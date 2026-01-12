@@ -1,0 +1,305 @@
+version: "1.0"
+stage2_understanding:
+  objective: "Cargar CSV, describir estructura, evaluar calidad y hacer EDA. No modifica datos; solo genera reportes/artefactos."
+
+  dataset_input:
+    source_type: "csv"
+    path: "${dataset_path}"           # lo inyecta el notebook o dataset_config
+    csv_params:
+      sep: ","
+      encoding: "utf-8"
+      decimal: "."
+      low_memory: true
+
+    # Para datasets grandes: por defecto trabaja sobre una muestra para EDA/calidad
+    read_strategy:
+      mode: "sample"                  # full | sample | chunked
+      sample_rows: 200000             # si mode=sample
+      sample_frac: null               # alternativa: 0.05 (5%), usa uno u otro
+      random_state: 42
+      chunksize: 200000               # si mode=chunked (para profiling parcial)
+
+  output_policy:
+    save_all_as_png: true
+    figures_dir: "figures/stage2"
+    tables_png_dir: "tables_png/stage2"
+    overwrite: true
+    dpi: 150
+
+  steps:
+
+    # 2.1 Collezionare i dati iniziali (Data acquisition) — SOLO CSV en tu escenario
+    step_2_1_data_acquisition:
+      enabled: true
+      technique: "data_acquisition"
+      methods:
+        load_csv:
+          enabled: true
+          params:
+            infer_datetime: true      # intenta detectar columnas datetime
+            parse_dates: []           # opcional: ["date_col"] si ya lo sabes
+
+    # 2.2 Descrivere i dati (Describe data)
+    step_2_2_describe_data:
+      enabled: true
+      techniques:
+
+        descriptive_statistics:
+          enabled: true
+          methods:
+            describe:
+              enabled: true
+              params:
+                include: "all"        # pandas describe(include="all")
+                numeric_only: false
+            min_max_mean_std:
+              enabled: true
+              params:
+                numeric_only: true    # agrega min/max/mean/std en numéricas
+
+        schema_inspection:
+          enabled: true
+          methods:
+            dtype_analysis:
+              enabled: true
+            cardinality_count:
+              enabled: true
+              params:
+                max_unique_to_report: 50     # para no explotar tablas enormes
+            null_count:
+              enabled: true
+
+    # 2.3 Verificare la qualità dei dati (Data quality assessment) — detecta, NO corrige
+    step_2_3_data_quality_assessment:
+      enabled: true
+      technique: "data_quality_assessment"
+      methods:
+
+        missing_analysis:
+          enabled: true
+          params:
+            show_top_columns: 30
+
+        outlier_detection:
+          enabled: true
+          params:
+            method: "iqr"             # iqr | zscore
+            iqr_k: 1.5                # usado si method=iqr
+            zscore_threshold: 3.0     # usado si method=zscore
+            numeric_only: true
+            max_columns: 30
+
+        duplicate_detection:
+          enabled: true
+          params:
+            subset: null              # null = todas las columnas
+            keep: "first"
+
+        range_validation:
+          enabled: true
+          params:
+            rules_file: "configs/rules/ranges_quality_rules_config.yml"
+            on_fail: "report_only"    # report_only (Fase2 no corrige)
+
+        inconsistency_checks:
+          enabled: true
+          params:
+            rules_file: "configs/rules/logic_quality_rules_config.yml"
+            on_fail: "report_only"
+
+    # 2.4 Esplorare i dati (EDA)
+    step_2_4_eda:
+      enabled: true
+      technique: "eda"
+      methods:
+
+        histograms:
+          enabled: true
+          params:
+            numeric_only: true
+            max_columns: 20
+            bins: 30
+
+        boxplots:
+          enabled: true
+          params:
+            numeric_only: true
+            max_columns: 20
+
+        scatter_matrix:
+          enabled: true
+          params:
+            numeric_only: true
+            max_columns: 8            # scatter-matrix explota si hay muchas
+            sample_rows: 10000
+
+        correlation_matrix:
+          enabled: true
+          params:
+            method: "pearson"         # pearson/spearman
+            numeric_only: true
+            max_columns: 30
+
+        pca_exploratory:
+          enabled: true
+          params:
+            numeric_only: true
+            n_components: 2
+            sample_rows: 20000
+
+
+stage3_preparation:
+  objective: "Preparar datos para series temporales (target + dependencia temporal). Evitar leakage: respetar orden temporal."
+
+  output_policy:
+    save_all_as_png: true
+    figures_dir: "figures/stage3"
+    tables_png_dir: "tables_png/stage3"
+
+  steps:
+
+    step_3_1_data_selection:
+      enabled: true
+      techniques:
+        dataset_definition:
+          enabled: true
+          methods:
+            manual_include_exclude: { enabled: true, params: { include: [], exclude: [] } }
+            drop_technical_columns: { enabled: true, params: { patterns: ["id", "uuid", "log"] } }
+            time_window_selection:
+              enabled: true
+              params:
+                time_col: "${time_col}"   # OBLIGATORIO en TS
+                start: null
+                end: null
+            population_filtering:
+              enabled: true               # "se puede aplicar"
+              params: { rules_file: "configs/rules/logic_quality_rules_config.yml" }
+
+        feature_selection:
+          enabled: true
+          methods:
+            semantic_based_selection: { enabled: true, params: { keep: [] } }
+            business_rule_filtering:  { enabled: true, params: { rules_file: "configs/rules/logic_quality_rules_config.yml" } }
+            remove_constant_features: { enabled: true, params: { threshold_unique: 1 } }
+            remove_duplicate_features: { enabled: true, params: { strategy: "exact" } }
+
+    step_3_2_data_cleaning:
+      enabled: true
+      techniques:
+
+        missing_data_handling:
+          enabled: true
+          methods:
+            mean_imputation:   { enabled: true, params: { numeric_only: true } }
+            median_imputation: { enabled: true, params: { numeric_only: true } }
+            mode_imputation:   { enabled: true, params: { for_categoricals: true } }
+            knn_imputation:    { enabled: false, params: { n_neighbors: 5 } }   # NO aplica TS
+            mice_imputation:   { enabled: false, params: {} }                   # NO aplica TS
+
+        outlier_handling:
+          enabled: true
+          methods:
+            winsorization:    { enabled: true,  params: { limits: [0.01, 0.01] } }  # se puede aplicar
+            iqr_clipping:     { enabled: true,  params: { k: 1.5 } }
+            zscore_filtering: { enabled: false, params: { threshold: 3.0 } }        # NO aplica TS
+
+        robust_transformations:
+          enabled: true
+          methods:
+            log_transform: { enabled: true, params: { shift_if_needed: true } }
+            box_cox:       { enabled: false, params: {} }     # NO aplica TS
+            yeo_johnson:   { enabled: true,  params: {} }
+
+        categorical_noise:
+          enabled: true
+          methods:
+            fix_typos:          { enabled: true, params: { lowercase: true, regex_cleanup: true } }
+            text_normalization: { enabled: true, params: { remove_accents: true } }
+            rare_grouping:      { enabled: false, params: { min_freq: 0.01 } }  # NO aplica TS
+
+        duplicate_handling:
+          enabled: true
+          methods:
+            exact_duplicates: { enabled: true, params: { subset: null, keep: "first" } }
+
+    step_3_3_data_transformation:
+      enabled: true
+      techniques:
+
+        feature_scaling:
+          enabled: true
+          methods:
+            standard_scaling: { enabled: true, params: {} }
+            minmax_scaling:   { enabled: true, params: { feature_range: [0, 1] } }
+            robust_scaling:   { enabled: true, params: {} }
+            maxabs_scaling:   { enabled: true, params: {} }
+
+        encoding:
+          enabled: false          # NO aplica TS según tu tabla
+          methods: {}
+
+        feature_engineering:
+          enabled: true
+          methods:
+            ratios:        { enabled: true, params: { definitions: [] } }
+            aggregations:  { enabled: true, params: { groupby_cols: [], agg_map: {} } }
+            interactions:  { enabled: false, params: {} }            # NO aplica TS
+            polynomial_features: { enabled: false, params: { degree: 2 } }  # NO aplica TS
+
+        temporal_features:
+          enabled: true
+          methods:
+            lags:
+              enabled: true
+              params: { lags: [1, 7, 14] }
+            rolling_statistics:
+              enabled: true
+              params: { windows: [7, 14], stats: ["mean", "std"] }
+            expanding_windows:
+              enabled: true
+              params: { stats: ["mean", "std"] }
+            date_decomposition:
+              enabled: true
+              params: { parts: ["month", "dayofweek"] }
+
+    step_3_4_data_integration:
+      enabled: true
+      technique: "data_integration"
+      methods:
+        dataset_merging: { enabled: false, params: { how: "inner", on: [] } }
+        union_concat:    { enabled: false, params: { axis: 0 } }
+
+        temporal_alignment:
+          enabled: true
+          params:
+            time_col: "${time_col}"
+            time_window_alignment: { enabled: true, params: {} }    # merge_asof-like
+            resampling:            { enabled: true, params: { rule: "D", agg: "mean" } }
+            forward_backward_fill: { enabled: true, params: { method: "ffill", limit: null } }
+
+        conflict_resolution:
+          enabled: true
+          params:
+            priority_rules_file: "configs/rules/logic_quality_rules_config.yml"
+
+    step_3_5_data_formatting:
+      enabled: true
+      techniques:
+
+        data_split:
+          enabled: true
+          methods:
+            temporal_split:
+              enabled: true
+              params: { time_col: "${time_col}", test_size: 0.2 }
+            walk_forward:
+              enabled: true
+              params: { n_splits: 5, test_size: null }    # tipo TimeSeriesSplit
+
+        dataset_formatting:
+          enabled: true
+          methods:
+            x_y_separation: { enabled: true, params: { target_col: "${target_col}" } }
+            type_casting:   { enabled: true, params: { parse_datetime: true } }
+            array_conversion: { enabled: true, params: { to_numpy: true } }

@@ -1,0 +1,742 @@
+version: "1.0"
+
+pipeline:
+  name: "classification_pipeline"
+  task: "classification"
+  objective: >
+    End-to-end CRISP-ML pipeline for supervised classification
+    (categorical target). Stages 2→5. Generates report artifacts (PNG/JSON)
+    and persists trained models.
+
+  # Variables injected by notebook (or resolved via dataset_config.yml)
+  variables:
+    dataset_path: "${dataset_path}"
+    target_col: "${target_col}"     # REQUIRED for classification
+    time_col: "${time_col}"         # Optional (usually null for classification)
+    id_cols: "${id_cols}"           # Optional list of technical identifiers
+
+runtime:
+  random_seed: 42
+  output_root: "out"
+  overwrite_artifacts: true
+
+# -------------------------
+# STAGE 2 — DATA UNDERSTANDING (PHASE 2)
+# -------------------------
+stage2_understanding:
+  enabled: true
+  objective: >
+    Load CSV + describe structure + data quality assessment + EDA.
+    Stage 2 MUST NOT modify data (report-only).
+
+  dataset_input:
+    source_type: "csv"
+    path: "${dataset_path}"
+
+    # Optional CSV overrides (prefer putting them in datasets/*.yml)
+    csv_params:
+      sep: ","
+      encoding: "utf-8"
+      decimal: "."
+      low_memory: true
+
+    # For large datasets: work on sample/chunks for profiling & EDA.
+    read_strategy:
+      mode: "sample"                # full | sample | chunked
+      sample_rows: 200000
+      sample_frac: null
+      random_state: 42
+      chunksize: 200000
+
+  output_policy:
+    save_all_as_png: true
+    figures_dir: "figures/stage2"
+    tables_png_dir: "tables_png/stage2"
+    dpi: 150
+
+  steps:
+
+    # 2.1 Data acquisition — CSV only (your scenario)
+    step_2_1_data_acquisition:
+      enabled: true
+      technique: "data_acquisition"
+      methods:
+        load_csv:
+          enabled: true
+          params:
+            infer_datetime: true
+            parse_dates: []          # e.g. ["event_time"] if known
+
+    # 2.2 Describe data — stats + schema inspection
+    step_2_2_describe_data:
+      enabled: true
+      techniques:
+
+        descriptive_statistics:
+          enabled: true
+          methods:
+            describe:
+              enabled: true
+              params:
+                include: "all"
+                numeric_only: false
+            min_max_mean_std:
+              enabled: true
+              params:
+                numeric_only: true
+
+        schema_inspection:
+          enabled: true
+          methods:
+            dtype_analysis:
+              enabled: true
+            cardinality_count:
+              enabled: true
+              params:
+                max_unique_to_report: 50
+            null_count:
+              enabled: true
+
+    # 2.3 Data quality assessment — detect only (no corrections)
+    step_2_3_data_quality_assessment:
+      enabled: true
+      technique: "data_quality_assessment"
+      methods:
+
+        missing_analysis:
+          enabled: true
+          params:
+            show_top_columns: 30
+
+        outlier_detection:
+          enabled: true
+          params:
+            method: "iqr"            # iqr | zscore
+            iqr_k: 1.5
+            zscore_threshold: 3.0
+            numeric_only: true
+            max_columns: 30
+
+        duplicate_detection:
+          enabled: true
+          params:
+            subset: null
+            keep: "first"
+
+        range_validation:
+          enabled: true
+          params:
+            rules_file: "configs/rules/ranges_quality_rules_config.yml"
+            on_fail: "report_only"
+
+        inconsistency_checks:
+          enabled: true
+          params:
+            rules_file: "configs/rules/logic_quality_rules_config.yml"
+            on_fail: "report_only"
+
+    # 2.4 EDA — visual exploration (PNG)
+    step_2_4_eda:
+      enabled: true
+      technique: "eda"
+      methods:
+
+        histograms:
+          enabled: true
+          params:
+            numeric_only: true
+            max_columns: 20
+            bins: 30
+
+        boxplots:
+          enabled: true
+          params:
+            numeric_only: true
+            max_columns: 20
+
+        scatter_matrix:
+          enabled: true
+          params:
+            numeric_only: true
+            max_columns: 8
+            sample_rows: 10000
+
+        correlation_matrix:
+          enabled: true
+          params:
+            method: "pearson"        # pearson | spearman
+            numeric_only: true
+            max_columns: 30
+
+        pca_exploratory:
+          enabled: true
+          params:
+            numeric_only: true
+            n_components: 2
+            sample_rows: 20000
+
+
+# -------------------------
+# STAGE 3 — DATA PREPARATION (PHASE 3)
+# -------------------------
+stage3_preparation:
+  enabled: true
+  objective: >
+    Prepare data for classification: selection + cleaning + transformations +
+    (optional integration) + split + formatting. Generates artifacts.
+
+  output_policy:
+    save_all_as_png: true
+    figures_dir: "figures/stage3"
+    tables_png_dir: "tables_png/stage3"
+
+  steps:
+
+    # 3.1 Data selection
+    step_3_1_data_selection:
+      enabled: true
+      techniques:
+
+        dataset_definition:
+          enabled: true
+          methods:
+            manual_include_exclude:
+              enabled: true
+              params: { include: [], exclude: [] }
+
+            drop_technical_columns:
+              enabled: true
+              params:
+                patterns: ["id", "uuid", "log"]
+
+            # Usually OFF for classification unless your dataset has time filtering needs
+            time_window_selection:
+              enabled: false
+              params:
+                time_col: "${time_col}"
+                start: null
+                end: null
+
+            population_filtering:
+              enabled: false
+              params:
+                rules_file: "configs/rules/logic_quality_rules_config.yml"
+
+        feature_selection:
+          enabled: true
+          methods:
+            semantic_based_selection:
+              enabled: false
+              params: { keep: [] }
+
+            business_rule_filtering:
+              enabled: false
+              params:
+                rules_file: "configs/rules/logic_quality_rules_config.yml"
+
+            remove_constant_features:
+              enabled: true
+              params: { threshold_unique: 1 }
+
+            remove_duplicate_features:
+              enabled: true
+              params: { strategy: "exact" }
+
+    # 3.2 Data cleaning
+    step_3_2_data_cleaning:
+      enabled: true
+      techniques:
+
+        missing_data_handling:
+          enabled: true
+
+          # Ensures you do NOT apply multiple numeric imputations at once.
+          selection_policy:
+            numeric_imputer: "median_imputation"     # mean_imputation | median_imputation | knn_imputation | mice_imputation
+            categorical_imputer: "mode_imputation"   # mode_imputation | constant_imputation
+
+          methods:
+            drop_rows:
+              enabled: false
+              params: { how: "any" }
+
+            drop_columns:
+              enabled: false
+              params: { threshold: 0.5 }            # drop columns with >50% missing
+
+            mean_imputation:
+              enabled: false
+              params: { numeric_only: true }
+
+            median_imputation:
+              enabled: true
+              params: { numeric_only: true }
+
+            mode_imputation:
+              enabled: true
+              params: { for_categoricals: true }
+
+            constant_imputation:
+              enabled: false
+              params: { value: "missing" }
+
+            knn_imputation:
+              enabled: false
+              params: { n_neighbors: 5 }
+
+            mice_imputation:
+              enabled: false
+              params: {}
+
+        outlier_handling:
+          enabled: true
+          methods:
+            winsorization:
+              enabled: false
+              params: { limits: [0.01, 0.01] }
+            iqr_clipping:
+              enabled: true
+              params: { k: 1.5 }
+            zscore_filtering:
+              enabled: false
+              params: { threshold: 3.0 }
+
+        robust_transformations:
+          enabled: true
+          methods:
+            log_transform:
+              enabled: false
+              params: { shift_if_needed: true }
+            box_cox:
+              enabled: false
+              params: {}
+            yeo_johnson:
+              enabled: true
+              params: {}
+
+        categorical_noise:
+          enabled: true
+          methods:
+            fix_typos:
+              enabled: true
+              params: { lowercase: true, regex_cleanup: true }
+            text_normalization:
+              enabled: true
+              params: { remove_accents: true }
+            rare_grouping:
+              enabled: true
+              params: { min_freq: 0.01 }
+
+        duplicate_handling:
+          enabled: true
+          methods:
+            exact_duplicates:
+              enabled: true
+              params: { subset: null, keep: "first" }
+
+        data_reduction:
+          enabled: false
+          methods:
+            drop_rows_threshold:
+              enabled: false
+              params: { max_na_ratio: 0.5 }
+            drop_columns_threshold:
+              enabled: false
+              params: { max_na_ratio: 0.5 }
+
+    # 3.3 Data transformation
+    step_3_3_data_transformation:
+      enabled: true
+      techniques:
+
+        feature_scaling:
+          enabled: true
+          selection_policy:
+            scaling_method: "standard_scaling"       # standard_scaling | minmax_scaling | robust_scaling | maxabs_scaling | none
+          methods:
+            standard_scaling: { enabled: true, params: {} }
+            minmax_scaling:   { enabled: false, params: { feature_range: [0, 1] } }
+            robust_scaling:   { enabled: false, params: {} }
+            maxabs_scaling:   { enabled: false, params: {} }
+
+        encoding:
+          enabled: true
+          selection_policy:
+            categorical_encoding: "one_hot_encoding" # one_hot_encoding | ordinal_encoding | frequency_encoding
+          methods:
+            one_hot_encoding:
+              enabled: true
+              params: { handle_unknown: "ignore" }
+            ordinal_encoding:
+              enabled: false
+              params: {}
+            frequency_encoding:
+              enabled: false
+              params: { min_freq: 1 }
+
+        feature_engineering:
+          enabled: false
+          methods:
+            ratios:
+              enabled: false
+              params: { definitions: [] }
+            aggregations:
+              enabled: false
+              params: { groupby_cols: [], agg_map: {} }
+            interactions:
+              enabled: false
+              params: {}
+            polynomial_features:
+              enabled: false
+              params: { degree: 2 }
+
+        # Keep OFF for classification by default (TS-only)
+        temporal_features:
+          enabled: false
+          methods: {}
+
+    # 3.4 Data integration (optional)
+    step_3_4_data_integration:
+      enabled: false
+      technique: "data_integration"
+      methods:
+        dataset_merging:
+          enabled: false
+          params: { how: "inner", on: [] }
+        union_concat:
+          enabled: false
+          params: { axis: 0 }
+        feature_alignment:
+          enabled: false
+          params:
+            column_renaming: {}
+            datatype_harmonization: true
+            column_selection: []
+
+    # 3.5 Data formatting (split + final shapes)
+    step_3_5_data_formatting:
+      enabled: true
+      techniques:
+
+        data_split:
+          enabled: true
+          selection_policy:
+            split_method: "holdout"                 # holdout | train_val_test
+          methods:
+            holdout:
+              enabled: true
+              params:
+                test_size: 0.2
+                stratify: true
+                random_state: 42
+            train_val_test:
+              enabled: false
+              params:
+                train: 0.7
+                val: 0.1
+                test: 0.2
+                stratify: true
+                random_state: 42
+
+            # Time-series strategies MUST stay OFF for classification
+            temporal_split:
+              enabled: false
+              params: { time_col: "${time_col}" }
+            walk_forward:
+              enabled: false
+              params: { n_splits: 5 }
+
+        dataset_formatting:
+          enabled: true
+          methods:
+            x_y_separation:
+              enabled: true
+              params:
+                target_col: "${target_col}"
+            type_casting:
+              enabled: true
+              params: {}
+            sparse_dense_format:
+              enabled: true
+              params: { format: "sparse" }          # sparse | dense
+
+
+# -------------------------
+# STAGE 4 — MODELING (PHASE 4)
+# -------------------------
+stage4_modeling:
+  enabled: true
+  objective: >
+    Phase 4 (Modeling) for classification: algorithm selection, training,
+    test design (CV/holdout), hyperparameter tuning, and evaluation metrics.
+
+  output_policy:
+    models_dir: "models"
+    figures_dir: "figures/stage4"
+    tables_png_dir: "tables_png/stage4"
+    metrics_file: "metrics.json"
+    save_all_as_png: true
+
+  steps:
+
+    # 4.1 Select the technique (Algorithm selection)
+    step_4_1_algorithm_selection:
+      enabled: true
+      technique: "algorithm_selection"
+      methods:
+        decision_tree_classifier:
+          enabled: true
+          params: {}
+        random_forest_classifier:
+          enabled: true
+          params: {}
+        svm_classifier:
+          enabled: true
+          params: {}
+        naive_bayes_classifier:
+          enabled: true
+          params: {}
+        knn_classifier:
+          enabled: true
+          params: {}
+
+    # 4.2 Build the model (Model training)
+    step_4_2_model_training:
+      enabled: true
+      technique: "model_training"
+      methods:
+        fit:
+          enabled: true
+          params:
+            fit_best_only: true          # keep best model as "best_model"
+            store_all_models: true       # persist all trained models
+
+        hyperparameter_tuning:
+          enabled: true                  # "se puede aplicar"
+          params:
+            strategy: "grid"             # grid | random
+            scoring: "f1_weighted"       # classification-oriented scoring
+            n_iter: 30                   # used only if strategy=random
+            refit: true
+          grids:
+            decision_tree_classifier:
+              max_depth: [3, 5, 10, null]
+              min_samples_split: [2, 5, 10]
+            random_forest_classifier:
+              n_estimators: [100, 200]
+              max_depth: [null, 10, 20]
+              min_samples_split: [2, 5]
+            svm_classifier:
+              C: [0.1, 1, 10]
+              kernel: ["rbf", "linear"]
+            naive_bayes_classifier:
+              var_smoothing: [1.0e-09, 1.0e-08]
+            knn_classifier:
+              n_neighbors: [3, 5, 7, 11]
+              weights: ["uniform", "distance"]
+
+    # 4.3 Generate the test project (Test design)
+    step_4_3_test_design:
+      enabled: true
+      technique: "test_design"
+      methods:
+
+        # Cross-validation applies to classification (per your table)
+        cross_validation:
+          enabled: true
+          params:
+            cv_folds: 5
+            shuffle: true
+            random_state: 42
+
+        # Hold-out applies to classification (per your table)
+        holdout:
+          enabled: true
+          params:
+            test_size: 0.2
+            stratify: true
+            random_state: 42
+
+        # Time-series tests must be OFF for classification (per your table)
+        temporal_test:
+          enabled: false
+          params:
+            time_col: "${time_col}"
+        walk_forward:
+          enabled: false
+          params:
+            n_splits: 5
+
+    # 4.4 Evaluate the model (Model evaluation)
+    step_4_4_model_evaluation:
+      enabled: true
+      technique: "model_evaluation"
+      metrics:
+        accuracy:
+          enabled: true
+          params: {}
+        f1_score:
+          enabled: true
+          params:
+            average: "weighted"
+        rmse:
+          enabled: false        # not applicable for classification
+        mae:
+          enabled: false        # not applicable for classification
+        silhouette:
+          enabled: false        # not applicable for classification
+        aic_bic:
+          enabled: false        # not applicable for classification
+
+
+
+# -------------------------
+# STAGE 5 — EVALUATION & INTERPRETATION (PHASE 5)
+# -------------------------
+stage5_evaluation_and_interpretation:
+  enabled: true
+  objective: >
+    Phase 5 (Evaluation & Interpretation): translate model results into
+    actionable knowledge, validate business value, audit the pipeline,
+    and decide next steps.
+
+  output_policy:
+    figures_dir: "figures/stage5"
+    tables_png_dir: "tables_png/stage5"
+    metrics_file: "metrics.json"
+    save_all_as_png: true
+
+  steps:
+
+    # 5.1 Extract knowledge (Interpretation)
+    step_5_1_interpretation:
+      enabled: true
+      technique: "interpretation"
+      methods:
+
+        # Applies to classification (per your table)
+        feature_importance:
+          enabled: true
+          params:
+            top_k: 30
+            normalize: true
+
+        # Applies to classification for linear models (per your table)
+        coefficients:
+          enabled: true
+          params:
+            top_k: 30
+            include_models: ["svm_linear", "logistic_like_if_any"]  # safe placeholder
+
+        # NOT applicable to classification (cluster-only in your table)
+        cluster_profiling:
+          enabled: false
+          params: {}
+
+        # Applies to classification (per your table) — keep OFF by default because it requires extra dependency
+        shap_values:
+          enabled: false
+          params:
+            max_samples: 2000
+            explainer: "auto"          # auto | tree | kernel
+
+        # Applies to classification (per your table)
+        permutation_importance:
+          enabled: true
+          params:
+            n_repeats: 10
+            random_state: 42
+
+        # Applies to classification (per your table)
+        partial_dependence_plot:
+          enabled: true
+          params:
+            features: []               # empty => auto-select top features
+            kind: "average"            # average | individual
+            max_features: 6
+
+        # Applies to classification (per your table)
+        confusion_matrix_analysis:
+          enabled: true
+          params:
+            normalize: "true"          # true | pred | all | null
+            include_class_report: true
+
+    # 5.2 Evaluate results (Business evaluation)
+    step_5_2_business_evaluation:
+      enabled: true
+      technique: "business_evaluation"
+      methods:
+
+        compare_models:
+          enabled: true
+          params:
+            rank_by: ["f1_weighted", "accuracy"]
+
+        baseline_comparison:
+          enabled: true
+          params:
+            baseline: "majority_class" # majority_class | random | custom
+
+        business_kpis:
+          enabled: true
+          params:
+            kpi_rules_file: "configs/rules/business_kpi_rules_config.yml"
+            currency: "EUR"
+
+    # 5.3 Review the process (Process audit)
+    step_5_3_process_audit:
+      enabled: true
+      technique: "process_audit"
+      methods:
+
+        pipeline_review:
+          enabled: true
+          params:
+            checklist_file: "configs/rules/pipeline_review_checklist.yml"  # optional
+
+        reproducibility_check:
+          enabled: true
+          params:
+            require_seed: true
+            require_config_snapshot: true
+
+        leakage_detection:
+          enabled: true
+          params:
+            target_col: "${target_col}"
+            check_time_leakage: false   # classification default
+            time_col: "${time_col}"
+
+    # 5.4 Determine next steps (Decision making)
+    step_5_4_decision_making:
+      enabled: true
+      technique: "decision_making"
+      methods:
+
+        go_no_go_decision:
+          enabled: true
+          params:
+            min_accuracy: 0.70
+            min_f1_weighted: 0.65
+
+        iterate_model:
+          enabled: true
+          params:
+            enable_backloop_to_stage: 4
+
+        deploy_planning:
+          enabled: false                # "It can be applied, the case can be evaluated" in your table; for courses you can keep ON but it won't deploy, only plan
+          params:
+            deployment_type: "report_only"   # report_only | local_batch | api
+
+        human_in_the_loop:
+          enabled: true
+          params:
+            require_manual_signoff: true
+
+        deployment_risk_assessment:
+          enabled: false                # "It can be applied, the case can be evaluated"
+          params:
+            checklist_file: "configs/rules/deployment_risk_checklist.yml"
+
