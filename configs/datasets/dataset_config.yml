@@ -1,0 +1,24 @@
+version: "1.0"
+
+datasets:
+  microsoft_security_incident:
+    description: "PHM North America 2024 Conference Data Challenge"
+
+    paths:
+      train: "data/raw/train/X_Train.csv"
+      test: "data/raw/test/X_Test.csv"
+      validation: "data/raw/validation/X_validation.csv"
+
+    csv_params:
+      sep: ","
+      encoding: "utf-8"
+      decimal: "."
+      low_memory: false # parameter to suppress dtype warning in pandas; problematic for very large files (strings or ids)
+
+
+
+
+
+
+
+

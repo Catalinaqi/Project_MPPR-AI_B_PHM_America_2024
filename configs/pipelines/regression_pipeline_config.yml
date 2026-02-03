@@ -1,286 +1,674 @@
+# Regression pipeline configuration (CRISP-ML style)
+# This YAML is a "contract" that declares WHAT to run in each stage (2→5),
+# which techniques/methods are enabled, and which parameters they use.
+#
+# Notes:
+# - "enabled: true"  => executed by the pipeline runner
+# - "enabled: false" => declared but disabled (safe default)
+# - Any method marked in your theory as "se puede aplicar" (optional) is OFF by default.
+
 version: "1.0"
-stage2_understanding:
-  objective: "Cargar CSV, describir estructura, evaluar calidad y hacer EDA. No modifica datos; solo genera reportes/artefactos."
 
-  dataset_input:
-    source_type: "csv"
-    path: "${dataset_path}"           # lo inyecta el notebook o dataset_config
-    csv_params:
-      sep: ","
-      encoding: "utf-8"
-      decimal: "."
-      low_memory: true
+pipeline:
+  name: "regression_pipeline"
+  task: "probabilistic_regression"
+  objective: >
+    CRISP-ML pipeline for probabilistic regression. Produces a predictive PDF
+    for torque margin (e.g., norm/cauchy) with per-row parameters.
+  variables:
+    dataset_path: "${dataset_path}" # Path to CSV dataset (injected by notebook or dataset_config.yml)
+    target_col: "${target_col}"     # REQUIRED (e.g., trq_margin)
+    id_cols: "${id_cols}"           # (e.g., [IncidentId])
 
-    # Para datasets grandes: por defecto trabaja sobre una muestra para EDA/calidad
-    read_strategy:
-      mode: "sample"                  # full | sample | chunked
-      sample_rows: 200000             # si mode=sample
-      sample_frac: null               # alternativa: 0.05 (5%), usa uno u otro
-      random_state: 42
-      chunksize: 200000               # si mode=chunked (para profiling parcial)
+runtime:
+  random_seed: 42                 # Global seed for reproducibility
+  output_root: "${output_root}"   # "out"
+  overwrite_artifacts: true       # Overwrite existing outputs
 
-  output_policy:
-    save_all_as_png: true
-    figures_dir: "figures/stage2"
-    tables_png_dir: "tables_png/stage2"
-    overwrite: true
-    dpi: 150
+# -------------------------
+# PIPELINE STAGES CONFIGURATION
+# Objective: Define each stage (2 to 5) with techniques, methods and parameters.
+# stage = phase in CRISP-ML process
+# -------------------------
+stages:
+  # -------------------------
+  # STAGE 2 — DATA UNDERSTANDING
+  # -------------------------
+  stage2_understanding:
+    # Stage 2 (Data Understanding / Acquisition)
+    # Goal: Load the CSV and produce descriptive, quality and EDA artifacts.
+    # Important: Stage 2 MUST NOT modify the dataset; it only reports and saves outputs.
+    objective: "Load CSV, profile the dataset, run quality checks, and produce EDA artifacts (no data modification)."
+    dataset_input:
+      source_type: "csv"
+      path: "${dataset_path}"                 # Injected by notebook or dataset_config.yml
+      csv_params:
+        sep: ","                              # CSV delimiter
+        encoding: "utf-8"                     # File encoding
+        decimal: "."                          # Decimal separator
+        low_memory: true                      # Pandas low_memory flag
+      read_strategy:
+        # For very large CSVs, Stage 2 can run on a sample to keep EDA fast.
+        mode: "sample"                        # full | sample | chunked
+        sample_rows: 200000                   # Used when mode=sample
+        sample_frac: null                     # Alternative to sample_rows (e.g., 0.05 for 5%)
+        random_state: 42
+        chunksize: 200000                     # Used when mode=chunked (profiling by chunks)
+    output_policy:
+      # Global output behavior for this stage
+      save_all_as_png: true
+      figures_dir: "figures/stage2"
+      tables_png_dir: "tables_png/stage2"
+      overwrite: true
+      dpi: 150
+    steps:
+      step_2_1_data_acquisition:
+        enabled: true
+        technique: "data_acquisition"
+        methods:
+          load_csv:
+            enabled: true
+            params:
+              infer_datetime: true            # Try to detect datetime-like columns
+              parse_dates: []                 # Optional explicit date columns (if known)
+      step_2_2_describe_data:
+        enabled: true
+        techniques:
+          # Technique 1: Descriptive Statistics
+          descriptive_statistics:
+            enabled: true
+            methods:
+              # Method 1 - describe: Pandas-based descriptive stats
+              describe:
+                enabled: true
+                params:
+                  include: "all"              # pandas.DataFrame.describe(include="all")
+                  numeric_only: false
+              # Method 2 - min_max_mean_std: Custom  aggregations
+              min_max_mean_std:
+                enabled: true
+                params:
+                  numeric_only: true          # Aggregations on numeric columns only
+          # Technique 2: Schema Inspection
+          schema_inspection:
+            enabled: true
+            methods:
+              # Method 1 - dtype_analysis: Data types of each column
+              dtype_analysis:
+                enabled: true                 # df.dtypes
+              # Method 2 - Counters: cardinality and null counts
+              cardinality_count:
+                enabled: true                 # df.nunique
+                params:
+                  max_unique_to_report: 50    # Prevent huge tables on high-cardinality columns
+              # Method 3 - null_count: count of missing values per column
+              null_count:
+                enabled: true                 # df.isna().sum()
 
-  steps:
+      step_2_3_data_quality_assessment:
+        enabled: true
+        technique: "data_quality_assessment"
+        methods:
+          # Method 1 - missing_analysis: Analyze missing data patterns
+          missing_analysis:
+            enabled: true
+            params:
+              show_top_columns: 30
+          # Method 2 - outlier_detection: Detect outliers in numeric columns
+          outlier_detection:
+            enabled: true
+            params:
+              method: "iqr"                   # iqr | zscore
+              iqr_k: 1.5
+              zscore_threshold: 3.0
+              numeric_only: true
+              max_columns: 30
+          # Method 3 - duplicate_detection: Find duplicaterows
+          duplicate_detection:
+            enabled: true
+            params:
+              subset: null                    # null => all columns
+              keep: "first"
+          # Method 4 - validity_checks: Apply rules from external YAML
+          range_validation:
+            enabled: true
+            params:
+              rules_file: "configs/rules/ranges_quality_rules_config.yml"
+              on_fail: "report_only"          # Stage 2 reports only (no corrections)
+          # Method 5 - logical_consistency_checks: Apply logic rules from external YAML
+          inconsistency_checks:
+            enabled: true
+            params:
+              rules_file: "configs/rules/logic_quality_rules_config.yml"
+              on_fail: "report_only"
 
-    # 2.1 Collezionare i dati iniziali (Data acquisition) — SOLO CSV en tu escenario
-    step_2_1_data_acquisition:
-      enabled: true
-      technique: "data_acquisition"
-      methods:
-        load_csv:
-          enabled: true
-          params:
-            infer_datetime: true      # intenta detectar columnas datetime
-            parse_dates: []           # opcional: ["date_col"] si ya lo sabes
+      step_2_4_eda:
+        enabled: true
+        technique: "eda"
+        methods:
+          # Method 1 - univariate_analysis: Histograms, boxplots
+          histograms:
+            enabled: true
+            params:
+              numeric_only: true
+              max_columns: 20
+              bins: 30
+        # Method 2 - bivariate_analysis: Scatter matrix, correlation matrix
+          boxplots:
+            enabled: true
+            params:
+              numeric_only: true
+              max_columns: 20
+        # Method 3 - multivariate_analysis: PCA, etc.
+          scatter_matrix:
+            enabled: true
+            params:
+              numeric_only: true
+              max_columns: 8
+              sample_rows: 10000
+        # Method 4 - correlation_analysis: Correlation matrix
+          correlation_matrix:
+            enabled: true
+            params:
+              method: "pearson"               # pearson | spearman
+              numeric_only: true
+              max_columns: 30
+        # Method 5 - dimensionality_reduction: PCA plots
+          pca_exploratory:
+            enabled: true
+            params:
+              numeric_only: true
+              n_components: 2
+              sample_rows: 20000
 
-    # 2.2 Descrivere i dati (Describe data)
-    step_2_2_describe_data:
-      enabled: true
-      techniques:
+  # -------------------------
+  # STAGE 3 — DATA PREPARATION
+  # -------------------------
+  stage3_preparation:
+    # Stage 3 (Data Preparation)
+    # Goal: Clean, transform and split data for REGRESSION.
+    # Important: Data leakage must be prevented (fit transforms on train only).
+    objective: "Prepare data for regression: cleaning, transformations, and train/test split (leakage-safe)."
+    output_policy:
+      save_all_as_png: true
+      figures_dir: "figures/stage3"
+      tables_png_dir: "tables_png/stage3"
+    steps:
+      step_3_1_data_selection:
+        enabled: true
+        techniques:
+          # Technique 1 - dataset_definition: Defining the scope of the dataset, determining which rows and columns are included in the analysis.
+          dataset_definition:
+            enabled: true
+            methods:
+              # Method 1 - manual_include_exclude: Explicit selection of relevant columns.
+              manual_include_exclude:
+                enabled: true
+                params:
+                  include: []
+                  exclude: []
+              # Method 2 - drop_technical_columns: Removal of technical columns (IDs, logs).
+              drop_technical_columns:
+                enabled: true
+                params:
+                  patterns: ["id", "uuid", "log"]   # drop columns with these substrings in name
+              # Method 3 - time_window_selection: select rows within a time window
+              time_window_selection:
+                enabled: false                 # OPTIONAL ("se puede aplicar") => OFF by default for regression
+                params:
+                  time_col: "${time_col}"
+                  start: null
+                  end: null
+              # Method  4 - target_based_filtering: remove rows with invalid target values
+              population_filtering:
+                enabled: false                 # OPTIONAL ("se puede aplicar") => OFF by default
+                params:
+                  rules_file: "configs/rules/logic_quality_rules_config.yml"
 
-        descriptive_statistics:
-          enabled: true
-          methods:
-            describe:
-              enabled: true
-              params:
-                include: "all"        # pandas describe(include="all")
-                numeric_only: false
-            min_max_mean_std:
-              enabled: true
-              params:
-                numeric_only: true    # agrega min/max/mean/std en numéricas
+          # Technique 2 - feature_selection: Selecting informative variables and eliminating redundancy
+          feature_selection:
+            enabled: true
+            methods:
+              # Method 1 - semantic_based_selection: Selection based on domain knowledge
+              semantic_based_selection:
+                enabled: true
+                params:
+                  keep: []
+              # Method 2 - business_rule_filtering: Expert inclusion/exclusion rules.
+              business_rule_filtering:
+                enabled: true
+                params:
+                  rules_file: "configs/rules/logic_quality_rules_config.yml"
+              remove_constant_features:
+                enabled: true
+                params:
+                  threshold_unique: 1
+              remove_duplicate_features:
+                enabled: true
+                params:
+                  strategy: "exact"
 
-        schema_inspection:
-          enabled: true
-          methods:
-            dtype_analysis:
-              enabled: true
-            cardinality_count:
-              enabled: true
-              params:
-                max_unique_to_report: 50     # para no explotar tablas enormes
-            null_count:
-              enabled: true
+      step_3_2_data_cleaning:
+        enabled: true
+        techniques:
 
-    # 2.3 Verificare la qualità dei dati (Data quality assessment) — detecta, NO corrige
-    step_2_3_data_quality_assessment:
-      enabled: true
-      technique: "data_quality_assessment"
-      methods:
+          missing_data_handling:
+            enabled: true
+            methods:
+              mean_imputation:   { enabled: true,  params: { numeric_only: true } }
+              median_imputation: { enabled: true,  params: { numeric_only: true } }
+              mode_imputation:   { enabled: true,  params: { for_categoricals: true } }
+              knn_imputation:    { enabled: false, params: { n_neighbors: 5 } }   # OPTIONAL ("se puede aplicar")
+              mice_imputation:   { enabled: false, params: {} }                   # OPTIONAL ("se puede aplicar") => OFF
 
-        missing_analysis:
-          enabled: true
-          params:
-            show_top_columns: 30
+          outlier_handling:
+            enabled: true
+            methods:
+              winsorization:    { enabled: false, params: { limits: [0.01, 0.01] } }  # OPTIONAL ("se puede aplicar")
+              iqr_clipping:     { enabled: true,  params: { k: 1.5 } }                 # Applies
+              zscore_filtering: { enabled: false, params: { threshold: 3.0 } }         # OPTIONAL ("se puede aplicar") => OFF
 
-        outlier_detection:
-          enabled: true
-          params:
-            method: "iqr"             # iqr | zscore
-            iqr_k: 1.5                # usado si method=iqr
-            zscore_threshold: 3.0     # usado si method=zscore
-            numeric_only: true
-            max_columns: 30
+          robust_transformations:
+            enabled: true
+            methods:
+              log_transform: { enabled: true,  params: { shift_if_needed: true } }     # Applies
+              box_cox:       { enabled: false, params: {} }                            # OPTIONAL ("se puede aplicar") => OFF
+              yeo_johnson:   { enabled: false, params: {} }                            # OPTIONAL ("se puede aplicar") => OFF
 
-        duplicate_detection:
-          enabled: true
-          params:
-            subset: null              # null = todas las columnas
-            keep: "first"
+          categorical_noise:
+            enabled: true
+            methods:
+              fix_typos:          { enabled: true,  params: { lowercase: true, regex_cleanup: true } }
+              text_normalization: { enabled: true,  params: { remove_accents: true } }
+              rare_grouping:      { enabled: false, params: { min_freq: 0.01 } }       # OPTIONAL ("se puede aplicar") => OFF
 
-        range_validation:
-          enabled: true
-          params:
-            rules_file: "configs/rules/ranges_quality_rules_config.yml"
-            on_fail: "report_only"    # report_only (Fase2 no corrige)
+          duplicate_handling:
+            enabled: true
+            methods:
+              exact_duplicates: { enabled: true, params: { subset: null, keep: "first" } }
 
-        inconsistency_checks:
-          enabled: true
-          params:
-            rules_file: "configs/rules/logic_quality_rules_config.yml"
-            on_fail: "report_only"
+          data_reduction:
+            enabled: true
+            methods:
+              drop_rows_threshold:    { enabled: false, params: { max_na_ratio: 0.5 } } # OPTIONAL
+              drop_columns_threshold: { enabled: false, params: { max_na_ratio: 0.5 } } # OPTIONAL
 
-    # 2.4 Esplorare i dati (EDA)
-    step_2_4_eda:
-      enabled: true
-      technique: "eda"
-      methods:
+      step_3_3_data_transformation:
+        enabled: true
+        techniques:
 
-        histograms:
-          enabled: true
-          params:
-            numeric_only: true
-            max_columns: 20
-            bins: 30
+          feature_scaling:
+            enabled: true
+            methods:
+              standard_scaling: { enabled: true,  params: {} }                          # Applies
+              minmax_scaling:   { enabled: true,  params: { feature_range: [0, 1] } }   # Applies
+              robust_scaling:   { enabled: true,  params: {} }                          # Applies
+              maxabs_scaling:   { enabled: false, params: {} }                          # OPTIONAL ("se puede aplicar") => OFF
 
-        boxplots:
-          enabled: true
-          params:
-            numeric_only: true
-            max_columns: 20
+          encoding:
+            enabled: true
+            methods:
+              one_hot_encoding:   { enabled: true,  params: { handle_unknown: "ignore" } } # Applies
+              ordinal_encoding:   { enabled: false, params: {} }                            # OPTIONAL => OFF
+              target_encoding:    { enabled: false, params: {} }                            # OPTIONAL => OFF (also needs extra dependency)
+              frequency_encoding: { enabled: false, params: { min_freq: 1 } }               # OPTIONAL ("se puede aplicar") => OFF
 
-        scatter_matrix:
-          enabled: true
-          params:
-            numeric_only: true
-            max_columns: 8            # scatter-matrix explota si hay muchas
-            sample_rows: 10000
+          feature_engineering:
+            enabled: true
+            methods:
+              ratios:              { enabled: true,  params: { definitions: [] } }          # Applies
+              aggregations:        { enabled: false, params: { groupby_cols: [], agg_map: {} } } # OPTIONAL ("se puede aplicar") => OFF
+              interactions:        { enabled: false, params: {} }                            # OPTIONAL ("se puede aplicar") => OFF
+              polynomial_features: { enabled: false, params: { degree: 2 } }                 # OPTIONAL ("se puede aplicar") => OFF
 
-        correlation_matrix:
-          enabled: true
-          params:
-            method: "pearson"         # pearson/spearman
-            numeric_only: true
-            max_columns: 30
+          temporal_features:
+            enabled: false                                                                  # Not applicable for standard regression
+            methods: {}
 
-        pca_exploratory:
-          enabled: true
-          params:
-            numeric_only: true
-            n_components: 2
-            sample_rows: 20000
+      step_3_4_data_integration:
+        enabled: true
+        technique: "data_integration"
+        methods:
+          dataset_merging:
+            enabled: false                 # Keep OFF by default (single-CSV projects)
+            params: { how: "inner", on: [] }
+          union_concat:
+            enabled: false
+            params: { axis: 0 }
+          feature_alignment:
+            enabled: true
+            params:
+              column_renaming: {}
+              datatype_harmonization: true
+              column_selection: []
+          data_enrichment:
+            enabled: false
+            params: { lookup_tables: [] }
 
+      step_3_5_data_formatting:
+        enabled: true
+        techniques:
+          data_split:
+            enabled: true
+            methods:
+              holdout:
+                enabled: true
+                params:
+                  test_size: 0.2
+                  random_state: 42
+              train_val_test:
+                enabled: false
+                params:
+                  train: 0.7
+                  val: 0.1
+                  test: 0.2
+                  random_state: 42
 
-stage3_preparation:
-  objective: "Preparar datos para regresión (target continuo). Limpieza + encoding + split. Genera artefactos."
+          dataset_formatting:
+            enabled: true
+            methods:
+              x_y_separation:      { enabled: true,  params: { target_col: "${target_col}" } }
+              type_casting:        { enabled: true,  params: {} }
+              array_conversion:    { enabled: true,  params: { to_numpy: true } }
+              sparse_dense_format: { enabled: true,  params: { format: "sparse" } }
 
-  output_policy:
-    save_all_as_png: true
-    figures_dir: "figures/stage3"
-    tables_png_dir: "tables_png/stage3"
+  # -------------------------
+  # STAGE 4 — MODELING (PROBABILISTIC REGRESSION / PDF)
+  # -------------------------
+  stage4_modeling:
+    # Stage 4 (Modeling)
+    # Goal: Train and compare regression models; select the best candidate.
+    objective: "Train, tune and evaluate regression models; select the best model by RMSE (tie-breaker: MAE)."
+    steps:
+      step_4_1_algorithm_selection:
+        enabled: true
+        technique: "algorithm_selection"
+        params:
+          selection_strategy: "compare_many"  # compare_many | single
+        candidates:
 
-  steps:
+          linear_regression:
+            enabled: true
+            library: "sklearn"
+            estimator: "LinearRegression"
+            params: {}
 
-    step_3_1_data_selection:
-      enabled: true
-      techniques:
-        dataset_definition:
-          enabled: true
-          methods:
-            manual_include_exclude: { enabled: true, params: { include: [], exclude: [] } }
-            drop_technical_columns: { enabled: true, params: { patterns: ["id", "uuid", "log"] } }
-            time_window_selection:  { enabled: true, params: { time_col: "${time_col}", start: null, end: null } }
-            population_filtering:   { enabled: true, params: { rules_file: "configs/rules/logic_quality_rules_config.yml" } }
+          ridge_regression:
+            enabled: true
+            library: "sklearn"
+            estimator: "Ridge"
+            params: {}
+            hyperparams:
+              alpha: [0.1, 1.0, 10.0]
 
-        feature_selection:
-          enabled: true
-          methods:
-            semantic_based_selection: { enabled: true, params: { keep: [] } }
-            business_rule_filtering:  { enabled: true, params: { rules_file: "configs/rules/logic_quality_rules_config.yml" } }
-            remove_constant_features: { enabled: true, params: { threshold_unique: 1 } }
-            remove_duplicate_features: { enabled: true, params: { strategy: "exact" } }
+          lasso_regression:
+            enabled: true
+            library: "sklearn"
+            estimator: "Lasso"
+            params: {}
+            hyperparams:
+              alpha: [0.001, 0.01, 0.1, 1.0]
 
-    step_3_2_data_cleaning:
-      enabled: true
-      techniques:
-        missing_data_handling:
-          enabled: true
-          methods:
-            mean_imputation:   { enabled: true, params: { numeric_only: true } }
-            median_imputation: { enabled: true, params: { numeric_only: true } }
-            mode_imputation:   { enabled: true, params: { for_categoricals: true } }
-            knn_imputation:    { enabled: false, params: { n_neighbors: 5 } }
-            mice_imputation:   { enabled: true,  params: {} }       # "se puede aplicar"
+          polynomial_regression:
+            enabled: true
+            library: "sklearn"
+            estimator: "PolynomialRegression" # Implemented as: PolynomialFeatures + (Linear/Ridge)
+            params:
+              degree: 2
+            hyperparams:
+              degree: [2, 3]
 
-        outlier_handling:
-          enabled: true
-          methods:
-            winsorization:    { enabled: false, params: { limits: [0.01, 0.01] } }
-            iqr_clipping:     { enabled: true,  params: { k: 1.5 } }
-            zscore_filtering: { enabled: true,  params: { threshold: 3.0 } }
+          knn_regressor:
+            enabled: true
+            library: "sklearn"
+            estimator: "KNeighborsRegressor"
+            params: {}
+            hyperparams:
+              n_neighbors: [3, 5, 11]
+              weights: ["uniform", "distance"]
 
-        robust_transformations:
-          enabled: true
-          methods:
-            log_transform: { enabled: true, params: { shift_if_needed: true } }
-            box_cox:       { enabled: true, params: {} }
-            yeo_johnson:   { enabled: true, params: {} }
+          decision_tree_regressor:
+            enabled: true
+            library: "sklearn"
+            estimator: "DecisionTreeRegressor"
+            params: {}
+            hyperparams:
+              max_depth: [null, 5, 10, 20]
+              min_samples_leaf: [1, 5, 10]
 
-        categorical_noise:
-          enabled: true
-          methods:
-            fix_typos:          { enabled: true, params: { lowercase: true, regex_cleanup: true } }
-            text_normalization: { enabled: true, params: { remove_accents: true } }
-            rare_grouping:      { enabled: true, params: { min_freq: 0.01 } }
+          random_forest_regressor:
+            enabled: true
+            library: "sklearn"
+            estimator: "RandomForestRegressor"
+            params:
+              n_jobs: -1
+            hyperparams:
+              n_estimators: [200, 500]
+              max_depth: [null, 10, 20]
+              min_samples_leaf: [1, 5]
 
-        duplicate_handling:
-          enabled: true
-          methods:
-            exact_duplicates: { enabled: true, params: { subset: null, keep: "first" } }
+          xgboost_regressor:
+            enabled: true
+            library: "xgboost"
+            estimator: "XGBRegressor"
+            params:
+              n_jobs: -1
+              objective: "reg:squarederror"
+            hyperparams:
+              n_estimators: [300, 800]
+              max_depth: [3, 6, 10]
+              learning_rate: [0.03, 0.1]
+              subsample: [0.8, 1.0]
+              colsample_bytree: [0.8, 1.0]
 
-        data_reduction:
-          enabled: true
-          methods:
-            drop_rows_threshold:    { enabled: false, params: { max_na_ratio: 0.5 } }
-            drop_columns_threshold: { enabled: false, params: { max_na_ratio: 0.5 } }
+          svr:
+            enabled: true
+            library: "sklearn"
+            estimator: "SVR"
+            params: {}
+            hyperparams:
+              kernel: ["rbf", "linear"]
+              C: [1.0, 10.0, 100.0]
+              epsilon: [0.01, 0.1]
 
-    step_3_3_data_transformation:
-      enabled: true
-      techniques:
+          neural_network_regressor:
+            enabled: true
+            library: "sklearn"
+            estimator: "MLPRegressor"
+            params:
+              max_iter: 500
+            hyperparams:
+              hidden_layer_sizes: [[64], [128], [64, 32]]
+              alpha: [0.0001, 0.001]
 
-        feature_scaling:
-          enabled: true
-          methods:
-            standard_scaling: { enabled: true, params: {} }
-            minmax_scaling:   { enabled: true, params: { feature_range: [0, 1] } }
-            robust_scaling:   { enabled: true, params: {} }
-            maxabs_scaling:   { enabled: true, params: {} }
+      step_4_2_model_training:
+        enabled: true
+        technique: "model_training"
+        methods:
 
-        encoding:
-          enabled: true
-          methods:
-            one_hot_encoding:   { enabled: true,  params: { handle_unknown: "ignore" } }
-            ordinal_encoding:   { enabled: false, params: {} }
-            target_encoding:    { enabled: false, params: {} }
-            frequency_encoding: { enabled: true,  params: { min_freq: 1 } }
+          fit:
+            enabled: true
+            params: {}
 
-        feature_engineering:
-          enabled: true
-          methods:
-            ratios:              { enabled: true, params: { definitions: [] } }
-            aggregations:        { enabled: true, params: { groupby_cols: [], agg_map: {} } }
-            interactions:        { enabled: true, params: {} }
-            polynomial_features: { enabled: true, params: { degree: 2 } }
+          hyperparameter_tuning:
+            enabled: true
+            params:
+              strategy: "grid"                  # grid | random
+              n_iter: 30                        # Used only for random search
+              scoring: "neg_root_mean_squared_error"
 
-        temporal_features:
-          enabled: false
-          methods: {}
+          cross_validation:
+            enabled: true
+            params:
+              cv_folds: 5
+              shuffle: true
+              random_state: 42
 
-    step_3_4_data_integration:
-      enabled: true
-      technique: "data_integration"
-      methods:
-        dataset_merging: { enabled: false, params: { how: "inner", on: [] } }
-        union_concat:    { enabled: false, params: { axis: 0 } }
-        feature_alignment:
-          enabled: true
-          params: { column_renaming: {}, datatype_harmonization: true, column_selection: [] }
-        data_enrichment: { enabled: false, params: { lookup_tables: [] } }
+      step_4_3_test_design:
+        enabled: true
+        technique: "test_design"
+        methods:
+          holdout:
+            enabled: true
+            params:
+              from_stage3_split: true           # Use the Stage3 split definitions
+          temporal_test:
+            enabled: false                      # Not applicable for standard regression
+          walk_forward:
+            enabled: false                      # Not applicable
 
-    step_3_5_data_formatting:
-      enabled: true
-      techniques:
-        data_split:
-          enabled: true
-          methods:
-            holdout:
-              enabled: true
-              params: { test_size: 0.2, random_state: 42 }
-            train_val_test:
-              enabled: false
-              params: { train: 0.7, val: 0.1, test: 0.2, random_state: 42 }
+      step_4_4_model_evaluation:
+        enabled: true
+        technique: "model_evaluation"
+        metrics:
+          rmse: { enabled: true }
+          mae:  { enabled: true }
+        model_selection:
+          primary_metric: "rmse"
+          tie_breaker: "mae"
 
-        dataset_formatting:
-          enabled: true
-          methods:
-            x_y_separation: { enabled: true, params: { target_col: "${target_col}" } }
-            type_casting:   { enabled: true, params: {} }
-            array_conversion: { enabled: true, params: { to_numpy: true } }
-            sparse_dense_format: { enabled: true, params: { format: "sparse" } }
+  # -------------------------
+  # STAGE 5 — EVALUATION & INTERPRETATION
+  # -------------------------
+  stage5_evaluation_interpretation:
+    # Stage 5 (Evaluation & Interpretation)
+    # Goal: Explain model behavior, validate business impact, audit the pipeline and decide next steps.
+    objective: "Interpret results, validate business value, audit the process, and decide next steps for regression."
+
+    output_policy:
+      save_all_as_png: true
+      figures_dir: "figures/stage5"
+      tables_png_dir: "tables_png/stage5"
+      export_metrics_json: true
+      metrics_path: "metrics.json"
+
+    steps:
+
+      step_5_1_interpretation:
+        enabled: true
+        technique: "interpretation"
+        methods:
+
+          feature_importance:
+            enabled: true
+            params:
+              strategy: "auto"                  # auto | model_native | permutation
+              top_k: 20
+
+          coefficients:
+            enabled: true
+            params:
+              standardize_for_compare: true
+              top_k: 30
+
+          shap_values:
+            enabled: false                      # Applies in theory, but OFF by default (requires 'shap' dependency)
+            params:
+              scope: "global_local"
+              sample_rows: 2000
+
+          permutation_importance:
+            enabled: true
+            params:
+              n_repeats: 10
+              scoring: "neg_root_mean_squared_error"
+              sample_rows: 20000
+              random_state: 42
+              top_k: 20
+
+          partial_dependence_plot_pdp:
+            enabled: true
+            params:
+              features: []                      # Empty => auto-select from top features
+              grid_resolution: 50
+              max_features: 8
+
+      step_5_2_business_evaluation:
+        enabled: true
+        technique: "business_evaluation"
+        methods:
+
+          compare_models:
+            enabled: true
+            params:
+              compare_on: ["rmse", "mae"]
+              rank_by: "rmse"
+
+          baseline_comparison:
+            enabled: true
+            params:
+              baseline_type: "naive_mean"       # naive_mean | naive_last | custom
+              custom_baseline_ref: null
+
+          business_kpis:
+            enabled: true
+            params:
+              kpi_rules_file: "configs/rules/business_kpi_rules_config.yml"
+              currency: null
+              report_level: "summary"           # summary | detailed
+
+      step_5_3_process_audit:
+        enabled: true
+        technique: "process_audit"
+        methods:
+
+          pipeline_review:
+            enabled: true
+            params:
+              checklist: ["stage2", "stage3", "stage4", "stage5"]
+
+          reproducibility_check:
+            enabled: true
+            params:
+              check_seeds: true
+              check_versions: true
+              check_config_hash: true
+
+          leakage_detection:
+            enabled: true
+            params:
+              checks:
+                - "target_in_features"
+                - "train_test_overlap"
+                - "time_leakage_if_time_col_present"
+              time_col: "${time_col}"
+
+      step_5_4_decision_making:
+        enabled: true
+        technique: "decision_making"
+        methods:
+
+          go_no_go_decision:
+            enabled: false                      # OPTIONAL ("se puede aplicar") => OFF by default
+            params:
+              thresholds:
+                rmse_max: null
+                mae_max: null
+              require_business_kpi_ok: false
+
+          iterate_model:
+            enabled: false                      # OPTIONAL ("se puede aplicar") => OFF by default
+            params:
+              next_iteration_notes: true
+
+          deploy_planning:
+            enabled: false                      # OPTIONAL ("se puede aplicar") => OFF by default
+            params:
+              target_env: "local"               # local | docker | cloud
+              model_format: "joblib"            # joblib | pickle
+
+          human_in_the_loop:
+            enabled: true                       # Applies
+            params:
+              required_review: true
+              review_roles: ["student", "professor"]
+
+          deployment_risk_assessment:
+            enabled: false                      # OPTIONAL ("se puede aplicar") => OFF by default
+            params:
+              checklist_items:
+                - "data_drift_risk"
+                - "model_drift_risk"
+                - "bias_risk"
+                - "privacy_risk"
+                - "monitoring_plan"
