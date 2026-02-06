@@ -11,11 +11,6 @@ __pycache__/
 *.pyo
 *.pyd
 
-
-# Logs
-logs/
-*.log
-
 # ============================================
 #  NOTEBOOKS & OUTPUT
 # ============================================
@@ -29,10 +24,9 @@ notebooks/.ipynb_checkpoints/
 #*.jpg
 #*.jpeg
 
-# Tabelle generate automaticamente
-#reports/
-#out
-#src/crispml/*.out
+# File generate automaticamente
+logs/
+*.log
 
 # ============================================
 #  POETRY
@@ -54,6 +48,6 @@ notebooks/.ipynb_checkpoints/
 # ============================================
 #  IDE FILES
 # ============================================
-data/*.csv
+#data/*.csv
 
 

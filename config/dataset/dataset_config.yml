@@ -1,0 +1,40 @@
+# Dataset configuration file for PHM North America 2024 Conference Data Challenge
+
+version: "1.0"
+datasets:
+  phm_north_america_2024_train:
+    description: "PHM North America 2024 Conference Data Challenge Training Set"
+    paths:  # dataset file paths
+      x_train: "data/raw/train/X_Train.csv"
+      Y_train: "data/raw/train/Y_Train.csv"
+    csv_params:
+      sep: ","
+      encoding: "utf-8"
+      decimal: "."
+      low_memory: false # parameter to suppress dtype warning in pandas; problematic for very large files (strings or ids)
+
+  phm_north_america_2024_test:
+    description: "PHM North America 2024 Conference Data Challenge Test Set"
+    paths:  # dataset file paths
+      x_test: "data/raw/test/X_Test.csv"
+    csv_params:
+      sep: ","
+      encoding: "utf-8"
+      decimal: "."
+      low_memory: false # parameter to suppress dtype warning in pandas; problematic for very large files (strings or ids)
+
+  phm_north_america_2024_validation:
+    description: "PHM North America 2024 Conference Data Challenge Validation Set"
+    paths:  # dataset file paths
+      x_validation: "data/raw/validation/X_validation.csv"
+    csv_params:
+      sep: ","
+      encoding: "utf-8"
+      decimal: "."
+      low_memory: false # parameter to suppress dtype warning in pandas; problematic for very large files (strings or ids)
+
+
+
+
+
+
