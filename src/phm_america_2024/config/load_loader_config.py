@@ -1,4 +1,4 @@
-# src/crispdm/config/load_loader_config.py
+# src/phm_america_2024/config/load_loader_config.py
 from __future__ import annotations
 
 import re
@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
-from crispdm.core.logging_utils_core import get_logger
+from phm_america_2024.core.logging_utils_core import get_logger
 
 log = get_logger(__name__)
 
@@ -32,6 +32,8 @@ log = get_logger(__name__)
 #   - Configuration Loader
 #   - Configuration Templating (placeholder resolution)
 # =============================================================================
+
+
 
 _VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
@@ -171,7 +173,7 @@ def load_and_resolve(path: str | Path,
     - merge variables
     - resolve ${var} placeholders
     """
-    log.info("load_and_resolve: start path=%s", path)
+
     log.debug("load_and_resolve: start path=%s", path)
 
     raw = load_yaml(path)
@@ -179,9 +181,8 @@ def load_and_resolve(path: str | Path,
     resolved = resolve_placeholders(raw, variables)
 
     has_unresolved, n = find_unresolved_placeholders(resolved)
-    log.debug("load_and_resolve: unresolved placeholders=%s", has_unresolved)
-    #print("Unresolved placeholders?", has_unresolved, "count:", n)
-    log.debug("load_and_resolve: unresolved placeholders found=%d", n)
+    log.debug("load_and_resolve: unresolved placeholders=%s found=%s", has_unresolved,n)
+
     if has_unresolved:
         log.warning("load_and_resolve: unresolved placeholders found=%d (check notebook vars)", n)
     else:

@@ -1,3 +1,4 @@
+# src/phm_america_2024/core/logging_utils_core.py
 from __future__ import annotations
 
 import logging
@@ -5,7 +6,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from crispdm.config.load_log_loader_config import load_logging_config
+
 # =============================================================================
 # Why this module exists
 # -----------------------------------------------------------------------------
@@ -26,15 +27,10 @@ from crispdm.config.load_log_loader_config import load_logging_config
 # =============================================================================
 
 _CONFIGURED_FOR: Optional[Path] = None
+_LOGS_DIR_NAME = "logs"
+_DEFAULT_LOG_LEVEL = "DEBUG"
+_LOGGER_NAMESPACE = "LOG_PHM_NORTH_AMERICA_2024" # module namespace for all loggers, constant
 
-  cfg = load_log_loader_config("logging_config.yml")
-
-  if cfg.get("logger_namespace"):
-     _LOGGER_NAMESPACE = cfg["logger_namespace"]
-  if cfg.get("logs_dir"):
-     _LOGS_DIR_NAME = cfg["logs_dir"]
-  if cfg.get("default_level"):
-     _DEFAULT_LOG_LEVEL = cfg["default_level"]
 
 def _safe_name(name: str) -> str:
     """
@@ -47,6 +43,7 @@ def _safe_name(name: str) -> str:
     name = (name or "").strip().lower()
     name = re.sub(r"[^a-z0-9_\-]+", "-", name)
     name = re.sub(r"-{2,}", "-", name).strip("-")
+
     return name or "run"
 
 
@@ -71,12 +68,13 @@ def build_log_file(output_root: Path | str,
     out_root = Path(output_root)
     logs_dir = out_root / _LOGS_DIR_NAME
     ts = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
+
     return logs_dir / f"{_safe_name(run_name)}_{ts}.log"
 
 
-def init_logging(log_file: Path, level: str = _DEFAULT_LOG_LEVEL) -> logging.Logger:
+def init_logging(log_file: Path, level: _DEFAULT_LOG_LEVEL) -> logging.Logger:
     """
-    Initialize crispdm logging for the current run.
+    Initialize phm_america_2024 logging for the current run.
 
     Behavior:
     - Creates out/logs/ if missing
@@ -129,6 +127,7 @@ def init_logging(log_file: Path, level: str = _DEFAULT_LOG_LEVEL) -> logging.Log
 
     _CONFIGURED_FOR = log_file
     root.debug("Logging initialized. log_file=%s level=%s", log_file, level.upper())
+
     return root
 
 
@@ -136,4 +135,5 @@ def get_logger(module_name: str) -> logging.Logger:
     """
     Get a namespaced logger. init_logging() should be called beforehand by the Facade.
     """
+
     return logging.getLogger(f"{_LOGGER_NAMESPACE}.{module_name}")

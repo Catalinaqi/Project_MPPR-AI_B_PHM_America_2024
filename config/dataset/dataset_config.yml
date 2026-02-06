@@ -6,7 +6,7 @@ datasets:
     description: "PHM North America 2024 Conference Data Challenge Training Set"
     paths:  # dataset file paths
       x_train: "data/raw/train/X_Train.csv"
-      Y_train: "data/raw/train/Y_Train.csv"
+      y_train: "data/raw/train/Y_Train.csv"
     csv_params:
       sep: ","
       encoding: "utf-8"

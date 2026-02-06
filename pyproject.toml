@@ -5,7 +5,6 @@ description = "..."
 authors = [
     {name = "Catalinaqi",email = "ccequispe@gmail.com"}
 ]
-package-mode = false
 readme = "README.md"
 requires-python = ">=3.10,<3.11"
 dependencies = [
@@ -19,4 +18,7 @@ dependencies = [
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 [tool.poetry]
-package-mode = false
+package-mode = true
+packages = [
+    { include = "phm_america_2024", from = "src" }
+]
