@@ -1,0 +1,62 @@
+{
+  "feature_importance": [
+    {
+      "feature": "oat",
+      "importance": 0.32050832442179183
+    },
+    {
+      "feature": "pa",
+      "importance": 0.24057881568955633
+    },
+    {
+      "feature": "trq_measured",
+      "importance": 0.103000322980106
+    },
+    {
+      "feature": "mgt",
+      "importance": 0.09808611381645592
+    },
+    {
+      "feature": "np",
+      "importance": 0.08843839893959243
+    },
+    {
+      "feature": "ng",
+      "importance": 0.08004663069799256
+    },
+    {
+      "feature": "ias",
+      "importance": 0.06934139345450498
+    }
+  ],
+  "permutation_importance": [
+    {
+      "feature": "oat",
+      "importance_mean": 0.2893682474268487
+    },
+    {
+      "feature": "pa",
+      "importance_mean": 0.1738741322081418
+    },
+    {
+      "feature": "mgt",
+      "importance_mean": 0.1308338963574202
+    },
+    {
+      "feature": "trq_measured",
+      "importance_mean": 0.12032062978436339
+    },
+    {
+      "feature": "ias",
+      "importance_mean": 0.04123043129669742
+    },
+    {
+      "feature": "ng",
+      "importance_mean": 0.035647470497586445
+    },
+    {
+      "feature": "np",
+      "importance_mean": 0.020704063436193187
+    }
+  ]
+}

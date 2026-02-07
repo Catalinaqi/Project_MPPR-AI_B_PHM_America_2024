@@ -1,37 +1,37 @@
 # Dataset configuration file for PHM North America 2024 Conference Data Challenge
 
 version: "1.0"
+
+defaults:
+  source_type: "csv"
+  csv_params:
+    sep: ","
+    encoding: "utf-8"
+    decimal: "."
+    low_memory: false
+
 datasets:
   phm_north_america_2024_train:
     description: "PHM North America 2024 Conference Data Challenge Training Set"
+    source_type: "csv" # specify the type of data source (e.g., csv, json, database)
     paths:  # dataset file paths
-      x_train: "data/raw/train/X_Train.csv"
-      y_train: "data/raw/train/Y_Train.csv"
-    csv_params:
-      sep: ","
-      encoding: "utf-8"
-      decimal: "."
-      low_memory: false # parameter to suppress dtype warning in pandas; problematic for very large files (strings or ids)
+      x_train_path: "data/raw/train/X_train.csv"
+      y_train_path: "data/raw/train/Y_train.csv"
+
 
   phm_north_america_2024_test:
     description: "PHM North America 2024 Conference Data Challenge Test Set"
+    source_type: "csv" # specify the type of data source (e.g., csv, json, database)
     paths:  # dataset file paths
-      x_test: "data/raw/test/X_Test.csv"
-    csv_params:
-      sep: ","
-      encoding: "utf-8"
-      decimal: "."
-      low_memory: false # parameter to suppress dtype warning in pandas; problematic for very large files (strings or ids)
+      x_test_path: "data/raw/test/X_test.csv"
+
 
   phm_north_america_2024_validation:
     description: "PHM North America 2024 Conference Data Challenge Validation Set"
+    source_type: "csv" # specify the type of data source (e.g., csv, json, database)
     paths:  # dataset file paths
-      x_validation: "data/raw/validation/X_validation.csv"
-    csv_params:
-      sep: ","
-      encoding: "utf-8"
-      decimal: "."
-      low_memory: false # parameter to suppress dtype warning in pandas; problematic for very large files (strings or ids)
+      x_validation_path: "data/raw/validation/X_validation.csv"
+
 
 
 

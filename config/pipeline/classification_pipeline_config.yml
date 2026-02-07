@@ -17,10 +17,16 @@ pipeline:
     and persists trained models.
   # Variables injected by notebook (or resolved via dataset_config.yml)
   variables:
-    dataset_path: "${dataset_path}"
-    target_col: "${target_col}"     # REQUIRED for classification
-    time_col: "${time_col}"         # Optional (usually null for classification)
-    id_cols: "${id_cols}"           # Optional list of technical identifiers
+    #dataset_path: "${dataset_path}" # Path to the main dataset CSV file (e.g. train set)
+    x_train_path: "${x_train_path}"   # Path to X_train CSV file (if separate)
+    y_train_path: "${y_train_path}"   # Path to Y_train CSV file (if separate)
+    x_test_path: "${x_test_path}"     # Path to X_test CSV file (if separate)
+    x_validation_path: "${x_validation_path}" # Path to X_validation CSV file (if separate)
+
+    #id_cols: "${id_cols}"           # Optional list of technical identifiers
+    join_key: "id"    #"${join_key}"
+    label_col: "faulty" #"${label_col}"  0/1 target for classification
+    time_col: "${time_col}"           # Optional column name for time-based analyses (e.g. "event_time")
 
 # -------------------------
 # RUNTIME CONFIGURATION
@@ -28,7 +34,7 @@ pipeline:
 # -------------------------
 runtime:
   random_seed: 42 # util seeding for reproducibility
-  output_root: "${output_root}" # util base output dir for all artifacts
+  output_root: "out" # ${output_root}" # util base output dir for all artifacts
   overwrite_artifacts: true # util whether to overwrite existing outputs
   #log_level: "DEBUG"        # DEBUG | INFO | WARNING | ERROR | CRITICAL
 
@@ -47,24 +53,20 @@ stages:
       Load CSV + describe structure + data quality assessment + EDA.
       Stage 2 MUST NOT modify data (report-only).
     dataset_input:
-      source_type: "csv"
-      path: "${dataset_path}"
-      # Optional CSV overrides (prefer putting them in datasets/*.yml)
-      csv_params:
-        sep: ","
-        encoding: "utf-8"
-        decimal: "."
-        low_memory: false
+      source_type: "csv" # csv | json | database | external_system
+      path:  "${x_train_path}" #"${dataset_path}"
+      labels_input:
+        source_type: "csv" # csv | json | database | external_system
+        path: "${y_train_path}"
       read_strategy:
-        mode: "sample"                # full | sample | chunked
+        mode: "sample"  # full | sample | chunked
         sample_rows: 200000
-        sample_frac: null
         random_state: 42
-        chunksize: 200000
+        chunk_size: 200000 # used only if mode=chunked
     output_policy:
       save_all_as_png: true
-      figures_dir: "figures/stage2"
-      tables_png_dir: "tables_png/stage2"
+      figures_dir: "figures/stage2_understanding"
+      tables_png_dir: "tables_png/stage2_understanding"
       dpi: 150
     steps:
       # 2.1 Data acquisition:
@@ -80,7 +82,7 @@ stages:
           load_csv:
             enabled: true
             params:
-              infer_datetime: true
+              infer_datetime: false       # whether to attempt parsing date columns
               parse_dates: []          # e.g. ["event_time"] if known
       # 2.2 Describe data:
       # Analysis of the dataset structure and its basic characteristics, including schema, variables, and data types.
@@ -151,14 +153,14 @@ stages:
               subset: null
               keep: "first"
           range_validation:
-            enabled: true
+            enabled: false
             params:
-              rules_file: "configs/rules/ranges_quality_rules_config.yml"
+              rules_file: "config/rules/ranges_quality_rules_config.yml"
               on_fail: "report_only"
           inconsistency_checks:
-            enabled: true
+            enabled: false
             params:
-              rules_file: "configs/rules/logic_quality_rules_config.yml"
+              rules_file: "config/rules/logic_quality_rules_config.yml"
               on_fail: "report_only"
 
       # 2.4 EDA:
@@ -187,7 +189,7 @@ stages:
           # Method 3 - scatter_matrix:
           # Displays bivariate relationships among multiple variable
           scatter_matrix:
-            enabled: true
+            enabled: false
             params:
               numeric_only: true
               max_columns: 8
@@ -203,7 +205,7 @@ stages:
           # Method 5 - pca_exploratory:
           # Reduces dimensionality to visualize the global structure of the dataset.
           pca_exploratory:
-            enabled: true
+            enabled: false
             params:
               numeric_only: true
               n_components: 2
@@ -221,8 +223,8 @@ stages:
       (optional integration) + split + formatting. Generates artifacts.
     output_policy:
       save_all_as_png: true
-      figures_dir: "figures/stage3"
-      tables_png_dir: "tables_png/stage3"
+      figures_dir: "figures/stage3_preparation"
+      tables_png_dir: "tables_png/stage3_preparation"
     steps:
       # 3.1 Data selection
       # Process of deciding which data are included in the analysis and which are excluded based on relevance and quality criteria.
@@ -237,12 +239,12 @@ stages:
               # Method 1 - manual_include_exclude:
               # Explicit selection of relevant columns to include or exclude from the analysis.
               manual_include_exclude:
-                enabled: true
+                enabled: false
                 params: { include: [], exclude: [] }
               # Method 2 - drop_technical_columns:
               # Removal of technical or non-informative columns (e.g. IDs, logs, metadata).
               drop_technical_columns:
-                enabled: true
+                enabled: false
                 params:
                   patterns: ["id", "uuid", "log"]
               # Method 3 - population_filtering:
@@ -250,7 +252,7 @@ stages:
               population_filtering:
                 enabled: false
                 params:
-                  rules_file: "configs/rules/logic_quality_rules_config.yml"
+                  rules_file: "config/rules/logic_quality_rules_config.yml"
           # Technique 2 - feature_selection:
           # Selection of informative variables and removal of redundant features.
           feature_selection:
@@ -266,7 +268,7 @@ stages:
               business_rule_filtering:
                 enabled: false
                 params:
-                  rules_file: "configs/rules/logic_quality_rules_config.yml"
+                  rules_file: "config/rules/logic_quality_rules_config.yml"
               # Method 3 - remove_constant_features:
               # Elimination of variables with no variance.
               remove_constant_features:
@@ -290,130 +292,12 @@ stages:
             # Ensures you do NOT apply multiple numeric imputations at once.
             selection_policy:
               numeric_imputer: "median_imputation"     # mean_imputation | median_imputation | knn_imputation | mice_imputation
-              categorical_imputer: "mode_imputation"   # mode_imputation | constant_imputation
             methods:
-              # Method 1 - drop_rows:
-              # Direct removal of rows containing missing or invalid values.
-              drop_rows:
-                enabled: false
-                params: { how: "any" }
-              # Method 2 - drop_columns:
-              # Direct removal of columns with missing or invalid values.
-              drop_columns:
-                enabled: false
-                params: { threshold: 0.5 }            # drop columns with >50% missing
-              # Method 3 - mean_imputation:
-              # Simple statistical imputation using the mean of the variable.
-              mean_imputation:
-                enabled: false
-                params: { numeric_only: true }
-              # Method 4 - median_imputation:
+              # Method 1 - median_imputation:
               # Simple statistical imputation using the median of the variable.
               median_imputation:
                 enabled: true
                 params: { numeric_only: true }
-              # Method 5 - mode_imputation:
-              # Simple statistical imputation using the mode of the variable.
-              mode_imputation:
-                enabled: true
-                params: { for_categoricals: true }
-              # Method 6 - constant_imputation:
-              constant_imputation:
-                enabled: false
-                params: { value: "missing" }
-              # Method 7 - knn_imputation:
-              knn_imputation:
-                enabled: false
-                params: { n_neighbors: 5 }
-              # Method 8 - mice_imputation:
-              mice_imputation:
-                enabled: false
-                params: {}
-          # Technique 2 - Outlier handling:
-          # Detection and management of extreme values.
-          outlier_handling:
-            enabled: true
-            methods:
-              # Method 1 - winsorization:
-              # Limits extreme values by capping them at specified percentiles.
-              winsorization:
-                enabled: false
-                params: { limits: [0.01, 0.01] }
-              # Method 2 - iqr_clipping:
-              # Outlier handling based on interquartile range thresholds.
-              iqr_clipping:
-                enabled: true
-                params: { k: 1.5 }
-              # Method 3 - zscore_filtering:
-              # Outlier detection based on standard deviation from the mean.
-              zscore_filtering:
-                enabled: false
-                params: { threshold: 3.0 }
-          # Technique 3 - Data transformation:
-          # Transformations applied to stabilize distributions and reduce sensitivity to outliers.
-          robust_transformations:
-            enabled: true
-            methods:
-              # Method 1 - log_transform:
-              # Logarithmic transformation applied to reduce skewness and stabilize variance.
-              log_transform:
-                enabled: false
-                params: { shift_if_needed: true }
-              # Method 2 - box_cox:
-              # Parametric power transformation (λ) applicable to strictly positive values (x > 0).
-              box_cox:
-                enabled: false
-                params: {}
-              # Method 3 - yeo_johnson:
-              # Generalized variant of Box–Cox that supports zero and negative values.
-              yeo_johnson:
-                enabled: true
-                params: {}
-          # Technique 4 - Categorical noise handling:
-          # Correction of noise in categorical variables (e.g. inconsistent labels, typos).
-          categorical_noise:
-            enabled: true
-            methods:
-              # Method 1 - fix_typos:
-              # Correction of spelling errors and inconsistent textual entries in categorical variables.
-              fix_typos:
-                enabled: true
-                params: { lowercase: true, regex_cleanup: true }
-              # Method 2 - text_normalization:
-              # Standardization of textual data (e.g. case folding, trimming, accent removal).
-              text_normalization:
-                enabled: true
-                params: { remove_accents: true }
-              # Method 3 - rare_grouping:
-              # Grouping of infrequent categories into a single representative category (e.g. Other).
-              rare_grouping:
-                enabled: true
-                params: { min_freq: 0.01 }
-          # Technique 5 - Duplicate handling & data reduction:
-          # Identification and management of duplicated records.
-          duplicate_handling:
-            enabled: true
-            method:
-              # Method 1 - exact_duplicates:
-              # Removal of fully identical records across all columns.
-              exact_duplicates:
-                enabled: true
-                params: { subset: null, keep: "first" }
-          # Technique 6 - Data reduction:
-          # Reduction of the dataset due to low quality, irrelevance, or redundancy.
-          data_reduction:
-            enabled: false
-            methods:
-              # Method 1 - drop_rows_threshold:
-              # Removal of rows based on a predefined missing value (NaN) threshold.
-              drop_rows_threshold:
-                enabled: false
-                params: { max_na_ratio: 0.5 }
-              # Method 2 - drop_columns_threshold:
-              # Removal of columns based on a predefined missing value (NaN) threshold.
-              drop_columns_threshold:
-                enabled: false
-                params: { max_na_ratio: 0.5 }
 
       # 3.3 Data transformation
       # Modification of data representation to improve model learning and performance (e.g., scaling, encoding, normalization).
@@ -430,19 +314,13 @@ stages:
               # Method 1 - standard_scaling:
               # Transforms data to have zero mean and unit standard deviation.
               standard_scaling: { enabled: true, params: {} }
-              # Method 2 - minmax_scaling:
-              # Min-Max normalization to a specified range (default: [0, 1]).
-              minmax_scaling:   { enabled: false, params: { feature_range: [0, 1] } }
-              # Method 3 - robust_scaling:
-              # Scaling using statistics robust to outliers (median and IQR).
-              robust_scaling:   { enabled: false, params: {} }
-              # Method 4 - max abs_scaling:
-              # Scaling by the maximum absolute value of each feature.
-              maxabs_scaling:   { enabled: false, params: {} }
+              # Method 2 - robust_scaling:
+              # Scaling using statistics that are robust to outliers (median and IQR).
+              robust_scaling: { enabled: false, params: {} }
           # Technique 2 - categorical_encoding:
           # Conversion of categorical variables into numerical representations understandable by ML algorithms
           encoding:
-            enabled: true
+            enabled: false
             selection_policy:
               categorical_encoding: "one_hot_encoding" # one_hot_encoding | ordinal_encoding | frequency_encoding
             methods:
@@ -488,63 +366,6 @@ stages:
       # Combination of multiple data sources into a single coherent, consistent, and aligned dataset.
       step_3_4_data_integration:
         enabled: false
-        techniques:
-          # Technique 1 - dataset_merging
-          # Process of combining datasets from different sources into a single dataset using common keys or concatenation.
-          dataset_merging:
-            enabled: false
-            selection_policy:
-              merging_method: join
-              join_how: inner          # inner | left | right
-            methods:
-              # Method 1 - join:
-              join:
-                enabled: true
-                params:
-                  how: inner           # inner | left | right
-                  on: []               # join keys
-          # Technique 2 - feature_alignment
-          # Alignment of features across datasets to ensure structural compatibility.
-          feature_alignment:
-            enabled: false
-            selection_policy:
-              alignment_methods: [column_renaming, datatype_harmonization]
-            methods:
-              # Method 1 - column_renaming:
-              column_renaming:
-                enabled: true
-                params:
-                  mapping: {}          # old_name: new_name
-              # Method 2 -datatype_harmonization:
-              datatype_harmonization:
-                enabled: true
-                params: {}
-          # Technique 3 - key_resolution
-          # Management and alignment of identifier keys across datasets.
-          key_resolution:
-            enabled: false
-            selection_policy:
-              key_method: pk_fk_mapping
-            methods:
-              # Method 1 - pk_fk_mapping:
-              pk_fk_mapping:
-                enabled: true
-                params:
-                  mapping: {}          # source_key: target_key
-          # Technique 4 - conflict_resolution
-          # Resolution of contradictory values between datasets during integration.
-          conflict_resolution:
-            enabled: false
-            selection_policy:
-              conflict_method: priority_rules
-            methods:
-              # Method 1 - priority_rules:
-              # Resolution of data conflicts based on predefined source priority rules.
-              priority_rules:
-                enabled: true
-                params:
-                  rules: {}            # e.g. column_name: [sourceA, sourceB]
-
 
       # 3.5 Data formatting (split + final shapes)
       # Preparation of data in the exact format required by the algorithm, without altering its informational content.
@@ -576,27 +397,21 @@ stages:
                   test: 0.2
                   stratify: true
                   random_state: 42
-              # Method 3 - time_based_split:
-              # Time-series strategies MUST stay OFF for classification
-              temporal_split:
-                enabled: false
-                params: { time_col: "${time_col}" }
-              # Method 4 - walk_forward:
-              # Time-series cross-validation strategy that simulates real-time forecasting by training on past data and testing on future data in a rolling manner.
-              walk_forward:
-                enabled: false
-                params: { n_splits: 5 }
           # Technique 2 - data_formatting:
           # Adaptation of data structure and types to the exact format required by ML algorithms, without altering informational content.
           dataset_formatting:
             enabled: true
             methods:
-              # Method 1 - x_y_separation:
-              # Separation of predictor variables (features) and the target variable.
-              x_y_separation:
+              # Method 1 - join_x_y:
+              # Integration of separate feature (X) and target (Y) datasets into a single dataset for modeling.
+              join_x_y:
                 enabled: true
                 params:
-                  target_col: "${target_col}"
+                  x_path: "${x_train_path}"
+                  y_path: "${y_train_path}"
+                  join_key: "${join_key}"
+                  label_col: "${label_col}"
+                  drop_after_join: ["trq_margin","id"] # example of a column to drop after the join, if it exists; can be empty or omitted
               # Method 2 - type_casting:
               # Explicit conversion of data types.
               type_casting:
@@ -607,6 +422,11 @@ stages:
               sparse_dense_format:
                 enabled: true
                 params: { format: "sparse" }          # sparse | dense
+              # Method 4 - x_y_separation:
+              # Separation of predictor variables (features) and the target variable.
+              x_y_separation:
+                enabled: true
+                params: {}
 
 
   # -------------------------
@@ -620,8 +440,8 @@ stages:
       test design (CV/holdout), hyperparameter tuning, and evaluation metrics.
     output_policy:
       models_dir: "models"
-      figures_dir: "figures/stage4"
-      tables_png_dir: "tables_png/stage4"
+      figures_dir: "figures/stage4_modeling"
+      tables_png_dir: "tables_png/stage4_modeling"
       metrics_file: "metrics.json"
       save_all_as_png: true
     steps:
@@ -634,22 +454,26 @@ stages:
           # Method 1 - decision_tree_classifier:
           decision_tree_classifier:
             enabled: true
-            params: {}
+            params:
+              random_state: 42
           # Method 2 - random_forest_classifier:
           random_forest_classifier:
             enabled: true
-            params: {}
+            params:
+                n_estimators: 100
+                random_state: 42
+                n_jobs: -1
           # Method 3 - svm_classifier:
           svm_classifier:
-            enabled: true
+            enabled: false
             params: {}
           # Method 4 - naive_bayes_classifier:
           naive_bayes_classifier:
-            enabled: true
+            enabled: false
             params: {}
           # Method 5 - knn_classifier:
           knn_classifier:
-            enabled: true
+            enabled: false
             params: {}
 
       # 4.2 Build the model (Model training)
@@ -666,7 +490,7 @@ stages:
               store_all_models: true       # persist all trained models
           # Method 2 - hyperparameter_tuning:
           hyperparameter_tuning:
-            enabled: true                  # "se puede aplicar"
+            enabled: false                  # "se puede aplicar"
             params:
               strategy: "grid"             # grid | random
               scoring: "f1_weighted"       # classification-oriented scoring
@@ -698,7 +522,7 @@ stages:
           # Method 1 - cross_validation:
           # Cross-validation applies to classification (per your table)
           cross_validation:
-            enabled: true
+            enabled: false # "se puede aplicar"
             params:
               cv_folds: 5
               shuffle: true
@@ -725,14 +549,6 @@ stages:
             enabled: true
             params:
               average: "weighted"
-          rmse:
-            enabled: false        # not applicable for classification
-          mae:
-            enabled: false        # not applicable for classification
-          silhouette:
-            enabled: false        # not applicable for classification
-          aic_bic:
-            enabled: false        # not applicable for classification
 
 
 
@@ -747,8 +563,8 @@ stages:
       actionable knowledge, validate business value, audit the pipeline,
       and decide next steps.
     output_policy:
-      figures_dir: "figures/stage5"
-      tables_png_dir: "tables_png/stage5"
+      figures_dir: "figures/stage5_evaluation_and_interpretation"
+      tables_png_dir: "tables_png/stage5_evaluation_and_interpretation"
       metrics_file: "metrics.json"
       save_all_as_png: true
     steps:
@@ -768,7 +584,7 @@ stages:
           # Method 2 - coefficients:
           # Direct interpretation of feature weights in linear models.
           coefficients:
-            enabled: true
+            enabled: false
             params:
               top_k: 30
               include_models: ["svm_linear", "logistic_like_if_any"]  # safe placeholder
@@ -779,14 +595,6 @@ stages:
             params:
               n_repeats: 10
               random_state: 42
-          # Method 4 - shap_analysis:
-          # Visualizes the average effect of a feature on the model’s predictions.
-          partial_dependence_plot:
-            enabled: true
-            params:
-              features: []               # empty => auto-select top features
-              kind: "average"            # average | individual
-              max_features: 6
           # Method 5 - confusion_matrix_analysis:
           # Detailed analysis of correct and incorrect predictions by class.
           confusion_matrix_analysis:
@@ -816,9 +624,9 @@ stages:
           # Method 3 - business_kpis:
           # Translation of technical metrics into economic or business impact indicators.
           business_kpis:
-            enabled: true
+            enabled: false
             params:
-              kpi_rules_file: "configs/rules/business_kpi_rules_config.yml"
+              kpi_rules_file: "config/rules/business_kpi_rules_config.yml"
               currency: "EUR"
 
       # 5.3 Review the process (Process audit)
@@ -830,9 +638,9 @@ stages:
           # Method 1 - pipeline_review:
           # Manual review of the entire processing pipeline.
           pipeline_review:
-            enabled: true
+            enabled: false
             params:
-              checklist_file: "configs/rules/pipeline_review_checklist.yml"  # optional
+              checklist_file: "config/rules/pipeline_review_checklist.yml"  # optional
           # Method 2 - reproducibility_check:
           # Verification that results are repeatable and reproducible.
           reproducibility_check:
@@ -845,14 +653,15 @@ stages:
           leakage_detection:
             enabled: true
             params:
-              target_col: "${target_col}"
+              label_col: "${label_col}"
+              #target_col: "${target_col}"
               check_time_leakage: false   # classification default
               time_col: "${time_col}"
 
       # 5.4 Determine next steps (Decision making)
       # Decide how to proceed with the model.
       step_5_4_decision_making:
-        enabled: true
+        enabled: false
         technique: "decision_making"
         methods:
           # Method 1 - go_no_go_decision:
@@ -876,3 +685,11 @@ stages:
               require_manual_signoff: true
 
 
+      step_5_5_submission_export:
+          enabled: false
+          technique: "submission_export"
+          params:
+            output_dir: "submissions" # directory where submission files will be saved
+            test_filename: "submission.jso" # name of the submission file for test set predictions (e.g. "submission.csv" or "submission.json")
+            validation_filename: "validation_submission.jso" # name of the submission file for validation set predictions (e.g. "validation_submission.csv" or "validation_submission.json")
+            id_field: "id"   # name of the identifier field to include in the submission file (e.g. "id", "uuid", "record_id")
