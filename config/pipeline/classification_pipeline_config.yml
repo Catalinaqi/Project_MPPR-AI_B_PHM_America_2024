@@ -166,6 +166,12 @@ stages:
             params:
               rules_file: "config/rules/logic_quality_rules_config.yml"
               on_fail: "report_only"
+          percentile_analysis:
+            enabled: true
+            params:
+              columns: [ "pa" ]
+              percentiles: [ 0.01, 0.05, 0.95, 0.99, 0.999 ]
+
 
       # 2.4 EDA:
       # Systematic exploration of data to identify patterns, relationships, trends, and behavioral characteristics.

@@ -229,6 +229,40 @@ def run_stage2(cfg: Dict[str, Any], variables: Dict[str, Any], output_root: Path
                            output_root, f"{tables_dir}/y_missing.png", "Y missing", dpi=dpi)
 
     # ============================================================
+    # Step 2.3 Data quality assessment
+    # ============================================================
+    s23 = steps.get("step_2_3_data_quality_assessment", {})
+    if s23.get("enabled", False):
+        methods = s23.get("methods", {})
+
+        # percentile_analysis
+        # percentiles: [ 0.01, 0.05, 0.95, 0.99, 0.999 ]
+        if methods.get("percentile_analysis", {}).get("enabled", False):
+            p = methods["percentile_analysis"].get("params", {})
+            percentiles = p.get("percentiles", [0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99, 0.999])
+            #percentiles = p.get("percentiles", [0.25, 0.5, 0.75])
+            cols_x = _numeric_cols(X, exclude=["id"])
+            cols_y = _numeric_cols(Y, exclude=["id"])
+
+            # def _percentiles(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
+            #     d = pd.DataFrame(index=cols)
+            #     for q in percentiles:
+            #         d[f"{int(q*100)}%"] = df[cols].quantile(q)
+            #     return d
+
+            def _percentiles(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+                if not cols:
+                    return pd.DataFrame()
+                qs = df[cols].quantile(percentiles).T  # index = cols, columns = percentiles
+                qs.columns = [f"p{int(q*1000)/10:g}" for q in percentiles]  # p1, p5, p99.9, etc.
+                return qs
+
+            save_table_png_pretty_all(as_table_by_column_heuristic(_percentiles(X, cols_x)), output_root, f"{tables_dir}/x_percentiles.png",
+                               "X Percentiles", dpi=dpi)
+            save_table_png_pretty_all(as_table_by_column_heuristic(_percentiles(Y, cols_y)), output_root, f"{tables_dir}/y_percentiles.png",
+                               "Y Percentiles", dpi=dpi)
+
+    # ============================================================
     # Step 2.4 EDA - Histograms for X + Y (including faulty)
     # ============================================================
     s24 = steps.get("step_2_4_eda", {})

@@ -61,12 +61,15 @@ def as_table_by_column_heuristic(desc_or_indexed: pd.DataFrame,
     stats_like = {"count", "mean", "std", "min", "25%", "50%", "75%", "max", "top", "freq", "unique"}
     if set(map(str, df.index)).intersection(stats_like):
         tbl = df.T.reset_index().rename(columns={"index": name_col})
+        log.debug("Caso 1: Transposed describe() output detected. Created table with %d rows and %d columns.", tbl.shape[0], tbl.shape[1])
     else:
         # Case B: already indexed by feature names
         if name_col in df.columns:
             tbl = df.reset_index(drop=True)
+            log.debug("Caso 2: DataFrame already has a column named '%s'. Using it as-is without resetting index.", name_col)
         else:
             tbl = df.reset_index().rename(columns={"index": name_col})
+            log.warning("Caso 2: DataFrame index reset into '%s'. Original index values are now in this column.", name_col)
 
     # Keep original dataset column ordering if provided
     if original_columns:
