@@ -68,6 +68,9 @@ stages:
       figures_dir: "figures/stage2_understanding"
       tables_png_dir: "tables_png/stage2_understanding"
       dpi: 150
+      max_rows: 60
+      float_fmt: "{:.3f}"
+      align: left
     steps:
       # 2.1 Data acquisition:
       # Process of collecting data and identifying their origin, sources, and generation context
@@ -89,7 +92,7 @@ stages:
       step_2_2_describe_data:
         enabled: true
         techniques:
-          # Technique 2 - describe_data:
+          # Technique 1 - describe_data:
           # Technique that numerically summarizes variables using measures of central tendency, dispersion, and range.
           descriptive_statistics:
             enabled: true
@@ -107,7 +110,7 @@ stages:
                 enabled: true
                 params:
                   numeric_only: true
-          # Technique 3  - schema_inspection:
+          # Technique 2  - schema_inspection:
           # Analysis of the dataset structure, including columns, data types, cardinality, and the presence of null values.
           schema_inspection:
             enabled: true
@@ -116,6 +119,7 @@ stages:
               # Inspects the data types of each dataset column
               dtype_analysis:
                 enabled: true
+                #params: {}
               # Method 2 -cardinality_count:
               # Counts the number of unique values per column.
               cardinality_count:
