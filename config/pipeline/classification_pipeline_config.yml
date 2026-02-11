@@ -53,13 +53,18 @@ stages:
       Load CSV + describe structure + data quality assessment + EDA.
       Stage 2 MUST NOT modify data (report-only).
     dataset_input:
-      source_type: "csv" # csv | json | database | external_system
+      source_type: "csv"  # csv | json | database | external_system
+      csv_params:
+        sep: ","
+        encoding: "utf-8"
+        decimal: "."
+        low_memory: false
       path:  "${x_train_path}" #"${dataset_path}"
       labels_input:
         source_type: "csv" # csv | json | database | external_system
         path: "${y_train_path}"
       read_strategy:
-        mode: "sample"  # full | sample | chunked
+        mode: "full"  # full | sample | chunked
         sample_rows: 200000
         random_state: 42
         chunk_size: 200000 # used only if mode=chunked
@@ -75,6 +80,7 @@ stages:
       # 2.1 Data acquisition:
       # Process of collecting data and identifying their origin, sources, and generation context
       step_2_1_data_acquisition:
+        name: step_2_1_data_acquisition
         enabled: true
         # Technique 1 - data_acquisition:
         # Process by which data are collected and made available for analysis from one or more sources (files, databases, APIs, external systems).
@@ -90,6 +96,7 @@ stages:
       # 2.2 Describe data:
       # Analysis of the dataset structure and its basic characteristics, including schema, variables, and data types.
       step_2_2_describe_data:
+        name: step_2_2_describe_data
         enabled: true
         techniques:
           # Technique 1 - describe_data:
@@ -134,6 +141,7 @@ stages:
       # 2.3 Data quality assessment:
       # Identification of data quality issues such as missing values, inconsistencies, or anomalies, without applying corrective actions
       step_2_3_data_quality_assessment:
+        name: step_2_3_data_quality_assessment
         enabled: true
         # Technique 4 - data_quality_assessment:
         # Systematic evaluation to detect data quality issues, without applying corrections yet.
@@ -176,6 +184,7 @@ stages:
       # 2.4 EDA:
       # Systematic exploration of data to identify patterns, relationships, trends, and behavioral characteristics.
       step_2_4_eda:
+        name: step_2_4_eda
         enabled: true
         # Technique 5 - exploratory_data_analysis (EDA):
         # Process of visual and analytical exploration to identify patterns, relationships, trends, and structures in the data.
@@ -244,7 +253,7 @@ stages:
           # Technique 1 - data_selection:
           # Definition of the dataset scope, determining which rows and columns are included in the analysis.
           dataset_definition:
-            enabled: true
+            enabled: false
             methods:
               # Method 1 - manual_include_exclude:
               # Explicit selection of relevant columns to include or exclude from the analysis.
@@ -256,7 +265,7 @@ stages:
               drop_technical_columns:
                 enabled: false
                 params:
-                  patterns: ["id", "uuid", "log"]
+                  patterns: ["uuid", "log"] # id not aplly to classification if id is relevant for the task; adjust patterns as needed
               # Method 3 - population_filtering:
               # Filtering of records according to business or analytical rules.
               population_filtering:
@@ -306,8 +315,20 @@ stages:
               # Method 1 - median_imputation:
               # Simple statistical imputation using the median of the variable.
               median_imputation:
+                enabled: false # change to true if you want to apply this imputation method
+                params:
+                  numeric_only: true
+                  #exclude_cols: [id] # e.g. ["id"] if id is not relevant for imputation; adjust as needed
+          # Technique 2 - Duplicate handling & data reduction:
+          # Identification and management of duplicated records.
+          duplicate_handling:
+            enabled: true
+            method:
+              # Method 1 - exact_duplicates:
+              # Removal of fully identical records across all columns.
+              exact_duplicates:
                 enabled: true
-                params: { numeric_only: true }
+                params: { subset: null, keep: "first" }
 
       # 3.3 Data transformation
       # Modification of data representation to improve model learning and performance (e.g., scaling, encoding, normalization).

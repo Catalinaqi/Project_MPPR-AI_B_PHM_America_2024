@@ -39,3 +39,29 @@ def write_json(path: str | Path, data: Dict[str, Any], indent: int = 2) -> Path:
     p.write_text(json.dumps(data, indent=indent, ensure_ascii=False), encoding="utf-8")
     log.info("write_json: %s", p)
     return p
+
+def to_json_log(obj: Any, indent: int = 2) -> str:
+    """
+    Convert an object to a pretty JSON string for logging.
+    - default=str prevents serialization errors (Path, numpy types, pandas objects, etc.)
+    """
+    return json.dumps(
+        obj,
+        ensure_ascii=False,
+        sort_keys=True,
+        indent=indent,
+        default=str,
+    )
+
+
+def to_json_log_compact(obj: Any) -> str:
+    """
+    Convert an object to a compact one-line JSON string for logging.
+    """
+    return json.dumps(
+        obj,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )

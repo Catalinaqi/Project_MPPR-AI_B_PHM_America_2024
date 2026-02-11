@@ -1,212 +1,253 @@
 # src/phm_america_2024/reporting/tables_utils_reporting.py
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from phm_america_2024.core.logging_utils_core import get_logger
-from phm_america_2024.core.helpers_utils_core import ensure_dir
 
 log = get_logger(__name__)
 
 # =============================================================================
 # Why this module exists
 # -----------------------------------------------------------------------------
-# Centralized table-to-image utilities for consistent reporting artifacts.
+# Reporting "table shaping" utilities.
 #
-# Program flow expectation:
-# - Stage2/Stage3/... compute pandas DataFrames for reporting (describe, quality,
-#   cardinality, missingness, etc.) and call save_table_png_pretty(...).
+# This module does NOT write files.
+# It only transforms pandas DataFrames into report-friendly table layouts.
+#
+# Step-by-step flow (typical usage in Stage2/Stage3)
+# -----------------------------------------------------------------------------
+# 1) Compute a raw report table (e.g., describe, missingness, cardinality, etc.)
+# 2) If needed, call safe_describe(df, ...) to get a robust describe() output
+# 3) Convert the output to a "by-feature" layout using as_table_by_column_heuristic(...)
+#    - This is critical for readable tables when there are many features
+# 4) Pass the final DataFrame to the artifact layer:
+#    - artifacts_service_reporting.save_table_png_pretty_all(...)
 #
 # Design patterns
 # - GoF: none.
 # - Enterprise/Architectural:
-#   - Reporting utility (artifact renderer)
+#   - Reporting utility (table shaper / formatter)
 # =============================================================================
 
 
-def as_table_by_column_heuristic(desc_or_indexed: pd.DataFrame,
-                       original_columns: list[str] | None = None,
-                       name_col: str = "NameColumn") -> pd.DataFrame:
+def safe_describe(
+        df: pd.DataFrame,
+        include: Union[str, List[str]] = "all",
+        numeric_only: bool = False,
+        context: str = "",
+) -> pd.DataFrame:
     """
-    Convert a DataFrame to a "by column" table with an explicit NameColumn.
+    Safe wrapper around pandas.DataFrame.describe() for reporting.
 
-    Supported inputs:
-    1) Output of df.describe() -> stats as rows, features as columns.
-       We transpose: rows become features, columns become stats.
-    2) Any DataFrame whose index already represents feature names (e.g. created with index=cols).
-       We reset index into NameColumn.
+    Why this method is critical
+    ---------------------------
+    Reporting stages must not crash because of edge cases:
+    - empty DataFrames (sampling/chunking)
+    - DataFrames without numeric columns when numeric_only=True
+    This helper returns an empty DataFrame instead of raising.
+
+    How it fits into the reporting flow
+    -----------------------------------
+    Stage2/Stage3:
+      safe_describe(df) -> as_table_by_column_heuristic(...) -> save_table_png_pretty_all(...)
+
+    Parameters
+    ----------
+    df:
+        Input DataFrame.
+    include:
+        Passed to df.describe(include=...). Use "all" to include numeric + non-numeric stats.
+    numeric_only:
+        If True, describe only numeric columns (stable for statistics tables).
+    context:
+        Optional label used only for logging (e.g., "Stage2/X" or "Stage2/Y").
+
+    Returns
+    -------
+    pd.DataFrame
+        describe() output or empty DataFrame if not applicable.
+    """
+    tag = f"[safe_describe]{'[' + context + ']' if context else ''}"
+
+    if df is None:
+        log.warning("%s df is None -> returning empty DataFrame()", tag)
+        return pd.DataFrame()
+
+    if df.shape[1] == 0:
+        log.warning("%s df has 0 columns -> returning empty DataFrame()", tag)
+        return pd.DataFrame()
+
+    log.info(
+        "%s start: rows=%d cols=%d numeric_only=%s include=%s",
+        tag, df.shape[0], df.shape[1], numeric_only, include
+    )
+
+    try:
+        if numeric_only:
+            num = df.select_dtypes(include="number")
+            if num.shape[1] == 0:
+                log.warning("%s numeric_only=True but no numeric columns -> empty DataFrame()", tag)
+                return pd.DataFrame()
+            out = num.describe()
+            log.info("%s end: produced describe table shape=%s (numeric_only)", tag, out.shape)
+            return out
+
+        out = df.describe(include=include)
+        log.info("%s end: produced describe table shape=%s", tag, out.shape)
+        return out
+
+    except Exception as e:
+        # Reporting MUST NOT crash the pipeline.
+        log.exception("%s describe failed -> returning empty DataFrame(). Error: %s", tag, str(e))
+        return pd.DataFrame()
+
+
+def as_table_by_column_heuristic(
+        desc_or_indexed: pd.DataFrame,
+        original_columns: Optional[List[str]] = None,
+        name_col: str = "NameColumn",
+        context: str = "",
+) -> pd.DataFrame:
+    """
+    Convert a DataFrame into a "by-feature" (by-column) reporting table.
+
+    Why this method is critical
+    ---------------------------
+    - Pandas describe() returns a table shaped as:
+        rows = statistics (count/mean/std/...)
+        cols = features
+      This is hard to read in a report when there are many columns.
+    - This method turns it into:
+        rows = features
+        cols = statistics
+      plus a dedicated column (NameColumn) for the feature name.
+
+    Heuristic behavior
+    ------------------
+    Case 1) Input looks like describe() output (stats x features) -> transpose.
+    Case 2) Input already looks like a per-feature table:
+        - If name_col is already present -> keep as-is
+        - Else -> move index into name_col
+
+    Ordering behavior
+    -----------------
+    If original_columns is provided, rows are ordered to match the original dataset
+    column order. This is important for consistency across outputs.
 
     Parameters
     ----------
     desc_or_indexed:
-        DataFrame to convert.
+        DataFrame to convert (describe output or already indexed by feature names).
     original_columns:
-        Optional ordering reference (usually list(X.columns)).
+        Optional list of dataset columns used to preserve original ordering.
     name_col:
-        Name for the feature-name column.
+        Column name used to store the feature name.
+    context:
+        Optional label used only for logging (e.g., "Stage2/X").
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with a name column and rows ordered for reporting.
     """
+    tag = f"[as_table_by_column_heuristic]{'[' + context + ']' if context else ''}"
+
     if desc_or_indexed is None or desc_or_indexed.empty:
+        log.debug("%s input is empty -> returning empty DataFrame()", tag)
         return pd.DataFrame()
 
     df = desc_or_indexed.copy()
 
-    # Case A: typical describe() output (stats x features) -> transpose
-    # Heuristic: if most column names look like feature names and index looks like stats
-    # we still support generic by always allowing transpose when index contains stats-like labels.
+    # Detect typical describe() index labels -> transpose
     stats_like = {"count", "mean", "std", "min", "25%", "50%", "75%", "max", "top", "freq", "unique"}
-    if set(map(str, df.index)).intersection(stats_like):
+    idx_as_str = set(map(str, df.index))
+    is_describe_like = bool(idx_as_str.intersection(stats_like))
+
+    if is_describe_like:
+        # Case 1: stats x features -> transpose into features x stats
         tbl = df.T.reset_index().rename(columns={"index": name_col})
-        log.debug("Caso 1: Transposed describe() output detected. Created table with %d rows and %d columns.", tbl.shape[0], tbl.shape[1])
+        log.info("%s Case1: describe-like detected -> transposed. in=%s out=%s", tag, df.shape, tbl.shape)
     else:
-        # Case B: already indexed by feature names
+        # Case 2: already feature-indexed or already has name column
         if name_col in df.columns:
             tbl = df.reset_index(drop=True)
-            log.debug("Caso 2: DataFrame already has a column named '%s'. Using it as-is without resetting index.", name_col)
+            log.info("%s Case2a: '%s' already present -> as-is. in=%s out=%s", tag, name_col, df.shape, tbl.shape)
         else:
             tbl = df.reset_index().rename(columns={"index": name_col})
-            log.warning("Caso 2: DataFrame index reset into '%s'. Original index values are now in this column.", name_col)
+            log.warning("%s Case2b: index moved into '%s'. in=%s out=%s", tag, name_col, df.shape, tbl.shape)
 
     # Keep original dataset column ordering if provided
     if original_columns:
-        order = [c for c in original_columns if c in set(tbl[name_col].astype(str))]
+        tbl[name_col] = tbl[name_col].astype(str)
+        order = [c for c in original_columns if c in set(tbl[name_col])]
         if order:
-            tbl[name_col] = tbl[name_col].astype(str)
             tbl[name_col] = pd.Categorical(tbl[name_col], categories=order, ordered=True)
             tbl = tbl.sort_values(name_col)
+            log.debug("%s ordered rows by original_columns (matched=%d)", tag, len(order))
+        else:
+            log.debug("%s original_columns provided but no matches -> no reordering applied", tag)
 
     return tbl.reset_index(drop=True)
 
 
-def save_table_png_pretty_all(
-        df: pd.DataFrame,
-        output_root: Path,
-        rel_path: str,
-        title: str = "",
-        max_rows: int = 60,
-        dpi: int = 250,
-        align: str = "left",
-        float_fmt: str = "{:.3f}",
-        add_row_ellipsis: bool = True,
-) -> Path:
+# -----------------------------------------------------------------------------#
+# Before/After helpers (used in Stage3/Feature selection reporting)
+# -----------------------------------------------------------------------------#
+
+def build_before_after_tables(
+        df_before: pd.DataFrame,
+        df_after: pd.DataFrame,
+        step_name: str,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Save a DataFrame as a high-quality PNG table (gray header, borders, good spacing).
+    Build two report-friendly tables:
+    1) KPI table (single row)
+    2) Changes table (removed/added columns)
 
-    Notes
-    -----
-    - This function is for reporting only: do not use it for data processing.
-    - It formats numeric values for readability and avoids oversized figures.
+    This module does NOT write files.
+    Stage runners decide how/where to persist artifacts.
     """
-    p = output_root / rel_path
-    ensure_dir(p.parent)
+    before_cols = list(df_before.columns)
+    after_cols = list(df_after.columns)
 
-    if df is None or df.empty:
-        # Still create a small image saying "empty"
-        fig, ax = plt.subplots(figsize=(8, 2), dpi=dpi)
-        ax.axis("off")
-        ax.text(0.5, 0.5, "Empty table", ha="center", va="center", fontsize=12)
-        fig.tight_layout()
-        fig.savefig(p, dpi=dpi, bbox_inches="tight", pad_inches=0.2)
-        plt.close(fig)
-        log.info("Saved pretty table PNG (empty): %s", p)
-        return p
+    removed = sorted(list(set(before_cols) - set(after_cols)))
+    added = sorted(list(set(after_cols) - set(before_cols)))
 
-    view = df.copy()
+    kpi_df = pd.DataFrame([{
+        "step": step_name,
+        "rows_before": int(df_before.shape[0]),
+        "cols_before": int(df_before.shape[1]),
+        "rows_after": int(df_after.shape[0]),
+        "cols_after": int(df_after.shape[1]),
+        "cols_removed": int(len(removed)),
+        "cols_added": int(len(added)),
+    }])
 
-    # ---- row limit with optional ellipsis row
-    if len(view) > max_rows:
-        head = view.head(max_rows).copy()
-        if add_row_ellipsis:
-            ell = pd.DataFrame([["..."] * view.shape[1]], columns=view.columns)
-            view = pd.concat([head, ell], ignore_index=True)
-        else:
-            view = head
+    n = max(len(removed), len(added), 1)
+    changes_df = pd.DataFrame({
+        "step": [step_name] * n,
+        "removed_col": removed + [""] * (n - len(removed)),
+        "added_col": added + [""] * (n - len(added)),
+    })
 
-    # ---- add sequential "No" column
-    view = view.reset_index(drop=True)
-    view.insert(0, "No", range(1, len(view) + 1))
-    if add_row_ellipsis and len(view) >= 1 and (view.iloc[-1].astype(str) == "...").any():
-        view.loc[len(view) - 1, "No"] = "..."
-
-    # ---- format values (avoid very long floats)
-    def _fmt(x: Any) -> str:
-        if x is None:
-            return ""
-        if isinstance(x, (np.floating, float)):
-            if np.isnan(x):
-                return ""
-            try:
-                return float_fmt.format(float(x))
-            except Exception:
-                return str(x)
-        if isinstance(x, (np.integer, int)):
-            return str(int(x))
-        # keep strings as-is
-        return str(x)
-
-    view = view.applymap(_fmt)
-
-    # ---- adaptive figure size
-    n_rows, n_cols = view.shape
-
-    # Estimate widths based on max string length per column (cap to avoid giant images)
-    max_lens = []
-    for j in range(n_cols):
-        col_vals = view.iloc[:, j].astype(str)
-        max_lens.append(max(col_vals.map(len).max(), len(str(view.columns[j]))))
-
-    # Convert length to inches roughly; cap each column
-    col_widths = [min(0.20 * L, 4.0) for L in max_lens]
-    fig_width = max(10.0, min(sum(col_widths), 28.0))  # cap total width
-    fig_height = max(2.0, min(0.42 * (n_rows + 2), 20.0))  # cap height
-
-    fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=dpi)
-    ax.axis("off")
-
-    if title:
-        ax.set_title(title, fontsize=14, fontweight="bold", pad=12)
-
-    align_map = {"left": "left", "center": "center", "right": "right"}
-    cell_loc = align_map.get(align, "left")
-
-    tbl = ax.table(
-        cellText=view.values,
-        colLabels=view.columns,
-        cellLoc=cell_loc,
-        loc="center",
+    log.debug(
+        "[build_before_after_tables] step=%s | removed=%d | added=%d",
+        step_name, len(removed), len(added)
     )
 
-    # ---- style
-    tbl.auto_set_font_size(False)
-    if n_cols <= 8:
-        fs = 10
-    elif n_cols <= 12:
-        fs = 9
-    else:
-        fs = 8
-    tbl.set_fontsize(fs)
-    tbl.scale(1.0, 1.25)
+    return kpi_df, changes_df
 
-    header_bg = "#E6E6E6"
-    for (r, c), cell in tbl.get_celld().items():
-        cell.set_edgecolor("black")
-        cell.set_linewidth(1.0)
 
-        if r == 0:
-            cell.set_facecolor(header_bg)
-            cell.set_text_props(weight="bold")
+def concat_reports(parts: List[pd.DataFrame]) -> pd.DataFrame:
+    """
+    Concatenate report parts safely.
+    """
+    parts = [p for p in parts if p is not None and not p.empty]
+    if not parts:
+        return pd.DataFrame()
+    return pd.concat(parts, axis=0, ignore_index=True)
 
-        # Center the "No" column
-        if c == 0 and r > 0:
-            cell._text.set_ha("center")
 
-    fig.tight_layout()
-    fig.savefig(p, dpi=dpi, bbox_inches="tight", pad_inches=0.15)
-    plt.close(fig)
-
-    log.info("Saved pretty table PNG: %s", p)
-    return p
