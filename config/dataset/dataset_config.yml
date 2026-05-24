@@ -1,36 +1,39 @@
-# Dataset configuration file for PHM North America 2024 Conference Data Challenge
-
-version: "1.0"
-
-defaults:
-  source_type: "csv"
-  csv_params:
-    sep: ","
-    encoding: "utf-8"
-    decimal: "."
-    low_memory: false
-
+# =============================================================================
+# DATASET CONFIGURATION
+# Single responsibility: Defines WHERE the data resides and HOW to ingest it.
+# =============================================================================
 datasets:
-  phm_north_america_2024_train:
-    description: "PHM North America 2024 Conference Data Challenge Training Set"
-    source_type: "csv" # specify the type of data source (e.g., csv, json, database)
-    paths:  # dataset file paths
-      x_train_path: "data/raw/train/X_train.csv"
-      y_train_path: "data/raw/train/Y_train.csv"
+  phm2024:
+    name: "PHM North America 2024 Conference Data Challenge Dataset"
+    version: "1.0"
+    description: "PHM North America 2024 Conference Data Challenge – complete dataset"
 
+    source:
+      url: "https://data.phmsociety.org/phm2024-conference-data-challenge/"
 
-  phm_north_america_2024_test:
-    description: "PHM North America 2024 Conference Data Challenge Test Set"
-    source_type: "csv" # specify the type of data source (e.g., csv, json, database)
-    paths:  # dataset file paths
-      x_test_path: "data/raw/test/X_test.csv"
+      # -------------------------------------------------------------------------
+      # download_executor: Reference to the Python module responsible for
+      # Phase 2.1 (Acquisition). Used by the orchestrator for automation.
+      # -------------------------------------------------------------------------
+      download_extractor_data: "src/phm_america_2024/data/download_extractor_data.py"
 
-
-  phm_north_america_2024_validation:
-    description: "PHM North America 2024 Conference Data Challenge Validation Set"
-    source_type: "csv" # specify the type of data source (e.g., csv, json, database)
-    paths:  # dataset file paths
-      x_validation_path: "data/raw/validation/X_validation.csv"
+    paths:
+      train:
+        X_TRAIN_FEATURE: "data/raw/train/X_train.csv"
+        Y_TRAIN_TARGET: "data/raw/train/Y_train.csv"
+      test:
+        X_TEST_FEATURE: "data/raw/test/X_test.csv"
+      validation:
+        X_VALIDATION_FEATURE: "data/raw/validation/X_validation.csv"
+    csv_params:
+      sep: ","
+      encoding: "utf-8"
+      decimal: "."
+      # -------------------------------------------------------------------------
+      # low_memory: false -> CRITICAL. Prevents pandas from inferring mixed dtypes
+      # in chunks, which leads to silent data corruption in large GUIDE files.
+      # -------------------------------------------------------------------------
+      low_memory: false
 
 
 

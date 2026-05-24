@@ -1,0 +1,449 @@
+pipeline_base:
+  metadata:
+    project: "PHM North America 2024 - Turboshaft Engine Degradation"
+    purpose: "Base configuration for PHASE 2 - Physics-based profiling"
+    methodology: "CRISP-DM"
+    version: "2.2.0"
+    date: "2025-05-23"
+    changelog:
+      v2.2.0: >
+        Column names confirmed lowercase from DESCRIBE df_train.
+        'torque_measured' corrected to 'trq_measured' across all references.
+        Dataset sizes confirmed: train=742,625 / validation=21,436 / test=21,436.
+        Total samples: 785,497. Split: 94.54% / 2.73% / 2.73%.
+        All 10 columns confirmed as DOUBLE except id (BIGINT) and faulty (BIGINT).
+        All columns nullable (YES) — null check added to quality assessment.
+      v2.1.0: "Column names updated to uppercase — superseded by v2.2.0"
+      v2.0.0: "Initial configuration"
+
+  common_base_config:
+    methodology: "CRISP-DM"
+    version: "2.2.0"
+    runtime:
+      random_seed: 7
+      output_root: "outputs"
+      overwrite_artifacts: true
+      log_level: "DEBUG"
+    output_policy:
+      save_all_as_png: true
+      save_all_tables_as_png: true
+      dpi: 150
+      format: "parquet"
+      compression: "snappy"
+
+  # ── CONFIRMED DATASET SIZES (from DuckDB COUNT queries) ─────────────────
+  # df_train:      742,625 rows  — 94.54% of total — has X and Y labels
+  # df_validation:  21,436 rows  —  2.73% of total — X only, no Y labels
+  # df_test:        21,436 rows  —  2.73% of total — X only, no Y labels
+  # Total:         785,497 rows
+  # ─────────────────────────────────────────────────────────────────────────
+  dataset_sizes:
+    train:      742625
+    validation: 21436
+    test:       21436
+    total:      785497
+    train_pct:  94.54
+    val_pct:    2.73
+    test_pct:   2.73
+
+  # ── CONFIRMED COLUMN SCHEMA (from DESCRIBE df_train) ────────────────────
+  # All feature columns are DOUBLE and nullable.
+  # id and faulty are BIGINT.
+  # No datetime columns — data is shuffled, no temporal order exists.
+  # ─────────────────────────────────────────────────────────────────────────
+  confirmed_schema:
+    columns:
+      id:           {type: BIGINT,  role: identifier,             nullable: true}
+      trq_measured: {type: DOUBLE,  role: feature,                nullable: true,  note: "Real-time measured torque"}
+      oat:          {type: DOUBLE,  role: feature,                nullable: true,  note: "Outside air temperature — can be negative, Kelvin shift required in Phase 3"}
+      mgt:          {type: DOUBLE,  role: feature,                nullable: true,  note: "Mean gas temperature"}
+      pa:           {type: DOUBLE,  role: feature,                nullable: true,  note: "Power available"}
+      ias:          {type: DOUBLE,  role: feature,                nullable: true,  note: "Indicated airspeed"}
+      np:           {type: DOUBLE,  role: feature,                nullable: true,  note: "Net power"}
+      ng:           {type: DOUBLE,  role: feature,                nullable: true,  note: "Compressor speed — min confirmed 90.00, no zero-division risk"}
+      faulty:       {type: BIGINT,  role: target_classification,  nullable: true,  note: "Binary label: 0=nominal, 1=faulty"}
+      trq_margin:   {type: DOUBLE,  role: target_regression,      nullable: true,  note: "Torque margin % — heavy negative skew confirmed (-2.75)"}
+
+  profiles:
+    dev:
+      enabled: true
+      description: "Fast iteration — stratified sample for development"
+      mode: "sample"
+      sample_rows: 7000
+      stratify_column: "faulty"   # confirmed lowercase
+    prod:
+      enabled: false
+      description: >
+        Full-scale execution. Train has 742,625 rows (94.54% of total).
+        Sample capped at 300,000 to keep memory manageable on CPU while
+        preserving statistical representativeness.
+      mode: "sample"
+      sample_rows: 300000
+      stratify_column: "faulty"   # confirmed lowercase
+
+  common_phases_config:
+    phases:
+      phase2_data_understanding:
+        enabled: true
+        objective: "Physical limits profiling and statistical distribution checks"
+        design_principle: "Profile → Detect → Flag → Report (NO transformations)"
+
+        dataset_input:
+          source_type: "local"
+          # Confirmed file mapping from Dataset Summary (v2.1.0)
+          x_train_path:      "${x_train_path}"      # X_train.csv      — 742,625 rows, 8 feature cols
+          y_train_path:      "${y_train_path}"      # Y_train.csv      — 742,625 rows, faulty + trq_margin
+          x_test_path:       "${x_test_path}"       # X_test.csv       —  21,436 rows, 8 feature cols, no labels
+          x_validation_path: "${x_validation_path}" # X_validation.csv —  21,436 rows, 8 feature cols, no labels
+
+        read_strategy:
+          sample_method: "stratified"
+          stratify_column: "faulty"   # confirmed lowercase, BIGINT
+          join_key: "id"              # confirmed BIGINT, present in all splits
+          random_state: 7
+          chunksize: 100000
+          add_source_column: true
+          combine_before_sampling: false
+          dtype_optimization: true
+
+        steps:
+          step_2_1_data_acquisition:
+            enabled: true
+            description: "Load and merge sensor (X) and label (Y) data on join key 'id'"
+            methods:
+              data_acquisition:
+                enabled: true
+                techniques:
+                  load_and_merge:
+                    enabled: true
+                    params:
+                      join_key: "id"
+                      infer_datetime: false  # Shuffled data — no timestamp exists
+                    output: "2.1.data_acquisition.merged_train.json"
+            output_artifacts:
+              sample_x_y_train_parquet:
+                path: "2.1.data_acquisition.sample_train.parquet"
+                description: >
+                  Random sample of 300,000 rows from df_train (merged X+Y).
+                  Contains all features + faulty + trq_margin.
+                  Primary input for all Phase 2 profiling steps and Phase 3 feature engineering.
+                  consumed_by: [ "step_2_2", "step_2_3", "step_2_4", "phase_3", "phase_4" ]
+
+              sample_x_test_parquet:
+                path: "2.1.data_acquisition.sample_test.parquet"
+                description: >
+                  Full df_test loaded as-is (21,436 rows — no sampling needed).
+                  Features only, no labels. Not used until Phase 5 final scoring.
+                  consumed_by: [ "phase_5" ]
+
+              sample_x_validation_parquet:
+                path: "2.1.data_acquisition.sample_validation.parquet"
+                description: >
+                  Full df_validation loaded as-is (21,436 rows — no sampling needed).
+                  Features only, no labels. Not used until Phase 5 final scoring.
+                  consumed_by: [ "phase_5" ]
+
+          #Capire le distribuzioni  → giustifica RobustScaler in Phase 3
+          step_2_2_data_description:
+            enabled: true
+            description: "Sensor schema analysis and thermodynamic bounds"
+            methods:
+              schema_analysis:
+                enabled: true
+                techniques:
+                  column_metadata:
+                    enabled: true
+                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    params:
+                      include_cardinality: false  # All features are continuous DOUBLE
+                      include_dtypes: true
+                    output: "2.2.schema_analysis.column_metadata.json"
+
+              descriptive_statistics:
+                enabled: true
+                description: "Basic statistics for all physical sensor features"
+                techniques:
+                  basic_stats:
+                    enabled: true
+                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    params:
+                      numeric_only: true
+                      metrics: ["count", "mean", "std", "min", "max", "skewness"]
+                      # Confirmed column names — all lowercase
+                      columns: ["mgt", "oat", "trq_measured", "pa", "ias", "np", "ng"]
+                    output: "2.2.descriptive_statistics.sensor_stats.json"
+
+              null_check:
+                enabled: true
+                description: >
+                  All columns confirmed nullable (YES from DESCRIBE).
+                  Check for actual null counts before Phase 3 transformations.
+                techniques:
+                  null_count_per_column:
+                    enabled: true
+                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    params:
+                      columns: ["trq_measured", "oat", "mgt", "pa", "ias", "np", "ng", "faulty", "trq_margin"]
+                    output: "2.2.null_check.null_count_per_column.json"
+
+              target_distribution:
+                enabled: true
+                description: "Analyze faulty class imbalance and trq_margin skewness"
+                techniques:
+                  distribution_analysis:
+                    enabled: true
+                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    params:
+                      classification_target: "faulty"
+                      regression_target: "trq_margin"
+                      compute_imbalance_ratio: true
+                      compute_skewness: true
+                      fit_distributions: [ "norm", "skewnorm", "gamma" ]
+                    output: "2.2.target_distribution.json"
+          #Trovare anomalie fisiche → giustifica regole fisiche + Kelvin shift
+          step_2_3_data_quality_assessment:
+            enabled: true
+            description: "Check for physical anomalies and mathematical risks"
+            methods:
+              physical_limits_detection:
+                enabled: true
+                techniques:
+                  zero_or_negative_check:
+                    enabled: true
+                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    description: >
+                      CONFIRMED RISK: oat min = -19.25°C — Kelvin shift mandatory in Phase 3.
+                      ng min = 90.00 — safe, no zero-division risk.
+                    params:
+                      check_columns: ["oat", "ng"]   # confirmed lowercase
+                      flag_if_less_than_or_equal_to: 0
+                    output: "2.3.physical_limits_detection.zero_or_negative_check.json"
+
+              potential_leakage_detection:
+                enabled: true
+                description: >
+                  Collinearity check using confirmed lowercase column names.
+                  Results from Query 3:
+                    corr(pa, trq_measured)  = -0.179 — safe
+                    corr(mgt, trq_measured) =  0.644 — moderate, keep but monitor
+                    corr(ng, np)            = -0.789 — below 0.95 threshold, keep both
+                  PENDING: corr(trq_measured, trq_margin) — leakage risk, run before closing Phase 2
+                techniques:
+                  collinearity_analysis:
+                    enabled: true
+                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    params:
+                      target_column: "trq_margin"
+                      suspect_pairs:
+                        - ["pa",           "trq_measured"]  # confirmed -0.179 — safe
+                        - ["ng",           "np"]            # confirmed -0.789 — below threshold
+                        - ["mgt",          "trq_measured"]  # confirmed  0.644 — moderate, document
+                        - ["trq_measured", "trq_margin"]    # PENDING — direct leakage check
+                      leakage_threshold: 0.95
+                      secondary_threshold: 0.85  # Applied to trq_measured vs trq_margin only
+                    output: "2.3.quality.collinearity.json"
+          #Scoprire struttura latente → giustifica GMM k=4 in Phase 4
+          step_2_4_data_exploration:
+            enabled: true
+            description: "Flight regime clustering and feature role grouping"
+            methods:
+              feature_inventory:
+                enabled: true
+                techniques:
+                  column_catalog:
+                    enabled: true
+                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    params:
+                      categorize_by_role: true
+                      roles:
+                        identifiers:   ["id"]
+                        targets:       ["faulty", "trq_margin"]
+                        temperatures:  ["oat", "mgt"]
+                        power_metrics: ["pa", "np", "trq_measured"]
+                        speeds:        ["ng", "ias"]
+                    output: "2.4.exploration.column_catalog.json"
+
+              domain_shift_analysis:
+                enabled: true
+                description: "Quantify distribution shift between train/validation/test splits"
+                techniques:
+                  ks_test_per_feature:
+                    enabled: true
+                    split: [
+                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
+                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
+                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
+                    ]
+                    params:
+                      features: [ "trq_measured", "oat", "mgt", "pa", "ias", "np", "ng" ]
+                      reference_split: "train"
+                      compare_splits: [ "validation", "test" ]
+                      significance_level: 0.01
+                      shift_threshold: 0.1  # KS statistic > 0.1 = shift detectado
+                    output: "2.4.domain_shift.ks_report.json"
+
+                  gmm_exploration:
+                    enabled: true
+                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    decision_rule: >
+                      Se BIC minimo a k=4 → conferma Group-K-Fold con k=4 in Phase 4.
+                      Se minimo altrove → aggiorna phase_4 regression/classification config.
+                    params:
+                      k_range: [ 2, 3, 4, 5, 6 ]
+                      features: [ "oat", "ng", "pa", "mgt" ]
+                      selection_criterion: "BIC"
+                    output: "2.4.gmm_exploration.bic_aic_curve.png"
+
+                  feature_drift_summary:
+                    enabled: true
+                    split: [
+                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
+                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
+                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
+                    ]
+                    params:
+                      aggregate_by: "max_ks_statistic"
+                      flag_critical_shifts: true
+                    output: "2.4.domain_shift.drift_summary.json"
+
+              visual_eda:
+                enabled: true
+                techniques:
+                  flight_regime_binning:
+                    enabled: true
+                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    description: >
+                      CONFIRMED from Query 4: two OAT bins dominate (20°C: 297,713 rows,
+                      10°C: 295,229 rows — together 79.8% of train).
+                      GMM k=4 will produce 2 large + 2 small clusters.
+                      Group-K-Fold folds will be size-imbalanced — document in Phase 5.
+                    params:
+                      column: "oat"
+                      bin_size: 10
+                      plot_type: "hist"
+                    output: "2.4.visual_eda.flight_regimes.png"
+
+        # ══════════════════════════════════════════════════════════════════════
+        # DYNAMIC WARNINGS — all confirmed by DuckDB queries
+        # These propagate directly to Phase 3, 4, and 5 configuration.
+        # ══════════════════════════════════════════════════════════════════════
+        critical_warnings:
+
+          negative_temperature_risk:
+            severity: "CRITICAL"
+            confirmed: true
+            evidence: "oat min = -19.25°C, max = 36.80°C (Query 1)"
+            description: >
+              oat contains negative values. KPIs using oat as denominator
+              will produce physically invalid results without Kelvin conversion.
+            phase_3_action: "enforce_kelvin_shift"
+            implementation: "oat_k = oat + 273.15 — apply before any KPI computation"
+            affected_kpis: ["mgt/oat_k", "np/(ng*oat_k)"]
+
+          target_skewness_alert:
+            severity: "ALERT"
+            confirmed: true
+            evidence: "trq_margin: mu=-1.157, sigma=14.069, skewness=-2.752 (Query 2)"
+            description: >
+              trq_margin has a heavy negative tail. Normal distribution assumption
+              for NGBoost and BayesianRidge is violated in the extreme degradation
+              region. Apply clipping or use robust loss in Phase 4.
+            phase_4_action: "enforce_clipping_or_robust_loss"
+            suggested_clip_bounds: "[-43.4, +41.0]  (± 3 sigma)"
+            affected_models: ["NGBoost", "BayesianRidge"]
+
+          scaling_strategy_recommendation:
+            severity: "CRITICAL"
+            evidence: "Domain shift detected: pa mean train=511, test=320"
+            description: >
+              StandardScaler will mis-scale test data because it uses train mean/std.
+              Use RobustScaler (median/IQR) or QuantileTransformer for distribution-robust scaling.
+            phase_3_action: "enforce_robust_scaling"
+            implementation:
+              preferred: "RobustScaler(unit_variance=True)"
+              alternative: "QuantileTransformer(output_distribution='normal')"
+              avoid: [ "StandardScaler", "MinMaxScaler" ]
+
+          leakage_check_pending:
+            severity: "PENDING"
+            confirmed: false
+            description: >
+              Correlation between trq_measured and trq_margin not yet measured.
+              trq_margin is defined as a function of measured torque — high
+              correlation would indicate direct leakage and require exclusion
+              of trq_measured from the feature set.
+            query_to_run: "SELECT CORR(trq_measured, trq_margin) FROM df_train"
+            threshold: 0.85
+            phase_4_action: "exclude_trq_measured_if_corr_above_threshold"
+
+          null_values_unconfirmed:
+            severity: "PENDING"
+            confirmed: false
+            description: >
+              All columns are nullable (DESCRIBE shows YES for all).
+              Actual null counts not yet measured. Run null check in step 2.2
+              before Phase 3 — nulls in oat or ng would affect KPI computation.
+            phase_3_action: "impute_or_drop_nulls_before_kpi_engineering"
+
+          flight_regime_imbalance:
+            severity: "INFO"
+            confirmed: true
+            evidence: >
+              oat bins 20°C (297,713) and 10°C (295,229) = 592,942 rows = 79.8% of train.
+              Remaining: 0°C (107,971), 30°C (21,017), -10°C (12,181),
+              -20°C (8,459), 40°C (55).
+            description: >
+              Two OAT regimes dominate. GMM k=4 will produce 2 large clusters
+              and 2 small ones. Group-K-Fold folds will be size-imbalanced.
+              Expected behavior — document in Phase 5 to justify validation design.
+            phase_5_action: "lock_gmm_components_to_4_document_imbalance"
+
+          collinearity_status:
+            severity: "PASS"
+            confirmed: true
+            evidence: >
+              corr(pa, trq_measured)=-0.179, corr(mgt, trq_measured)=0.644,
+              corr(ng, np)=-0.789. All below 0.95 threshold (Query 3).
+            description: >
+              No feature pair exceeds leakage threshold. mgt vs trq_measured
+              shows moderate correlation (0.644) — keep both, monitor feature
+              importance in Phase 4.
+            phase_4_action: "keep_all_physical_features"
+            consumed_by: ["phase_4_modeling"]
+
+          ngboost_configuration_hint:
+            severity: "ALERT"
+            evidence: "trq_margin skewness = -2.752"
+            description: >
+              Normal distribution assumes symmetry. With heavy negative tail,
+              NGBoost may under-predict extreme degradation values.
+            phase_4_options:
+              option_A: # Recomendado: simple y efectivo
+                action: "clip_targets_before_training"
+                bounds: "[-43.4, +41.0]"  # ±3σ del train
+                Distribution: "Normal"
+
+              option_B: # Avanzado: modelar asimetría
+                action: "use_asymmetric_distribution"
+                Distribution: "SkewNormal"  # Requiere ngboost >= 0.8
+                note: "Validate calibration on validation split"
+
+              option_C: # Conservador: robust loss
+                action: "use_robust_loss_function"
+                loss: "LogScore with sigma_clipping"
+                sigma_min: 0.01  # Evitar σ→0
+
+          dataset_split_asymmetry:
+            severity: "INFO"
+            confirmed: true
+            evidence: "train=742,625 (94.54%), validation=21,436 (2.73%), test=21,436 (2.73%)"
+            description: >
+              Validation and Test are very small and have no Y labels.
+              All model selection and hyperparameter tuning must be done
+              exclusively on the Train set using Group-K-Fold.
+              Validation and Test are used only for final generalization scoring.
+            phase_4_action: "tune_exclusively_on_train_group_kfold"
+            phase_5_action: "final_score_on_validation_and_test_only"
+
+
+

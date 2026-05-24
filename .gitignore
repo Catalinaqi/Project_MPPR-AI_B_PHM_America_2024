@@ -27,6 +27,7 @@ notebooks/.ipynb_checkpoints/
 # File generate automaticamente
 logs/
 *.log
+outputs/
 
 # ============================================
 #  POETRY
@@ -45,9 +46,16 @@ logs/
 # VSCode
 .vscode/
 
+
 # ============================================
 #  IDE FILES
 # ============================================
 #data/*.csv
 
+# ============================================
+#  DOCUMENTATION
+# ============================================
+docs/
+.continuerc.yml
+.continue_manu/
 
