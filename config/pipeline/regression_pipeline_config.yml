@@ -1,530 +1,348 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# REGRESSION PIPELINE CONFIGURATION
+# PROBABILISTIC REGRESSION PIPELINE CONFIGURATION (TORQUE MARGIN)
 # ══════════════════════════════════════════════════════════════════════════════
-# Purpose: CRISP-DM Phases 3-4-5 for probabilistic regression analysis
-# Inherits: base_pipeline_config.yml (Phase 2: Data Understanding)
-# Problem Type: probabilistic_regression (predicting distribution parameters mu, sigma)
-# Techniques: NGBoost, LightGBM (with Custom Probabilistic Objective)
-# Methodology: CRISP-DM
+# CRISP-DM Phases: 3 (Data Preparation), 4 (Modeling), 5 (Evaluation)
+# Selected Architecture: NGBoost (Natural Gradient Boosting)
+# Core Target: trq_margin (Estimating Conditional Mean \mu and Variance \sigma^2)
+# Methodology Requirements: Rigid step layout with explicit method/technique splits
 # ══════════════════════════════════════════════════════════════════════════════
 
 regression_pipeline_config:
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # METADATA
-  # ────────────────────────────────────────────────────────────────────────────
   metadata:
     pipeline_key:
-      task: "regression" # probabilistic_regression
-      version: "1.0"
-      objective: "Predict torque margin probability density function (PDF). Phases 3-5."
+      task: "regression" #probabilistic_regression
+      version: "2.1" # Versión corregida para Cross-Asset Isolation
+      objective: "Estimate torque margin probability density function under cross-asset domain shift."
       granularity: "flight_sample"
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # INHERITANCE
-  # ────────────────────────────────────────────────────────────────────────────
   inherits_from: "base_pipeline_config"
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # RUNTIME OVERRIDES
-  # ────────────────────────────────────────────────────────────────────────────
   runtime:
     log_level: "DEBUG"
+    warnings_handling:
+      gmm_bic_overfit_trigger:
+        action: "LOG_WARNING"
+        message: "WARNING (BIC not at k=4). Overriding absolute minimum k=6 with physical elbow criterion k=4."
 
 phases:
-  # -------------------------
+  # ----------------------------------------------------------------------------
   # STAGE 2 — DATA UNDERSTANDING
-  # -------------------------
+  # ----------------------------------------------------------------------------
   phase2_data_understanding:
-  enabled: true
-  # Already executed by base_pipeline_config
-  # Artifacts available:
+    enabled: true
 
-  # -------------------------
-  # STAGE 3 — DATA PREPARATION
-  # -------------------------
+  # ----------------------------------------------------------------------------
+  # STAGE 3 — DATA PREPARATION (ISOLATED TO TRAINING MOTORS - STEP MODULARITY)
+  # ----------------------------------------------------------------------------
   phase3_data_preparation:
-    # Stage 3 (Data Preparation)
-    # Goal: Clean, transform and split data for REGRESSION.
-    # Important: Data leakage must be prevented (fit transforms on train only).
-    objective: "Prepare data for regression: cleaning, transformations, and train/test split (leakage-safe)."
-    # QUESTION: ¿Combinar train+test para drift detection o mantener separados?
+    objective: "Clean, transform, and internal split ONLY the 4 training motors."
+
+    # [REGLA 3] DAG Traceability: Ingesta hermética solo del split de entrenamiento
     read_strategy:
-      mode: "sample"  # Hereda de profile activo
-      combine_before_sampling: false  # TODO: Decide
-      add_source_column: false  # true si necesitas diferenciar train/test después
-      input_source: "${sample_train_parquet}"
+      mode: "full_flight_records"
+      input_source:
+        train_parquet: "2.1.data_acquisition.prod_300000_stratified_train.parquet"
 
     steps:
+      # ────────────────────────────────────────────────────────────────────────
+      # STEP 3.1: SELECCIÓN DE VARIABLES
+      # ────────────────────────────────────────────────────────────────────────
       step_3_1_data_selection:
         enabled: true
+        description: "Filter operational features and remove irrelevant technical variables."
         methods:
-#          # Technique 1 - dataset_definition: Defining the scope of the dataset, determining which rows and columns are included in the analysis.
-#          dataset_definition:
-#            enabled: true
-#            techniques:
-#              # Method 1 - manual_include_exclude: Explicit selection of relevant columns.
-#              manual_include_exclude:
-#                enabled: true
-#                params:
-#                  include: []
-#                  exclude: []
-#              # Method 2 - drop_technical_columns: Removal of technical columns (IDs, logs).
-#              drop_technical_columns:
-#                enabled: true
-#                params:
-#                  patterns: ["id", "uuid", "log"]   # drop columns with these substrings in name
-#              # Method 3 - time_window_selection: select rows within a time window
-#              time_window_selection:
-#                enabled: false                 # OPTIONAL ("se puede aplicar") => OFF by default for regression
-#                params:
-#                  time_col: "${time_col}"
-#                  start: null
-#                  end: null
-#              # Method  4 - target_based_filtering: remove rows with invalid target values
-#              population_filtering:
-#                enabled: false                 # OPTIONAL ("se puede aplicar") => OFF by default
-#                params:
-#                  rules_file: "configs/rules/logic_quality_rules_config.yml"
-#
-#          # Technique 2 - feature_selection: Selecting informative variables and eliminating redundancy
-#          feature_selection:
-#            enabled: true
-#            techniques:
-#              # Method 1 - semantic_based_selection: Selection based on domain knowledge
-#              semantic_based_selection:
-#                enabled: true
-#                params:
-#                  keep: []
-#              # Method 2 - business_rule_filtering: Expert inclusion/exclusion rules.
-#              business_rule_filtering:
-#                enabled: true
-#                params:
-#                  rules_file: "configs/rules/logic_quality_rules_config.yml"
-#              remove_constant_features:
-#                enabled: true
-#                params:
-#                  threshold_unique: 1
-#              remove_duplicate_features:
-#                enabled: true
-#                params:
-#                  strategy: "exact"
-
+          data_selection:
+            enabled: true
+            techniques:
+              dataset_definition:
+                enabled: true
+                params:
+                  include: [ "oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured" ]
+                  patterns_to_drop: [ "id", "uuid", "log", "engine_id" ]
+                output: "3.1.selection.definition_trace_log.json"
+              feature_selection:
+                enabled: true
+                params:
+                  remove_constant: true
+                  remove_duplicate: true
+                output: "3.1.selection.filter_trace_log.json"
+        output_artifacts:
+          selected_regression_train_parquet:
+            path: "3.1.selection.selected_regression_train.parquet"
+            description: "Intermediate regression matrix containing only selected operational columns."
+            consumed_by: [ "step_3_2_data_cleaning" ]
+      # ────────────────────────────────────────────────────────────────────────
+      # STEP 3.2: TRATAMIENTO DE OUTLIERS Y DUPLICADOS (CON CLIPPING EN TRQ_MARGIN)
+      # ────────────────────────────────────────────────────────────────────────
       step_3_2_data_cleaning:
         enabled: true
+        description: "Mitigate severe target asymmetries and check training set row duplications."
         methods:
-#
-#          missing_data_handling:
-#            enabled: true
-#            techniques:
-#              mean_imputation:   { enabled: true,  params: { numeric_only: true } }
-#              median_imputation: { enabled: true,  params: { numeric_only: true } }
-#              mode_imputation:   { enabled: true,  params: { for_categoricals: true } }
-#              knn_imputation:    { enabled: false, params: { n_neighbors: 5 } }   # OPTIONAL ("se puede aplicar")
-#              mice_imputation:   { enabled: false, params: {} }                   # OPTIONAL ("se puede aplicar") => OFF
-#
-#          outlier_handling:
-#            enabled: true
-#            techniques:
-#              winsorization:    { enabled: false, params: { limits: [0.01, 0.01] } }  # OPTIONAL ("se puede aplicar")
-#              iqr_clipping:     { enabled: true,  params: { k: 1.5 } }                 # Applies
-#              zscore_filtering: { enabled: false, params: { threshold: 3.0 } }         # OPTIONAL ("se puede aplicar") => OFF
-#
-#          robust_transformations:
-#            enabled: true
-#            techniques:
-#              log_transform: { enabled: true,  params: { shift_if_needed: true } }     # Applies
-#              box_cox:       { enabled: false, params: {} }                            # OPTIONAL ("se puede aplicar") => OFF
-#              yeo_johnson:   { enabled: false, params: {} }                            # OPTIONAL ("se puede aplicar") => OFF
-#
-#          categorical_noise:
-#            enabled: true
-#            techniques:
-#              fix_typos:          { enabled: true,  params: { lowercase: true, regex_cleanup: true } }
-#              text_normalization: { enabled: true,  params: { remove_accents: true } }
-#              rare_grouping:      { enabled: false, params: { min_freq: 0.01 } }       # OPTIONAL ("se puede aplicar") => OFF
-#
-#          duplicate_handling:
-#            enabled: true
-#            techniques:
-#              exact_duplicates: { enabled: true, params: { subset: null, keep: "first" } }
-#
-#          data_reduction:
-#            enabled: true
-#            techniques:
-#              drop_rows_threshold:    { enabled: false, params: { max_na_ratio: 0.5 } } # OPTIONAL
-#              drop_columns_threshold: { enabled: false, params: { max_na_ratio: 0.5 } } # OPTIONAL
-
+          data_cleaning:
+            enabled: true
+            techniques:
+              outlier_handling:
+                enabled: true
+                params:
+                  target_clipping: true
+                  target_variable: "trq_margin"
+                  lower_percentile: 0.01
+                  upper_percentile: 0.99
+                output: "3.2.cleaning.clipping_audit_log.json"
+              duplicate_handling:
+                enabled: true
+                params:
+                  keep: "first"
+                output: "3.2.cleaning.duplicates_trace.json"
+        output_artifacts:
+          cleaned_regression_train_parquet:
+            path: "3.2.cleaning.cleaned_regression_train.parquet"
+            description: "Intermediate regression matrix deduplicated and outlier-clipped."
+            consumed_by: [ "step_3_3_data_transformation" ]
+      # ────────────────────────────────────────────────────────────────────────
+      # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
+      # ────────────────────────────────────────────────────────────────────────
       step_3_3_data_transformation:
         enabled: true
+        description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
         methods:
-#
-#          feature_scaling:
-#            enabled: true
-#            techniques:
-#              standard_scaling: { enabled: true,  params: {} }                          # Applies
-#              minmax_scaling:   { enabled: true,  params: { feature_range: [0, 1] } }   # Applies
-#              robust_scaling:   { enabled: true,  params: {} }                          # Applies
-#              maxabs_scaling:   { enabled: false, params: {} }                          # OPTIONAL ("se puede aplicar") => OFF
-#
-#          encoding:
-#            enabled: true
-#            techniques:
-#              one_hot_encoding:   { enabled: true,  params: { handle_unknown: "ignore" } } # Applies
-#              ordinal_encoding:   { enabled: false, params: {} }                            # OPTIONAL => OFF
-#              target_encoding:    { enabled: false, params: {} }                            # OPTIONAL => OFF (also needs extra dependency)
-#              frequency_encoding: { enabled: false, params: { min_freq: 1 } }               # OPTIONAL ("se puede aplicar") => OFF
-#
-#          feature_engineering:
-#            enabled: true
-#            techniques:
-#              ratios:              { enabled: true,  params: { definitions: [] } }          # Applies
-#              aggregations:        { enabled: false, params: { groupby_cols: [], agg_map: {} } } # OPTIONAL ("se puede aplicar") => OFF
-#              interactions:        { enabled: false, params: {} }                            # OPTIONAL ("se puede aplicar") => OFF
-#              polynomial_features: { enabled: false, params: { degree: 2 } }                 # OPTIONAL ("se puede aplicar") => OFF
-#
-#          temporal_features:
-#            enabled: false                                                                  # Not applicable for standard regression
-#            techniques: {}
-
-      step_3_4_data_integration:
-        enabled: true
-        methods:
-          data_integration:
-#        techniques:
-#          dataset_merging:
-#            enabled: false                 # Keep OFF by default (single-CSV projects)
-#            params: { how: "inner", on: [] }
-#          union_concat:
-#            enabled: false
-#            params: { axis: 0 }
-#          feature_alignment:
-#            enabled: true
-#            params:
-#              column_renaming: {}
-#              datatype_harmonization: true
-#              column_selection: []
-#          data_enrichment:
-#            enabled: false
-#            params: { lookup_tables: [] }
-
+          data_transformation:
+            enabled: true
+            techniques:
+              feature_scaling:
+                enabled: true
+                params:
+                  method: "RobustScaler"
+                  fit_on_train_only: true
+                  features: [ "oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured" ]
+                output: "3.3.transformation.scaler_fit_trace.json"
+              feature_engineering:
+                enabled: true
+                params:
+                  oat_denominator_protection:
+                    method: "convert_to_kelvin"
+                    offset: 273.15
+                  formulas:
+                    mgt_oat_ratio: "mgt / (oat + 273.15)"
+                    specific_power_index: "np / (ng * (oat + 273.15))"
+                  interactions:
+                    enabled: true
+                    degree: 2
+                    features: [ "mgt", "ng", "Torque Measured", "np" ]
+                output: "3.3.transformation.engineering_formulas_log.json"
+        output_artifacts:
+          transformed_regression_train_parquet:
+            path: "3.3.transformation.transformed_regression_train.parquet"
+            description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
+            consumed_by: [ "step_3_5_data_formatting" ]
+          fitted_scaler_regression_artifact:
+            path: "3.3.transformation.robust_scaler_regression.pkl"
+            description: "Fitted state parameters of the training-isolated RobustScaler model for regression."
+            consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
+      # ────────────────────────────────────────────────────────────────────────
+      # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS NUMÉRICOS
+      # ────────────────────────────────────────────────────────────────────────
       step_3_5_data_formatting:
         enabled: true
+        description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
         methods:
-#          data_split:
-#            enabled: true
-#            methods:
-#              holdout:
-#                enabled: true
-#                params:
-#                  test_size: 0.2
-#                  random_state: 42
-#              train_val_test:
-#                enabled: false
-#                params:
-#                  train: 0.7
-#                  val: 0.1
-#                  test: 0.2
-#                  random_state: 42
-#
-#          dataset_formatting:
-#            enabled: true
-#            methods:
-#              x_y_separation:      { enabled: true,  params: { target_col: "${target_col}" } }
-#              type_casting:        { enabled: true,  params: {} }
-#              array_conversion:    { enabled: true,  params: { to_numpy: true } }
-#              sparse_dense_format: { enabled: true,  params: { format: "sparse" } }
+          data_formatting:
+            enabled: true
+            techniques:
+              data_split:
+                enabled: true
+                params:
+                  test_size: 0.2
+                  random_state: 42
+                output: "3.5.formatting.split_indices_trace.json"
+              dataset_formatting:
+                enabled: true
+                params:
+                  target_col: "trq_margin"
+                  type_casting: "float64" # Target continuo para NGBoost
+                  to_numpy: true
+                output: "3.5.formatting.arrays_manifest.json"
+        output_artifacts:
+          engineered_train_split:
+            path: "3.5.formatting.regression_internal_train.parquet"
+            description: "Finalized scaling-safe internal training matrix for NGBoost."
+            consumed_by: [ "phase4_data_modeling" ]
+          engineered_val_split:
+            path: "3.5.formatting.regression_internal_val.parquet"
+            description: "Finalized internal validation split for NGBoost early stopping/CV."
+            consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
-  # -------------------------
-  # STAGE 4 — MODELING (PROBABILISTIC REGRESSION / PDF)
-  # -------------------------
+  # ----------------------------------------------------------------------------
+  # STAGE 4 — MODELING (PROBABILISTIC DENSITY ESTIMATION)
+  # ----------------------------------------------------------------------------
   phase4_data_modeling:
-    # Stage 4 (Modeling)
-    # Goal: Train and compare regression model; select the best candidate.
-    objective: "Train, tune and evaluate regression model; select the best model by RMSE (tie-breaker: MAE)."
-    steps:
-#      step_4_1_algorithm_selection:
-#        enabled: true
-#        technique: "algorithm_selection"
-#        params:
-#          selection_strategy: "compare_many"  # compare_many | single
-#        candidates:
-#
-#          linear_regression:
-#            enabled: true
-#            library: "sklearn"
-#            estimator: "LinearRegression"
-#            params: {}
-#
-#          ridge_regression:
-#            enabled: true
-#            library: "sklearn"
-#            estimator: "Ridge"
-#            params: {}
-#            hyperparams:
-#              alpha: [0.1, 1.0, 10.0]
-#
-#          lasso_regression:
-#            enabled: true
-#            library: "sklearn"
-#            estimator: "Lasso"
-#            params: {}
-#            hyperparams:
-#              alpha: [0.001, 0.01, 0.1, 1.0]
-#
-#          polynomial_regression:
-#            enabled: true
-#            library: "sklearn"
-#            estimator: "PolynomialRegression" # Implemented as: PolynomialFeatures + (Linear/Ridge)
-#            params:
-#              degree: 2
-#            hyperparams:
-#              degree: [2, 3]
-#
-#          knn_regressor:
-#            enabled: true
-#            library: "sklearn"
-#            estimator: "KNeighborsRegressor"
-#            params: {}
-#            hyperparams:
-#              n_neighbors: [3, 5, 11]
-#              weights: ["uniform", "distance"]
-#
-#          decision_tree_regressor:
-#            enabled: true
-#            library: "sklearn"
-#            estimator: "DecisionTreeRegressor"
-#            params: {}
-#            hyperparams:
-#              max_depth: [null, 5, 10, 20]
-#              min_samples_leaf: [1, 5, 10]
-#
-#          random_forest_regressor:
-#            enabled: true
-#            library: "sklearn"
-#            estimator: "RandomForestRegressor"
-#            params:
-#              n_jobs: -1
-#            hyperparams:
-#              n_estimators: [200, 500]
-#              max_depth: [null, 10, 20]
-#              min_samples_leaf: [1, 5]
-#
-#          xgboost_regressor:
-#            enabled: true
-#            library: "xgboost"
-#            estimator: "XGBRegressor"
-#            params:
-#              n_jobs: -1
-#              objective: "reg:squarederror"
-#            hyperparams:
-#              n_estimators: [300, 800]
-#              max_depth: [3, 6, 10]
-#              learning_rate: [0.03, 0.1]
-#              subsample: [0.8, 1.0]
-#              colsample_bytree: [0.8, 1.0]
-#
-#          svr:
-#            enabled: true
-#            library: "sklearn"
-#            estimator: "SVR"
-#            params: {}
-#            hyperparams:
-#              kernel: ["rbf", "linear"]
-#              C: [1.0, 10.0, 100.0]
-#              epsilon: [0.01, 0.1]
-#
-#          neural_network_regressor:
-#            enabled: true
-#            library: "sklearn"
-#            estimator: "MLPRegressor"
-#            params:
-#              max_iter: 500
-#            hyperparams:
-#              hidden_layer_sizes: [[64], [128], [64, 32]]
-#              alpha: [0.0001, 0.001]
-#
-#      step_4_2_model_training:
-#        enabled: true
-#        technique: "model_training"
-#        methods:
-#
-#          fit:
-#            enabled: true
-#            params: {}
-#
-#          hyperparameter_tuning:
-#            enabled: true
-#            params:
-#              strategy: "grid"                  # grid | random
-#              n_iter: 30                        # Used only for random search
-#              scoring: "neg_root_mean_squared_error"
-#
-#          cross_validation:
-#            enabled: true
-#            params:
-#              cv_folds: 5
-#              shuffle: true
-#              random_state: 42
-#
-#      step_4_3_test_design:
-#        enabled: true
-#        technique: "test_design"
-#        methods:
-#          holdout:
-#            enabled: true
-#            params:
-#              from_stage3_split: true           # Use the Stage3 split definitions
-#          temporal_test:
-#            enabled: false                      # Not applicable for standard regression
-#          walk_forward:
-#            enabled: false                      # Not applicable
-#
-#      step_4_4_model_evaluation:
-#        enabled: true
-#        technique: "model_evaluation"
-#        metrics:
-#          rmse: { enabled: true }
-#          mae:  { enabled: true }
-#        model_selection:
-#          primary_metric: "rmse"
-#          tie_breaker: "mae"
+    objective: "Train NGBoost over simulated operational flight envelope groups to isolate engine-asset features."
 
-  # -------------------------
-  # STAGE 5 — EVALUATION & INTERPRETATION
-  # -------------------------
+    # [REGLA 3] DAG Traceability: Insumos de la Fase 3
+    read_strategy:
+      mode: "consume_engineered_splits"
+      input_source:
+        train_data: "3.5.formatting.regression_internal_train.parquet"
+        val_data: "3.5.formatting.regression_internal_val.parquet"
+        scaler: "3.3.transformation.robust_scaler.pkl"
+
+    steps:
+      step_4_1_algorithm_selection:
+        enabled: true
+        description: "Configure NGBoost to output Normal distribution parameters."
+        methods:
+          algorithm_selection:
+            enabled: true
+            techniques:
+              single_probabilistic_architecture:
+                enabled: true
+                params:
+                  library: "ngboost"
+                  estimator: "NGBRegressor"
+                  Dist: "Normal"
+                  Score: "LogScore"
+                  n_estimators: 400
+                  learning_rate: 0.03
+                  Base:
+                    type: "DecisionTreeRegressor"
+                    max_depth: 4
+                  random_state: 42
+                output: "4.1.modeling.algo_setup_trace.json"
+
+      step_4_2_model_training:
+        enabled: true
+        description: "Execute GMM-grouped cross validation."
+        methods:
+          model_training:
+            enabled: true
+            techniques:
+              cross_validation:
+                enabled: true
+                params:
+                  strategy: "GroupKFold"
+                  n_splits: 5
+                  grouping_mechanism:
+                    type: "GMM_Clusterer"
+                    features: [ "oat", "mgt", "ias" ]
+                    n_clusters: 4
+                    covariance_type: "full"
+                    log_centroids_verification: true
+                output: "4.2.training.cv_fold_execution_trace.json"
+        output_artifacts:
+          trained_ngboost_model:
+            path: "4.2.training.ngboost_regressor.pkl"
+            description: "Fitted NGBoost parameters structure ready for variance forecasting inference."
+            consumed_by: [ "step_4_4_model_evaluation", "phase5_evaluation_and_interpretation" ]
+
+      step_4_4_model_evaluation:
+        enabled: true
+        description: "Select best model using Negative Log-Likelihood (NLL)."
+        methods:
+          model_evaluation:
+            enabled: true
+            techniques:
+              model_selection_criteria:
+                enabled: true
+                params:
+                  primary_metric: "neg_log_likelihood"
+                  tie_breaker: "rmse"
+                output: "4.4.evaluation.ranking_trace.json"
+        output_artifacts:
+          best_regression_model_metadata:
+            path: "4.4.evaluation.final_best_model_meta.json"
+            description: "Consolidated performance scoreboard isolating validation likelihood outcomes."
+            consumed_by: [ "phase5_evaluation_and_interpretation" ]
+
+  # ----------------------------------------------------------------------------
+  # STAGE 5 — EVALUATION & UNCERTAINTY INTERPRETATION
+  # ----------------------------------------------------------------------------
   phase5_evaluation_and_interpretation:
-    # Stage 5 (Evaluation & Interpretation)
-    # Goal: Explain model behavior, validate business impact, audit the pipeline and decide next steps.
-    objective: "Interpret results, validate business value, audit the process, and decide next steps for regression."
+    objective: "Verify prediction interval calibration honesty on UNSEEN CROSS-ASSET MOTORS."
+
+    # ¡CORRECCIÓN CRÍTICA APLICADA! Carga el scaler, modelo y los DATOS DEL CHALLENGE CRUDOS
+    read_strategy:
+      mode: "cross_asset_evaluation"
+      input_source:
+        model: "4.2.training.ngboost_regressor.pkl"
+        scaler: "3.3.transformation.robust_scaler.pkl"
+        challenge_test_data: "2.1.data_acquisition.prod_300000_stratified_test.parquet"
+        challenge_val_data: "2.1.data_acquisition.prod_300000_stratified_validation.parquet"
+        metadata: "4.4.evaluation.final_best_model_meta.json"
 
     steps:
-#
-#      step_5_1_interpretation:
-#        enabled: true
-#        technique: "interpretation"
-#        methods:
-#
-#          feature_importance:
-#            enabled: true
-#            params:
-#              strategy: "auto"                  # auto | model_native | permutation
-#              top_k: 20
-#
-#          coefficients:
-#            enabled: true
-#            params:
-#              standardize_for_compare: true
-#              top_k: 30
-#
-#          shap_values:
-#            enabled: false                      # Applies in theory, but OFF by default (requires 'shap' dependency)
-#            params:
-#              scope: "global_local"
-#              sample_rows: 2000
-#
-#          permutation_importance:
-#            enabled: true
-#            params:
-#              n_repeats: 10
-#              scoring: "neg_root_mean_squared_error"
-#              sample_rows: 20000
-#              random_state: 42
-#              top_k: 20
-#
-#          partial_dependence_plot_pdp:
-#            enabled: true
-#            params:
-#              features: []                      # Empty => auto-select from top feature
-#              grid_resolution: 50
-#              max_features: 8
-#
-#      step_5_2_business_evaluation:
-#        enabled: true
-#        technique: "business_evaluation"
-#        methods:
-#
-#          compare_models:
-#            enabled: true
-#            params:
-#              compare_on: ["rmse", "mae"]
-#              rank_by: "rmse"
-#
-#          baseline_comparison:
-#            enabled: true
-#            params:
-#              baseline_type: "naive_mean"       # naive_mean | naive_last | custom
-#              custom_baseline_ref: null
-#
-#          business_kpis:
-#            enabled: true
-#            params:
-#              kpi_rules_file: "configs/rules/business_kpi_rules_config.yml"
-#              currency: null
-#              report_level: "summary"           # summary | detailed
-#
-#      step_5_3_process_audit:
-#        enabled: true
-#        technique: "process_audit"
-#        methods:
-#
-#          pipeline_review:
-#            enabled: true
-#            params:
-#              checklist: ["stage2", "stage3", "stage4", "stage5"]
-#
-#          reproducibility_check:
-#            enabled: true
-#            params:
-#              check_seeds: true
-#              check_versions: true
-#              check_config_hash: true
-#
-#          leakage_detection:
-#            enabled: true
-#            params:
-#              checks:
-#                - "target_in_features"
-#                - "train_test_overlap"
-#                - "time_leakage_if_time_col_present"
-#              time_col: "${time_col}"
-#
-#      step_5_4_decision_making:
-#        enabled: true
-#        technique: "decision_making"
-#        methods:
-#
-#          go_no_go_decision:
-#            enabled: false                      # OPTIONAL ("se puede aplicar") => OFF by default
-#            params:
-#              thresholds:
-#                rmse_max: null
-#                mae_max: null
-#              require_business_kpi_ok: false
-#
-#          iterate_model:
-#            enabled: false                      # OPTIONAL ("se puede aplicar") => OFF by default
-#            params:
-#              next_iteration_notes: true
-#
-#          deploy_planning:
-#            enabled: false                      # OPTIONAL ("se puede aplicar") => OFF by default
-#            params:
-#              target_env: "local"               # local | docker | cloud
-#              model_format: "joblib"            # joblib | pickle
-#
-#          human_in_the_loop:
-#            enabled: true                       # Applies
-#            params:
-#              required_review: true
-#              review_roles: ["student", "professor"]
-#
-#          deployment_risk_assessment:
-#            enabled: false                      # OPTIONAL ("se puede aplicar") => OFF by default
-#            params:
-#              checklist_items:
-#                - "data_drift_risk"
-#                - "model_drift_risk"
-#                - "bias_risk"
-#                - "privacy_risk"
-#                - "monitoring_plan"
+      step_5_1_interpretation:
+        enabled: true
+        description: "Extract feature coefficients mapping the behavior of both Mu and Sigma sub-trees."
+        methods:
+          model_interpretation:
+            enabled: true
+            techniques:
+              feature_importance:
+                enabled: true
+                params:
+                  strategy: "model_native"
+                  top_k: 15
+                output: "5.1.plots.feature_importance_data.json"
+              permutation_importance:
+                enabled: true
+                params:
+                  n_repeats: 5
+                  scoring: "neg_log_likelihood"
+                output: "5.1.plots.permutation_data.json"
+
+      step_5_2_probabilistic_evaluation:
+        enabled: true
+        description: "Audit true target hit counts inside prediction boundaries on hidden test motors."
+        methods:
+          probabilistic_evaluation:
+            enabled: true
+            techniques:
+              calibration_audit:
+                enabled: true
+                params:
+                  intervals: [ 0.10, 0.50, 0.90 ]
+                output: "5.2.evaluation.intervals_trace.json"
+              performance_degradation_benchmarking:
+                enabled: true
+                params:
+                  expect_test_degradation: true
+                  baseline: "naive_mean"
+                output: "5.2.evaluation.degradation_trace.json"
+        output_artifacts:
+          evaluation_summary_json:
+            path: "5.2.evaluation.final_regression_metrics_summary.json"
+            description: "Final consolidated regression score sheet mapping NLL, RMSE, and interval coverages on hidden motors."
+            consumed_by: [ "deployment" ]
+
+      step_5_3_process_audit:
+        enabled: true
+        description: "Run automated compliance traces on the transformation pipeline."
+        methods:
+          process_audit:
+            enabled: true
+            techniques:
+              leakage_detection:
+                enabled: true
+                params:
+                  checks: [ "train_test_overlap", "scaler_contamination_check" ]
+                output: "5.3.audit.leakage_trace.json"
+
+      step_5_4_decision_making:
+        enabled: true
+        description: "Subject pipeline execution artifacts to engineering domain specialist reviews."
+        methods:
+          decision_making:
+            enabled: true
+            techniques:
+              final_sign_off:
+                enabled: true
+                params:
+                  required_review: true
+                  review_roles: [ "preventive_maintenance_engineer" ]
+                output: "5.4.decision.sign_off_trace.json"
+        output_artifacts:
+          deployment_sign_off:
+            path: "5.4.decision.final_sign_off_certificate.json"
+            description: "Cryptographic or structured approval marker for production release."
+            consumed_by: [ "deployment" ]

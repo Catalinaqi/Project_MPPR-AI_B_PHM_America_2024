@@ -1,11 +1,13 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# CLASSIFICATION PIPELINE CONFIGURATION
+# CALIBRATED BINARY CLASSIFICATION PIPELINE CONFIGURATION (FAULTY DETECTION)
 # ══════════════════════════════════════════════════════════════════════════════
-# Purpose: CRISP-DM Phases 3-4-5 for binary classification analysis
-# Inherits: base_pipeline_config.yml (Phase 2: Data Understanding)
-# Problem Type: binary_classification (nominal vs. faulty engine state)
-# Techniques: LightGBM, XGBoost, BalancedRandomForest
-# Methodology: CRISP-DM
+# CRISP-DM Phases: 3 (Data Preparation), 4 (Modeling), 5 (Evaluation)
+# Selected Architecture: LightGBM + Isotonic Probability Calibration
+# Core Target: faulty (0: Nominal Operation, 1: Engine Fault State)
+# Methodology Requirements:
+#   1. read_strategy MANDATORY per phase.
+#   2. output MANDATORY per technique (execution trace).
+#   3. output_artifacts OPTIONAL per step (only for heavy boundary-crossing assets).
 # ══════════════════════════════════════════════════════════════════════════════
 
 classification_pipeline_config:
@@ -15,574 +17,351 @@ classification_pipeline_config:
   # ────────────────────────────────────────────────────────────────────────────
   metadata:
     pipeline_key:
-      task: "classification" # binary_classification
-      version: "1.0"
-      objective: "Predict binary engine health status (nominal vs. faulty). Phases 3-5."
+      task: "classification"
+      version: "2.1" # Versión corregida para Cross-Asset Isolation
+      objective: "Predict honest, calibrated probability of engine failure under cross-asset shift."
       granularity: "flight_sample"
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # INHERITANCE
-  # ────────────────────────────────────────────────────────────────────────────
   inherits_from: "base_pipeline_config"
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # RUNTIME OVERRIDES
-  # ────────────────────────────────────────────────────────────────────────────
   runtime:
     log_level: "DEBUG"
+    warnings_handling:
+      gmm_bic_overfit_trigger:
+        action: "LOG_WARNING"
+        message: "WARNING (BIC not at k=4). Overriding absolute minimum k=6 with physical elbow criterion k=4."
 
 phases:
-  # -------------------------
-  # STAGE 2 — DATA UNDERSTANDING (PHASE 2)
-  # Phase focused on exploring data structure, semantics, and quality to identify issues and guide preprocessing.
-  # -------------------------
+  # ----------------------------------------------------------------------------
+  # STAGE 2 — DATA UNDERSTANDING (INHERITED & ACTIVE)
+  # ----------------------------------------------------------------------------
   phase2_data_understanding:
-  enabled: true
-  # Already executed by base_pipeline_config
-  # Artifacts available:
+    enabled: true
 
-
-
-  # -------------------------
-  # STAGE 3 — DATA PREPARATION (PHASE 3)
-  # Phase where data are cleaned, transformed, integrated, and formatted for modeling.
-  # -------------------------
+  # ----------------------------------------------------------------------------
+  # STAGE 3 — DATA PREPARATION (ISOLATED TO TRAINING MOTORS -STEP MODULARITY)
+  # ----------------------------------------------------------------------------
   phase3_data_preparation:
-    enabled: true
-    objective:
+    objective: "Clean, transform, and internal split ONLY the 4 training motors."
+
+    # [REGLA 3] DAG Traceability: Ingesta hermética solo del split de entrenamiento
     read_strategy:
-      mode: "sample"  # Hereda de profile activo
-      combine_before_sampling: false  # TODO: Decide
-      add_source_column: false  # true si necesitas diferenciar train/test después
-      input_source: "${sample_train_parquet}"
-#    objective: >
-#      Prepare data for classification: selection + cleaning + transformations +
-#      (optional integration) + split + formatting. Generates artifacts.
-#    output_policy:
-#      save_all_as_png: true
-#      figures_dir: "figures/stage3_preparation"
-#      tables_png_dir: "tables_png/stage3_preparation"
-#    steps:
-#      # 3.1 Data selection
-#      # Process of deciding which data are included in the analysis and which are excluded based on relevance and quality criteria.
-#      step_3_1_data_selection:
-#        enabled: true
-#        name: step_3_1_data_selection
-#        techniques:
-#          # Technique 1 - data_selection:
-#          # Definition of the dataset scope, determining which rows and columns are included in the analysis.
-#          dataset_definition:
-#            enabled: false
-#            methods:
-#              # Method 1 - manual_include_exclude:
-#              # Explicit selection of relevant columns to include or exclude from the analysis.
-#              manual_include_exclude:
-#                enabled: false
-#                params: { include: [], exclude: [] }
-#              # Method 2 - drop_technical_columns:
-#              # Removal of technical or non-informative columns (e.g. IDs, logs, metadata).
-#              drop_technical_columns:
-#                enabled: false
-#                params:
-#                  patterns: ["uuid", "log"] # id not aplly to classification if id is relevant for the task; adjust patterns as needed
-#              # Method 3 - population_filtering:
-#              # Filtering of records according to business or analytical rules.
-#              population_filtering:
-#                enabled: false
-#                params:
-#                  rules_file: "config/rules/logic_quality_rules_config.yml"
-#          # Technique 2 - feature_selection:
-#          # Selection of informative variables and removal of redundant feature.
-#          feature_selection:
-#            enabled: false
-#            methods:
-#              # Method 1 - variance_threshold:
-#              # Feature selection based on domain knowledge and semantic relevance.
-#              semantic_based_selection:
-#                enabled: false
-#                params: { keep: [] }
-#              # Method 2 - correlation_filtering:
-#              # Application of expert-defined inclusion and exclusion rules.
-#              business_rule_filtering:
-#                enabled: false
-#                params:
-#                  rules_file: "config/rules/logic_quality_rules_config.yml"
-#              # Method 3 - remove_constant_features:
-#              # Elimination of variables with no variance.
-#              remove_constant_features:
-#                enabled: false
-#                params: { threshold_unique: 1 }
-#              # Method 4 - remove_duplicate_features:
-#              # Removal of redundant or duplicated columns.
-#              remove_duplicate_features:
-#                enabled: false
-#                params: { strategy: "exact" }
-#
-#      # 3.2 Data cleaning
-#      # Correction of errors, inconsistencies, and noise in the data, without introducing new information
-#      step_3_2_data_cleaning:
-#        enabled: true
-#        name: step_3_2_data_cleaning
-#        techniques:
-#          # Technique 1 - Missing data handling:
-#          # Management and treatment of missing values.
-#          missing_data_handling:
-#            enabled: false
-#            # Ensures you do NOT apply multiple numeric imputations at once.
-#            selection_policy:
-#              numeric_imputer: "median_imputation"     # mean_imputation | median_imputation | knn_imputation | mice_imputation
-#            methods:
-#              # Method 1 - median_imputation:
-#              # Simple statistical imputation using the median of the variable.
-#              median_imputation:
-#                enabled: false # change to true if you want to apply this imputation method
-#                params:
-#                  numeric_only: true
-#                  #exclude_cols: [id] # e.g. ["id"] if id is not relevant for imputation; adjust as needed
-#          # Technique 2 - Duplicate handling & data reduction:
-#          # Identification and management of duplicated records.
-#          duplicate_handling:
-#            enabled: false
-#            method:
-#              # Method 1 - exact_duplicates:
-#              # Removal of fully identical records across all columns.
-#              exact_duplicates:
-#                enabled: true
-#                params: { subset: null, keep: "first" }
-#          # Technique 3 - Outlier handling:
-#          # Detection and management of extreme values.
-#          outlier_handling:
-#            enabled: false
-#            methods:
-#              # Method 1 - winsorization:
-#              # Limits extreme values by capping them at specified percentiles.
-#              winsorization:
-#                enabled: true
-#                params: { limits: [0.01, 0.01] }
-#              # Method 2 - iqr_clipping:
-#              # Outlier handling based on interquartile range thresholds.
-#              iqr_clipping:
-#                enabled: false
-#                params: { k: 1.5 }
-#              # Method 3 - zscore_filtering:
-#              # Outlier detection based on standard deviation from the mean.
-#              zscore_filtering:
-#                enabled: false
-#                params: { threshold: 3.0 }
-#          # Technique 4 - Data transformation:
-#          # Transformations applied to stabilize distributions and reduce sensitivity to outliers.
-#          robust_transformations:
-#            enabled: false
-#            methods:
-#              # Method 1 - log_transform:
-#              # Logarithmic transformation applied to reduce skewness and stabilize variance.
-#              log_transform:
-#                enabled: false
-#                params: { shift_if_needed: true }
-#              # Method 2 - box_cox:
-#              # Parametric power transformation (λ) applicable to strictly positive values (x > 0).
-#              box_cox:
-#                enabled: false
-#                params: {}
-#              # Method 3 - yeo_johnson:
-#              # Generalized variant of Box–Cox that supports zero and negative values.
-#              yeo_johnson:
-#                enabled: true
-#                params: {}
-#
-#      # 3.3 Data transformation
-#      # Modification of data representation to improve model learning and performance (e.g., scaling, encoding, normalization).
-#      step_3_3_data_transformation:
-#        enabled: true
-#        name: step_3_3_data_transformation
-#        techniques:
-#          # Technique 1 - feature_scaling:
-#          # Rescaling of numerical variables to ensure comparable magnitudes.
-#          feature_scaling:
-#            enabled: true
-#            selection_policy:
-#              scaling_method: "standard_scaling"       # standard_scaling | minmax_scaling | robust_scaling | maxabs_scaling | none
-#            methods:
-#              # Method 1 - standard_scaling:
-#              # Transforms data to have zero mean and unit standard deviation.
-#              standard_scaling: { enabled: true, params: {} }
-#              # Method 2 - robust_scaling:
-#              # Scaling using statistics that are robust to outliers (median and IQR).
-#              robust_scaling: { enabled: false, params: {} }
-#          # Technique 2 - categorical_encoding:
-#          # Conversion of categorical variables into numerical representations understandable by ML algorithms
-#          encoding:
-#            enabled: false
-#            selection_policy:
-#              categorical_encoding: "one_hot_encoding" # one_hot_encoding | ordinal_encoding | frequency_encoding
-#            methods:
-#              # Method 1 - one_hot_encoding:
-#              # Creation of binary columns for each category level.
-#              one_hot_encoding:
-#                enabled: true
-#                params: { handle_unknown: "ignore" }
-#              # Method 2 - ordinal_encoding:
-#              # Assignment of integer values to categories based on a defined order or frequency.
-#              ordinal_encoding:
-#                enabled: false
-#                params: {}
-#              # Method 3 - frequency_encoding:
-#              # Replacement of categories with their corresponding frequency counts.
-#              frequency_encoding:
-#                enabled: false
-#                params: { min_freq: 1 }
-#          # Technique 3 - feature_engineering:
-#          # Creation of new feature from existing ones to capture implicit or hidden information.
-#          feature_engineering:
-#            enabled: true
-#            methods:
-#              # Method 1 - ratios:
-#              ratios:
-#                enabled: false
-#                params: { definitions: [] }
-#              # Method 2 - aggregations:
-#              aggregations:
-#                enabled: false
-#                params: { groupby_cols: [], agg_map: {} }
-#              # Method 3 - interactions:
-#              interactions:
-#                enabled: false
-#                params: {}
-#             # Method 4- polynomial_features:
-#              polynomial_features:
-#                enabled: false
-#                params: { degree: 2 }
-#
-#
-#      # 3.4 Data integration (optional)
-#      # Combination of multiple data sources into a single coherent, consistent, and aligned dataset.
-#      step_3_4_data_integration:
-#        enabled: false
-#
-#      # 3.5 Data formatting (split + final shapes)
-#      # Preparation of data in the exact format required by the algorithm, without altering its informational content.
-#      step_3_5_data_formatting:
-#        enabled: true
-#        name: step_3_5_data_formatting
-#        techniques:
-#          # Technique 1 - data_splitting:
-#          # Separation of the dataset into training, validation, and test subsets.
-#          data_split:
-#            enabled: true
-#            selection_policy:
-#              split_method: "holdout"                 # holdout | train_val_test
-#            methods:
-#              # Method 1 -  holdout
-#              # Splits the dataset into training and test sets.
-#              holdout:
-#                enabled: true
-#                params:
-#                  test_size: 0.2
-#                  stratify: true
-#                  random_state: 42
-#              # Method 2 - train_val_test
-#              # Splits the dataset into three independent subsets.
-#              train_val_test:
-#                enabled: false
-#                params:
-#                  train: 0.7
-#                  val: 0.1
-#                  test: 0.2
-#                  stratify: true
-#                  random_state: 42
-#          # Technique 2 - data_formatting:
-#          # Adaptation of data structure and types to the exact format required by ML algorithms, without altering informational content.
-#          dataset_formatting:
-#            enabled: true
-#            methods:
-#              # Method 1 - join_x_y:
-#              # Integration of separate feature (X) and target (Y) datasets into a single dataset for modeling.
-#              join_x_y:
-#                enabled: true
-#                params:
-#                  x_path: "${x_train_path}"
-#                  y_path: "${y_train_path}"
-#                  join_key: "${join_key}"
-#                  label_col: "${label_col}"
-#                  drop_after_join: ["trq_margin","id"] # example of a column to drop after the join, if it exists; can be empty or omitted
-#              # Method 2 - type_casting:
-#              # Explicit conversion of data types.
-#              type_casting:
-#                enabled: true
-#                params: {}
-#              # Method 3 - sparse_dense_format:
-#              # Conversion between sparse and dense matrix representations.
-#              sparse_dense_format:
-#                enabled: true
-#                params: { format: "sparse" }          # sparse | dense
-#              # Method 4 - x_y_separation:
-#              # Separation of predictor variables (feature) and the target variable.
-#              x_y_separation:
-#                enabled: true
-#                params: {}
+      mode: "full_flight_records" # Modo de archivo único para asegurar aislamiento
+      input_source:
+        train_parquet: "2.1.data_acquisition.prod_300000_stratified_train.parquet"
 
+    steps:
+      # ────────────────────────────────────────────────────────────────────────
+      # STEP 3.1: SELECCIÓN DE VARIABLES
+      # ────────────────────────────────────────────────────────────────────────
+      step_3_1_data_selection:
+        enabled: true
+        description: "Filter operational features and remove irrelevant technical variables."
+        methods:
+          data_selection:
+            enabled: true
+            techniques:
+              dataset_definition:
+                enabled: true
+                params:
+                  include: ["oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured"]
+                  patterns_to_drop: ["id", "uuid", "log", "engine_id"]
+                output: "3.1.selection.definition_trace_log.json"
+              feature_selection:
+                enabled: true
+                params:
+                  remove_constant: true
+                  remove_duplicate: true
+                output: "3.1.selection.filter_trace_log.json"
+        # NUEVO EN OPCIÓN B: Persiste la matriz reducida a disco
+        output_artifacts:
+          selected_classification_train_parquet:
+            path: "3.1.selection.selected_classification_train.parquet"
+            description: "Intermediate classification matrix containing only selected operational columns."
+            consumed_by: ["step_3_2_data_cleaning"]
 
-  # -------------------------
-  # STAGE 4 — MODELING (PHASE 4)
-  # Phase dedicated to selecting, training, and tuning model to learn patterns from data.
-  # -------------------------
+      # ────────────────────────────────────────────────────────────────────────
+      # STEP 3.2: LIMPIEZA Y SANITIZACIÓN (SIN CLIPPING PARA TARGET BINARIO)
+      # ────────────────────────────────────────────────────────────────────────
+      step_3_2_data_cleaning:
+        enabled: true
+        description: "Ensure structural integrity. Target clipping disabled for binary classification."
+        methods:
+          data_cleaning:
+            enabled: true
+            techniques:
+              duplicate_handling:
+                enabled: true
+                params:
+                  keep: "first"
+                output: "3.2.cleaning.duplicates_trace.json"
+        # NUEVO EN OPCIÓN B: Consume el parquet de 3.1, lo sanea y crea un nuevo checkpoint
+        output_artifacts:
+          cleaned_classification_train_parquet:
+            path: "3.2.cleaning.cleaned_classification_train.parquet"
+            description: "Intermediate classification matrix deduplicated."
+            consumed_by: ["step_3_3_data_transformation"]
+
+      # ────────────────────────────────────────────────────────────────────────
+      # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
+      # ────────────────────────────────────────────────────────────────────────
+      step_3_3_data_transformation:
+        enabled: true
+        description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
+        methods:
+          data_transformation:
+            enabled: true
+            techniques:
+              feature_scaling:
+                enabled: true
+                params:
+                  method: "RobustScaler"
+                  fit_on_train_only: true
+                  features: ["oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured"]
+                output: "3.3.transformation.scaler_fit_trace.json"
+              feature_engineering:
+                enabled: true
+                params:
+                  oat_denominator_protection:
+                    method: "convert_to_kelvin"
+                    offset: 273.15
+                  formulas:
+                    mgt_oat_ratio: "mgt / (oat + 273.15)"
+                    specific_power_index: "np / (ng * (oat + 273.15))"
+                  interactions:
+                    enabled: true
+                    degree: 2
+                    features: ["mgt", "ng", "Torque Measured", "np"]
+                output: "3.3.transformation.engineering_formulas_log.json"
+        # NUEVO EN OPCIÓN B: Consume el parquet de 3.2. Guarda la data transformada y el scaler
+        output_artifacts:
+          transformed_classification_train_parquet:
+            path: "3.3.transformation.transformed_classification_train.parquet"
+            description: "Intermediate classification matrix with scaling applied and engineered features."
+            consumed_by: ["step_3_5_data_formatting"]
+          fitted_scaler_bin:
+            path: "3.3.transformation.robust_scaler_classification.pkl" # Renombrado para no pisar el de regresión
+            description: "Fitted state parameters of the training-isolated RobustScaler model."
+            consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
+
+      # ────────────────────────────────────────────────────────────────────────
+      # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS
+      # ────────────────────────────────────────────────────────────────────────
+      step_3_5_data_formatting:
+        enabled: true
+        description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
+        methods:
+          data_formatting:
+            enabled: true
+            techniques:
+              data_split: # REACTIVADO: Necesitamos un set interno para validar la calibración de Fase 4
+                enabled: true
+                params:
+                  test_size: 0.2
+                  random_state: 42
+                  stratify: true
+                output: "3.5.formatting.split_indices_trace.json"
+              dataset_formatting:
+                enabled: true
+                params:
+                  target_col: "faulty"
+                  type_casting: "int64"
+                  to_numpy: true
+                output: "3.5.formatting.arrays_manifest.json"
+        # Consume el parquet de 3.3 y genera los conjuntos finales para las fases siguientes
+        output_artifacts:
+          engineered_train_split:
+            path: "3.5.formatting.classification_internal_train.parquet"
+            description: "Finalized scaling-safe internal training matrix."
+            consumed_by: ["step_4_2_model_training"]
+          engineered_val_split:
+            path: "3.5.formatting.classification_internal_val.parquet"
+            description: "Finalized internal validation split for isotonic calibration."
+            consumed_by: ["step_4_2_model_training", "step_4_4_model_evaluation"]
+
+  # ----------------------------------------------------------------------------
+  # STAGE 4 — MODELING
+  # ----------------------------------------------------------------------------
   phase4_data_modeling:
-    enabled: true
-#    objective: >
-#      Phase 4 (Modeling) for classification: algorithm selection, training,
-#      test design (CV/holdout), hyperparameter tuning, and evaluation metrics.
-#    output_policy:
-#      models_dir: "model"
-#      figures_dir: "figures/stage4_modeling"
-#      tables_png_dir: "tables_png/stage4_modeling"
-#      metrics_file: "metrics.json"
-#      save_all_as_png: true
-#    steps:
-#      # 4.1 Select the technique (Algorithm selection)
-#      # Choose the appropriate algorithm.
-#      step_4_1_algorithm_selection:
-#        enabled: true
-#        technique: "algorithm_selection"
-#        methods:
-#          # Method 1 - decision_tree_classifier:
-#          decision_tree_classifier:
-#            enabled: true
-#            params:
-#              random_state: 42
-#          # Method 2 - random_forest_classifier:
-#          random_forest_classifier:
-#            enabled: true
-#            params:
-#                n_estimators: 100
-#                random_state: 42
-#                n_jobs: -1
-#          # Method 3 - svm_classifier:
-#          svm_classifier:
-#            enabled: false
-#            params: {}
-#          # Method 4 - naive_bayes_classifier:
-#          naive_bayes_classifier:
-#            enabled: false
-#            params: {}
-#          # Method 5 - knn_classifier:
-#          knn_classifier:
-#            enabled: false
-#            params: {}
-#
-#      # 4.2 Build the model (Model training)
-#      # Train the model.
-#      step_4_2_model_training:
-#        enabled: true
-#        technique: "model_training"
-#        methods:
-#          # Method 1 - model_fit:
-#          fit:
-#            enabled: true
-#            params:
-#              fit_best_only: true          # keep best model as "best_model"
-#              store_all_models: true       # persist all trained model
-#          # Method 2 - hyperparameter_tuning:
-#          hyperparameter_tuning:
-#            enabled: false                  # "se puede aplicar"
-#            params:
-#              strategy: "grid"             # grid | random
-#              scoring: "f1_weighted"       # classification-oriented scoring
-#              n_iter: 30                   # used only if strategy=random
-#              refit: true
-#            grids:
-#              decision_tree_classifier:
-#                max_depth: [3, 5, 10, null]
-#                min_samples_split: [2, 5, 10]
-#              random_forest_classifier:
-#                n_estimators: [100, 200]
-#                max_depth: [null, 10, 20]
-#                min_samples_split: [2, 5]
-#              svm_classifier:
-#                C: [0.1, 1, 10]
-#                kernel: ["rbf", "linear"]
-#              naive_bayes_classifier:
-#                var_smoothing: [1.0e-09, 1.0e-08]
-#              knn_classifier:
-#                n_neighbors: [3, 5, 7, 11]
-#                weights: ["uniform", "distance"]
-#
-#      # 4.3 Generate the test project (Test design)
-#      # Define how the model will be tested and validated.
-#      step_4_3_test_design:
-#        enabled: true
-#        technique: "test_design"
-#        methods:
-#          # Method 1 - cross_validation:
-#          # Cross-validation applies to classification (per your table)
-#          cross_validation:
-#            enabled: false # "se puede aplicar"
-#            params:
-#              cv_folds: 5
-#              shuffle: true
-#              random_state: 42
-#          # Method 2 - holdout:
-#          # Hold-out applies to classification (per your table)
-#          holdout:
-#            enabled: true
-#            params:
-#              test_size: 0.2
-#              stratify: true
-#              random_state: 42
-#
-#      # 4.4 Evaluate the model (Model evaluation)
-#      # Evaluate model performance using appropriate metrics.
-#      step_4_4_model_evaluation:
-#        enabled: true
-#        technique: "model_evaluation"
-#        metrics:
-#          accuracy:
-#            enabled: true
-#            params: {}
-#          f1_score:
-#            enabled: true
-#            params:
-#              average: "weighted"
+    objective: "Train LightGBM with physical proxy groups, applying post-hoc isotonic calibration."
 
+    read_strategy:
+      mode: "consume_engineered_splits"
+      input_source:
+        train_data: "3.5.formatting.classification_internal_train.parquet"
+        val_data: "3.5.formatting.classification_internal_val.parquet" # Usado solo para fittear la calibración isotónica
 
+    steps:
+      step_4_1_algorithm_selection:
+        enabled: true
+        description: "Configure core boosting framework accounting for mild class imbalance."
+        methods:
+          algorithm_selection:
+            enabled: true
+            techniques:
+              single_calibrated_architecture:
+                enabled: true
+                params:
+                  library: "lightgbm"
+                  estimator: "LGBMClassifier"
+                  objective: "binary"
+                  boosting_type: "gbdt"
+                  scale_pos_weight: 1.48
+                  learning_rate: 0.05
+                  n_estimators: 350
+                  max_depth: 6
+                  num_leaves: 31
+                  random_state: 42
+                output: "4.1.modeling.algo_setup_trace.json"
 
-  # -------------------------
-  # STAGE 5 — EVALUATION & INTERPRETATION (PHASE 5)
-  # Phase where model performance is evaluated, results are interpreted, and business value is assessed.
-  # -------------------------
+      step_4_2_model_training:
+        enabled: true
+        description: "Execute GMM cross-validation and fit isotonic calibrator for probability honesty."
+        methods:
+          model_training:
+            enabled: true
+            techniques:
+              cross_validation:
+                enabled: true
+                params:
+                  strategy: "GroupKFold"
+                  n_splits: 5
+                  grouping_mechanism:
+                    type: "GMM_Clusterer"
+                    features: ["oat", "mgt", "ias"]
+                    n_clusters: 4
+                    covariance_type: "full"
+                    log_centroids_verification: true
+                output: "4.2.training.cv_fold_execution_trace.json"
+              post_processing_calibration:
+                enabled: true
+                params:
+                  method: "IsotonicRegression"
+                  fit_on_validation_splits: true
+                output: "4.2.training.isotonic_fit_trace.json"
+        output_artifacts:
+          trained_lightgbm_base:
+            path: "4.2.training.lightgbm_raw_classifier.pkl"
+            description: "Serialized raw LightGBM tree structure."
+            consumed_by: ["phase5_evaluation_and_interpretation"]
+          fitted_isotonic_calibrator:
+            path: "4.2.training.isotonic_calibrator.pkl"
+            description: "Probability calibrator mapping raw tree scores to empirical frequencies."
+            consumed_by: ["phase5_evaluation_and_interpretation"]
+
+      step_4_4_model_evaluation:
+        enabled: true
+        description: "Enforce validation selection driven by Brier Score to ensure uncertainty quality."
+        methods:
+          model_evaluation:
+            enabled: true
+            techniques:
+              model_selection_criteria:
+                enabled: true
+                params:
+                  primary_metric: "brier_score"
+                  tie_breaker: "roc_auc"
+                output: "4.4.evaluation.ranking_trace.json"
+        output_artifacts:
+          best_classification_metadata:
+            path: "4.4.evaluation.final_best_model_meta.json"
+            description: "Consolidated performance scoreboard."
+            consumed_by: ["phase5_evaluation_and_interpretation"]
+
+  # ----------------------------------------------------------------------------
+  # STAGE 5 — EVALUATION & CALIBRATION AUDIT
+  # ----------------------------------------------------------------------------
   phase5_evaluation_and_interpretation:
-    enabled: true
-#    objective: >
-#      Phase 5 (Evaluation & Interpretation): translate model results into
-#      actionable knowledge, validate business value, audit the pipeline,
-#      and decide next steps.
-#    output_policy:
-#      figures_dir: "figures/stage5_evaluation_and_interpretation"
-#      tables_png_dir: "tables_png/stage5_evaluation_and_interpretation"
-#      metrics_file: "metrics.json"
-#      save_all_as_png: true
-#    steps:
-#      # 5.1 Extract knowledge (Interpretation)
-#      # Understand what the model has learned and why.
-#      step_5_1_interpretation:
-#        enabled: true
-#        technique: "interpretation"
-#        methods:
-#          # Method 1 - feature_importance:
-#          # Measures the relative contribution of each feature to the model.
-#          feature_importance:
-#            enabled: true
-#            params:
-#              top_k: 30
-#              normalize: true
-#          # Method 2 - coefficients:
-#          # Direct interpretation of feature weights in linear model.
-#          coefficients:
-#            enabled: false
-#            params:
-#              top_k: 30
-#              include_models: ["svm_linear", "logistic_like_if_any"]  # safe placeholder
-#          # Method 3 - permutation_importance:
-#          # Measures performance loss when a feature’s values are randomly permuted.
-#          permutation_importance:
-#            enabled: true
-#            params:
-#              n_repeats: 10
-#              random_state: 42
-#          # Method 5 - confusion_matrix_analysis:
-#          # Detailed analysis of correct and incorrect predictions by class.
-#          confusion_matrix_analysis:
-#            enabled: true
-#            params:
-#              normalize: "true"          # true | pred | all | null
-#              include_class_report: true
-#
-#      # 5.2 Evaluate results (Business evaluation)
-#      # Assess whether the model delivers real business value
-#      step_5_2_business_evaluation:
-#        enabled: true
-#        technique: "business_evaluation"
-#        methods:
-#          # Method 1 - compare_models:
-#          # Comparison among multiple candidate model.
-#          compare_models:
-#            enabled: true
-#            params:
-#              rank_by: ["f1_weighted", "accuracy"]
-#          # Method 2 - baseline_comparison:
-#          # Comparison against a simple or current baseline solution.
-#          baseline_comparison:
-#            enabled: true
-#            params:
-#              baseline: "majority_class" # majority_class | random | custom
-#          # Method 3 - business_kpis:
-#          # Translation of technical metrics into economic or business impact indicators.
-#          business_kpis:
-#            enabled: false
-#            params:
-#              kpi_rules_file: "config/rules/business_kpi_rules_config.yml"
-#              currency: "EUR"
-#
-#      # 5.3 Review the process (Process audit)
-#      # Verify that the process was correct, consistent, and reproducible.
-#      step_5_3_process_audit:
-#        enabled: true
-#        technique: "process_audit"
-#        methods:
-#          # Method 1 - pipeline_review:
-#          # Manual review of the entire processing pipeline.
-#          pipeline_review:
-#            enabled: false
-#            params:
-#              checklist_file: "config/rules/pipeline_review_checklist.yml"  # optional
-#          # Method 2 - reproducibility_check:
-#          # Verification that results are repeatable and reproducible.
-#          reproducibility_check:
-#            enabled: true
-#            params:
-#              require_seed: true
-#              require_config_snapshot: true
-#          # Method 3 - data_drift_detection:
-#          # Detection of information leakage from training to test data.
-#          leakage_detection:
-#            enabled: true
-#            params:
-#              label_col: "${label_col}"
-#              #target_col: "${target_col}"
-#              check_time_leakage: false   # classification default
-#              time_col: "${time_col}"
-#
-#      # 5.4 Determine next steps (Decision making)
-#      # Decide how to proceed with the model.
-#      step_5_4_decision_making:
-#        enabled: false
-#        technique: "decision_making"
-#        methods:
-#          # Method 1 - go_no_go_decision:
-#          # Decision on whether to adopt or reject the model.
-#          go_no_go_decision:
-#            enabled: true
-#            params:
-#              min_accuracy: 0.70
-#              min_f1_weighted: 0.65
-#          # Method 2 - iterate_model:
-#          # Start a new modeling iteration to improve performance or robustness.
-#          iterate_model:
-#            enabled: true
-#            params:
-#              enable_backloop_to_stage: 4
-#          # Method 3 - human_in_the_loop:
-#          # Human validation in critical or high-risk decisions.
-#          human_in_the_loop:
-#            enabled: true
-#            params:
-#              require_manual_signoff: true
-#
-#
-#      step_5_5_submission_export:
-#          enabled: false
-#          technique: "submission_export"
-#          params:
-#            output_dir: "submissions" # directory where submission files will be saved
-#            test_filename: "submission.jso" # name of the submission file for test set predictions (e.g. "submission.csv" or "submission.json")
-#            validation_filename: "validation_submission.jso" # name of the submission file for validation set predictions (e.g. "validation_submission.csv" or "validation_submission.json")
-#            id_field: "id"   # name of the identifier field to include in the submission file (e.g. "id", "uuid", "record_id")
+    objective: "Audit probability honesty on UNSEEN CROSS-ASSET MOTORS."
+
+    # ¡LA CLAVE ESTÁ AQUÍ! Carga el scaler, el modelo, y los DATOS DEL CHALLENGE CRUDOS
+    read_strategy:
+      mode: "cross_asset_evaluation"
+      input_source:
+        model_base: "4.2.training.lightgbm_raw_classifier.pkl"
+        calibrator: "4.2.training.isotonic_calibrator.pkl"
+        scaler: "3.3.transformation.robust_scaler.pkl"
+        challenge_test_data: "2.1.data_acquisition.prod_300000_stratified_test.parquet"
+        challenge_val_data: "2.1.data_acquisition.prod_300000_stratified_validation.parquet"
+
+    steps:
+      step_5_1_interpretation:
+        enabled: true
+        description: "Extract feature weights to understand operational drivers of engine fault."
+        methods:
+          model_interpretation:
+            enabled: true
+            techniques:
+              feature_importance:
+                enabled: true
+                params:
+                  strategy: "model_native"
+                  top_k: 15
+                output: "5.1.plots.feature_importance_data.json"
+              confusion_matrix_analysis:
+                enabled: true
+                params:
+                  normalize: "true"
+                  include_class_report: true
+                output: "5.1.plots.confusion_matrix_data.json"
+
+      step_5_2_probabilistic_evaluation:
+        enabled: true
+        description: "Validate calibration via reliability plotting and benchmark asset performance loss on hidden data."
+        methods:
+          calibration_audit:
+            enabled: true
+            techniques:
+              reliability_diagram:
+                enabled: true
+                params:
+                  n_bins: 10
+                  strategy: "uniform"
+                output: "5.2.evaluation.reliability_trace.json"
+              performance_degradation_benchmarking:
+                enabled: true
+                params:
+                  expect_test_degradation: true
+                  baseline_comparison: "stratified_random"
+                output: "5.2.evaluation.degradation_trace.json"
+        output_artifacts:
+          evaluation_summary_json:
+            path: "5.2.evaluation.final_classification_metrics_summary.json"
+            description: "Final consolidated classification scores (Brier, AUC, F1) on hidden challenge motors."
+            consumed_by: ["deployment"]
+          reliability_diagram_plot:
+            path: "5.2.evaluation.reliability_diagram.png"
+            description: "Calibration curve validating predicted fault probability honesty on hidden challenge motors."
+            consumed_by: ["deployment"]
+
+      step_5_3_process_audit:
+        enabled: true
+        description: "Audit transformation constraints and flag potential data leakage occurrences."
+        methods:
+          process_audit:
+            enabled: true
+            techniques:
+              leakage_detection:
+                enabled: true
+                params:
+                  checks: ["train_test_overlap", "scaler_contamination_check"]
+                output: "5.3.audit.leakage_trace.json"
+
+      step_5_4_decision_making:
+        enabled: true
+        description: "Subject pipeline execution results to final domain engineering verification."
+        methods:
+          decision_making:
+            enabled: true
+            techniques:
+              final_sign_off:
+                enabled: true
+                params:
+                  required_review: true
+                  review_roles: ["preventive_maintenance_engineer", "turbomachinery_specialist"]
+                output: "5.4.decision.sign_off_trace.json"
+        output_artifacts:
+          deployment_sign_off:
+            path: "5.4.decision.final_sign_off_certificate.json"
+            description: "Cryptographic or structured approval marker for production release."
+            consumed_by: ["deployment"]
