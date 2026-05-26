@@ -27,7 +27,7 @@ notebooks/.ipynb_checkpoints/
 # File generate automaticamente
 logs/
 *.log
-outputs/
+#outputs/
 
 # ============================================
 #  POETRY
