@@ -8,33 +8,36 @@ from typing import Any, cast
 
 import numpy as np
 import pandas as pd
+from omegaconf import Container, DictConfig, ListConfig, OmegaConf
 
 from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.common.path_service_common import resolve_path
-from phm_america_2024.configuration.enum_registry_config import Phase, StepsPhase
-from typing import Any
-from omegaconf import OmegaConf, DictConfig, ListConfig, Container  # <-- Importamos Container
-
+from phm_america_2024.configuration.enum_registry_config import Phase
 
 log = get_logger(__name__)
 
 
 class _NumpyEncoder(json.JSONEncoder):
-    """Custom JSON encoder that converts all numpy and OmegaConf types to native Python types."""
+    """Custom JSON encoder supporting NumPy structures and OmegaConf containers."""
+
     def default(self, obj: Any) -> Any:
-        # Primero: Si es un contenedor de OmegaConf (ListConfig/DictConfig), resolverlo a nativo
+        # Step 1: If it is an OmegaConf container, CALL OmegaConf.to_container to resolve it
         if isinstance(obj, Container):
             return OmegaConf.to_container(obj, resolve=True)
 
-        # Lógica original para Numpy
+        # Step 2: Handle standard NumPy generic scalars
         if isinstance(obj, (np.generic,)):
             return obj.item()
+
+        # Step 3: Handle NumPy multidimensional arrays
         if isinstance(obj, np.ndarray):
             return obj.tolist()
 
         return super().default(obj)
 
+
 def _convert_configs(obj: Any) -> Any:
+    """Recursively convert OmegaConf objects into vanilla python structures."""
     if isinstance(obj, (DictConfig, ListConfig)):
         return OmegaConf.to_container(obj, resolve=True)
     if isinstance(obj, dict):
@@ -43,62 +46,14 @@ def _convert_configs(obj: Any) -> Any:
         return [_convert_configs(v) for v in obj]
     return obj
 
+
 def save_parquet(
         df: pd.DataFrame,
         path: str | Path,
         *,
         compression: str,
 ) -> Path:
-    """
-    Persist a DataFrame as a Parquet file with the specified compression.
-
-    Called in Stages 2 and 3 to write intermediate datasets consumed by the
-    next pipeline stage. ``snappy`` offers the best balance between
-    compression ratio and read/write speed for pipeline artifacts.
-
-    Intermediate artifact paths per option:
-
-    Option A:
-        Stage 2: ``sample_200k_with_source.parquet``
-        Stage 3: ``train_prepared_150k.parquet``
-        Stage 3: ``test_prepared_50k.parquet``
-
-    Option B:
-        Stage 2: ``train_sample_200k.parquet``
-        Stage 3: ``train_prepared_200k.parquet``
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame to persist.
-    path : str | Path
-        Relative or absolute destination path for the ``.parquet`` file.
-        Resolved against the project root via ``resolve_path()``.
-        Parent directories are created automatically if they do not exist.
-    compression : str
-        Parquet compression codec.
-        Options: ``"snappy"`` | ``"gzip"`` | ``"brotli"`` | ``"zstd"`` | ``"none"``.
-        Default: ``"snappy"`` (fast, industry-standard for pipeline artifacts).
-
-    Returns
-    -------
-    Path
-        Resolved absolute path where the file was written.
-
-    Raises
-    ------
-    ValueError
-        If ``df`` is empty (writing an empty parquet is likely a pipeline bug).
-    Exception
-        Any ``df.to_parquet()`` exception is logged then re-raised.
-
-    Examples
-    --------
-    >>> path = save_parquet(
-    ...     df_sample, "out/runs/clustering/.../sample_200k_with_source.parquet"
-    ... )
-    >>> print(path.stat().st_size / 1024**2, "MB")
-    """
+    """Save a pandas DataFrame into a compressed Parquet artifact."""
     # Step 1: Guard against persisting an empty DataFrame -- likely a bug.
     if df.empty:
         log.error(
@@ -112,7 +67,7 @@ def save_parquet(
             f"An empty DataFrame at this stage indicates a pipeline bug."
         )
 
-    # Step 2: Resolve destination path to absolute location.
+    # Step 2: CALL resolve_path() — resolve destination path to absolute location.
     resolved: Path = resolve_path(path)
     log.debug(
         "[save_parquet] resolved path=%s compression=%s rows=%d cols=%d",
@@ -122,11 +77,11 @@ def save_parquet(
         df.shape[1],
     )
 
-    # Step 3: Create parent directories if they do not exist.
+    # Step 3: CALL mkdir() — create parent directories if they do not exist.
     resolved.parent.mkdir(parents=True, exist_ok=True)
     log.debug("[save_parquet] ensured parent dir=%s", resolved.parent)
 
-    # Step 4: Write parquet to disk.
+    # Step 4: CALL to_parquet() — write parquet to disk.
     try:
         log.info(
             "[save_parquet] writing rows=%d cols=%d compression=%s path=%s",
@@ -136,12 +91,11 @@ def save_parquet(
             resolved,
         )
         df.to_parquet(resolved, compression=cast(Any, compression), index=False)
-
     except Exception:
         log.exception("[save_parquet] to_parquet failed path=%s", resolved)
         raise
 
-    # Step 5: Log written file size for storage awareness.
+    # Step 5: CALL stat() — calculate and log written file size for storage awareness.
     size_mb: float = resolved.stat().st_size / (1024**2)
     log.info(
         "[save_parquet] written size_mb=%.2f compression=%s path=%s",
@@ -156,51 +110,7 @@ def save_pickle(
         obj: Any,
         path: str | Path,
 ) -> Path:
-    """
-    Persist a Python object to disk using pickle serialisation.
-
-    Used in Stage 3 to serialise the fitted transformers pipeline
-    (imputer + scaler + encoder) for on-the-fly application in Stage 5.
-    Used in Stage 4 to serialise trained clustering models (KMeans, DBSCAN).
-
-    Intermediate artifact paths per option:
-
-    Both options Stage 3:
-        ``transformers_pipeline.pkl`` — fitted sklearn Pipeline object.
-
-    Both options Stage 4:
-        ``kmeans_best.pkl``  — best KMeans model after grid search.
-        ``dbscan_best.pkl``  — best DBSCAN model after grid search.
-
-    Parameters
-    ----------
-    obj : Any
-        Python object to serialise. Typically a fitted sklearn Pipeline,
-        a trained clustering model, or a metadata dict.
-    path : str | Path
-        Relative or absolute destination path for the ``.pkl`` file.
-        Resolved against the project root via ``resolve_path()``.
-        Parent directories are created automatically if they do not exist.
-
-    Returns
-    -------
-    Path
-        Resolved absolute path where the file was written.
-
-    Raises
-    ------
-    ValueError
-        If ``obj`` is ``None`` (persisting None is likely a pipeline bug).
-    Exception
-        Any ``pickle.dump()`` exception is logged then re-raised.
-
-    Examples
-    --------
-    >>> path = save_pickle(
-    ...     transformers_pipeline, "out/runs/.../transformers_pipeline.pkl"
-    ... )
-    >>> path = save_pickle(kmeans_model, "out/runs/.../models/kmeans_best.pkl")
-    """
+    """Serialize any pipeline artifact using standard pickle protocol."""
     # Step 1: Guard against persisting None -- likely a pipeline bug.
     if obj is None:
         log.error(
@@ -213,7 +123,7 @@ def save_pickle(
             f"A None object at this stage indicates a pipeline bug."
         )
 
-    # Step 2: Resolve destination path to absolute location.
+    # Step 2: CALL resolve_path() — resolve destination path to absolute location.
     resolved: Path = resolve_path(path)
     log.debug(
         "[save_pickle] resolved path=%s object_type=%s",
@@ -221,11 +131,11 @@ def save_pickle(
         type(obj).__name__,
     )
 
-    # Step 3: Create parent directories if they do not exist.
+    # Step 3: CALL mkdir() — create parent directories if they do not exist.
     resolved.parent.mkdir(parents=True, exist_ok=True)
     log.debug("[save_pickle] ensured parent dir=%s", resolved.parent)
 
-    # Step 4: Serialise object to disk.
+    # Step 4: CALL pickle.dump() — serialise object to disk.
     try:
         log.info(
             "[save_pickle] serialising object_type=%s path=%s",
@@ -234,12 +144,11 @@ def save_pickle(
         )
         with resolved.open("wb") as fh:
             pickle.dump(obj, fh, protocol=pickle.HIGHEST_PROTOCOL)
-
     except Exception:
         log.exception("[save_pickle] pickle.dump failed path=%s", resolved)
         raise
 
-    # Step 5: Log written file size.
+    # Step 5: CALL stat() — log written file size.
     size_mb: float = resolved.stat().st_size / (1024**2)
     log.info(
         "[save_pickle] written size_mb=%.3f object_type=%s path=%s",
@@ -250,92 +159,13 @@ def save_pickle(
     return resolved
 
 
-def save_model_pickle(
-        run_dir: Path,
-        model: Any,
-        filename: str = "model.pkl",
-) -> Path:
-
-    # Step 1 – Resolve destination path under the Phase.MODELS sub-directory
-    out_path = run_dir / Phase.MODELS.value / filename
-
-    # Step 2 – Ensure the models directory exists (defensive mkdir guard)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Step 3 – Serialise model to bytes and write to disk
-    out_path.write_bytes(pickle.dumps(model))
-
-    # Step 4 – Emit info-level confirmation
-    log.info("[artifacts] model saved: %s", out_path)
-    return out_path
-
-
 def save_json(
         obj: Any,
         path: str | Path,
         *,
         indent: int = 2,
 ) -> Path:
-    """
-    Persist a Python dict or list as a formatted JSON file.
-
-    Used in Stage 3 to save structured reports, feature lists, and metadata
-    with the naming convention ``{step}.{method}.{technique}.{filename}``.
-
-    Stage 3 JSON artifacts per step:
-
-    Step 3.1 (Data Selection):
-        ``3.1.manual.exclusions.selected_features.json``
-        ``3.1.manual.exclusions.dropped_features.json``
-        ``3.1.feature_selection.report.feature_selection_report.json``
-
-    Step 3.2 (Data Cleaning):
-        ``3.2.sentinel.removal.sentinel_removal_report.json``
-        ``3.2.cleaning.imputation.cleaning_report.json``
-        ``3.2.missing.before.missing_values_before.json``
-        ``3.2.missing.after.missing_values_after.json``
-
-    Step 3.3 (Data Transformation):
-        ``3.3.scaling.robust.scaling_report.json``
-        ``3.3.encoding.mappings.encoding_mappings.json``
-        ``3.3.transformation.summary.transformation_summary.json``
-        ``3.3.feature_engineering.aggregations.feature_engineering_report.json``
-
-    Parameters
-    ----------
-    obj : Any
-        Python object to serialise (typically dict or list).
-        Must be JSON-serialisable (no numpy arrays, pandas objects, or
-        custom classes without a custom encoder).
-    path : str | Path
-        Relative or absolute destination path for the ``.json`` file.
-        Resolved against the project root via ``resolve_path()``.
-        Parent directories are created automatically if they do not exist.
-    indent : int, optional
-        Number of spaces for pretty-printing. Default: 2.
-        Use ``indent=None`` for compact single-line output.
-
-    Returns
-    -------
-    Path
-        Resolved absolute path where the file was written.
-
-    Raises
-    ------
-    ValueError
-        If ``obj`` is ``None`` (persisting None is likely a pipeline bug).
-    TypeError
-        If ``obj`` contains non-JSON-serialisable types.
-    Exception
-        Any ``json.dump()`` exception is logged then re-raised.
-
-    Examples
-    --------
-    >>> report = {"dropped": ["Id", "IncidentId"], "kept": 42}
-    >>> path = save_json(
-    ...     report, "out/runs/.../3.1.manual.exclusions.dropped_features.json"
-    ... )
-    """
+    """Save configurations, summaries or operational evaluation metrics to JSON."""
     # Step 1: Guard against persisting None -- likely a pipeline bug.
     if obj is None:
         log.error(
@@ -348,7 +178,7 @@ def save_json(
             f"A None object at this stage indicates a pipeline bug."
         )
 
-    # Step 2: Resolve destination path to absolute location.
+    # Step 2: CALL resolve_path() — resolve destination path to absolute location.
     resolved: Path = resolve_path(path)
     log.debug(
         "[save_json] resolved path=%s object_type=%s indent=%s",
@@ -357,20 +187,27 @@ def save_json(
         indent,
     )
 
-    # Step 3: Create parent directories if they do not exist.
+    # Step 3: CALL mkdir() — create parent directories if they do not exist.
     resolved.parent.mkdir(parents=True, exist_ok=True)
     log.debug("[save_json] ensured parent dir=%s", resolved.parent)
 
-    # Step 4: Serialise object to disk with pretty-printing.
+    # Step 4: CALL json.dump() — serialise object with custom _NumpyEncoder and config converters.
     try:
         log.info(
             "[save_json] writing object_type=%s path=%s",
             type(obj).__name__,
             resolved,
         )
+        converted = _convert_configs(obj)
         with resolved.open("w", encoding="utf-8") as fh:
-            json.dump(_convert_configs(obj), fh, indent=indent, ensure_ascii=False, sort_keys=False, cls=_NumpyEncoder)
-
+            json.dump(
+                converted,
+                fh,
+                indent=indent,
+                ensure_ascii=False,
+                sort_keys=False,
+                cls=_NumpyEncoder
+            )
     except TypeError as err:
         log.error(
             "[save_json] object contains non-JSON-serialisable types path=%s error=%s",
@@ -378,12 +215,11 @@ def save_json(
             err,
         )
         raise
-
     except Exception:
         log.exception("[save_json] json.dump failed path=%s", resolved)
         raise
 
-    # Step 5: Log written file size.
+    # Step 5: CALL stat() — calculate and log written file size.
     size_kb: float = resolved.stat().st_size / 1024
     log.info(
         "[save_json] written size_kb=%.2f object_type=%s path=%s",
@@ -398,55 +234,8 @@ def save_numpy(
         arr: Any,
         path: str | Path,
 ) -> Path:
-    """
-    Persist a NumPy array to disk as a ``.npy`` file.
-
-    Used in Stage 3 to save the ``IncidentGrade`` target labels separately
-    from the prepared feature matrices for post-hoc validation (ARI, NMI)
-    in Stage 4 and Stage 5.
-
-    Stage 3 NumPy artifacts:
-
-    Both options:
-        ``train_incident_grade.npy`` — train labels for validation.
-        ``test_incident_grade.npy``  — test labels for validation.
-
-    The ``IncidentGrade`` column is dropped from the feature DataFrames
-    before saving ``train_prepared_150k.parquet`` and
-    ``test_prepared_50k.parquet`` because clustering is unsupervised.
-    Labels are kept in separate ``.npy`` files so Stage 5 can compute
-    external validation metrics (Adjusted Rand Index, Normalised Mutual
-    Information) after cluster assignment.
-
-    Parameters
-    ----------
-    arr : np.ndarray
-        NumPy array to persist. Typically a 1D array of string labels
-        (e.g. ``["TP", "BP", "FP", ...]``).
-    path : str | Path
-        Relative or absolute destination path for the ``.npy`` file.
-        Resolved against the project root via ``resolve_path()``.
-        Parent directories are created automatically if they do not exist.
-
-    Returns
-    -------
-    Path
-        Resolved absolute path where the file was written.
-
-    Raises
-    ------
-    ValueError
-        If ``arr`` is ``None`` or not a NumPy array.
-    Exception
-        Any ``np.save()`` exception is logged then re-raised.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> labels = np.array(["TP", "BP", "FP", "TP"])
-    >>> path = save_numpy(labels, "out/runs/.../train_incident_grade.npy")
-    """
-    # Step 1: Guard against None and validate type.
+    """Save raw multidimensional structures in optimized binary NumPy (.npy) format."""
+    # Step 1: Guard against None and validate target type.
     if arr is None:
         log.error(
             "[save_numpy] array is None -- refusing to save None to path=%s. "
@@ -468,7 +257,7 @@ def save_numpy(
             f"save_numpy() requires a numpy.ndarray, got {type(arr).__name__}."
         )
 
-    # Step 2: Resolve destination path to absolute location.
+    # Step 2: CALL resolve_path() — resolve destination path to absolute location.
     resolved: Path = resolve_path(path)
     log.debug(
         "[save_numpy] resolved path=%s shape=%s dtype=%s",
@@ -477,11 +266,11 @@ def save_numpy(
         arr.dtype,
     )
 
-    # Step 3: Create parent directories if they do not exist.
+    # Step 3: CALL mkdir() — create parent directories if they do not exist.
     resolved.parent.mkdir(parents=True, exist_ok=True)
     log.debug("[save_numpy] ensured parent dir=%s", resolved.parent)
 
-    # Step 4: Save array to disk in NumPy binary format.
+    # Step 4: CALL np.save() — save array to disk in NumPy binary format.
     try:
         log.info(
             "[save_numpy] saving shape=%s dtype=%s path=%s",
@@ -490,12 +279,11 @@ def save_numpy(
             resolved,
         )
         np.save(resolved, arr, allow_pickle=False)
-
     except Exception:
         log.exception("[save_numpy] np.save failed path=%s", resolved)
         raise
 
-    # Step 5: Log written file size.
+    # Step 5: CALL stat() — calculate and log written file size.
     size_kb: float = resolved.stat().st_size / 1024
     log.info(
         "[save_numpy] written size_kb=%.2f shape=%s dtype=%s path=%s",

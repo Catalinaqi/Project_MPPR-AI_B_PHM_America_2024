@@ -190,18 +190,30 @@ class StepOutputArtifact(str, Enum):
     # Phase 2 – Data Understanding
     # ──────────────────────────────────────────────────────────────────────────
     # Step 2.1
+    load_and_merge_json = "load_and_merge_x_y"
+
     sample_x_y_train_parquet = "sample_x_y_train_parquet"
     sample_x_test_parquet = "sample_x_test_parquet"
     sample_x_validation_parquet = "sample_x_validation_parquet"
 
-
     # Step 2.2
-
+    column_metadata_json = "column_metadata"
+    sensor_stats_json =  "basic_stats"
+    null_count_json = "null_count_per_column"
+    target_distribution_json = "distribution_analysis"
 
     # Step 2.3
-
+    zero_or_negative_check_json =   "zero_or_negative_check"
+    collinearity_json = "collinearity_analysis"
 
     # Step 2.4
+    column_catalog_json =  "column_catalog"
+    ks_report_json =      "ks_test_per_feature"
+    gmm_curve_png = "gmm_exploration"
+    drift_summary_json = "feature_drift_summary"
+
+    flight_regimes_png = "flight_regime_binning"
+
 
 
     # ──────────────────────────────────────────────────────────────────────────

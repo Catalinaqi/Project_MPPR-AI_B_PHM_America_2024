@@ -8,9 +8,9 @@ from phm_america_2024.common.path_service_common import find_project_root
 
 log = get_logger(__name__)
 
-
 class YmlRepository:
     _base_cache: Optional[DictConfig] = None
+    _dataset_cache: Optional[DictConfig] = None  # <-- 1. AGREGAMOS EL NUEVO CACHÉ EN MEMORIA
     _project_root: Optional[Path] = None
 
     @classmethod
@@ -21,6 +21,10 @@ class YmlRepository:
 
     @classmethod
     def load_dataset_config(cls) -> DictConfig:
+        # 2. SI YA EXISTE EN RAM, DEVOLVEMOS LA COPIA INMEDIATAMENTE SIN IR AL DISCO
+        if cls._dataset_cache is not None:
+            return cls._dataset_cache
+
         path = cls._get_config_root() / "dataset" / "dataset_config.yml"
         log.info(f"Loading dataset config from {path}")
 
@@ -28,10 +32,14 @@ class YmlRepository:
             log.error(f"Dataset config not found: {path}")
             raise FileNotFoundError(f"Dataset config not found: {path}")
 
-        return OmegaConf.load(path)
+        # 3. GUARDAMOS EN MEMORIA PARA LA PRÓXIMA CONSULTA
+        cls._dataset_cache = OmegaConf.load(path)
+        log.info("Dataset config cached successfully")
+        return cls._dataset_cache
 
     @classmethod
     def get_dataset_by_key(cls, key: str) -> DictConfig:
+        # Ahora load_dataset_config() es inteligente y no saturará el disco
         cfg = cls.load_dataset_config()
 
         if key not in cfg.datasets:
@@ -41,6 +49,8 @@ class YmlRepository:
 
         log.info(f"Retrieved dataset config for key='{key}'")
         return cfg.datasets[key]
+
+    # ... (el resto del código queda igual)
 
     @classmethod
     def load_base_pipeline_config(cls) -> DictConfig:

@@ -66,13 +66,13 @@ pipeline_base:
 
   profiles:
     dev:
-      enabled: true
+      enabled: false
       description: "Fast iteration — stratified sample for development"
       mode: "sample"
       sample_rows: 7000
       stratify_column: "faulty"   # confirmed lowercase
     prod:
-      enabled: false
+      enabled: true
       description: >
         Full-scale execution. Train has 742,625 rows (94.54% of total).
         Sample capped at 300,000 to keep memory manageable on CPU while
@@ -97,7 +97,7 @@ pipeline_base:
           x_validation_path: "${x_validation_path}" # X_validation.csv —  21,436 rows, 8 feature cols, no labels
 
         read_strategy:
-          sample_method: "stratified"
+          sample_method: "stratified" # random / stratified
           stratify_column: "faulty"   # confirmed lowercase, BIGINT
           join_key: "id"              # confirmed BIGINT, present in all splits
           random_state: 7
@@ -143,6 +143,10 @@ pipeline_base:
                   Features only, no labels. Not used until Phase 5 final scoring.
                   consumed_by: [ "phase_5" ]
 
+              load_and_merge_x_y:
+                path: "2.1.data_acquisition.metadata_merged_train.json"
+                description: "Metadata de los datos consolidados X+Y."
+
           #Capire le distribuzioni  → giustifica RobustScaler in Phase 3
           step_2_2_data_description:
             enabled: true
@@ -153,7 +157,8 @@ pipeline_base:
                 techniques:
                   column_metadata:
                     enabled: true
-                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
                     params:
                       include_cardinality: false  # All features are continuous DOUBLE
                       include_dtypes: true
@@ -165,7 +170,8 @@ pipeline_base:
                 techniques:
                   basic_stats:
                     enabled: true
-                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
+                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
                     params:
                       numeric_only: true
                       metrics: ["count", "mean", "std", "min", "max", "skewness"]
@@ -181,7 +187,8 @@ pipeline_base:
                 techniques:
                   null_count_per_column:
                     enabled: true
-                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
                     params:
                       columns: ["trq_measured", "oat", "mgt", "pa", "ias", "np", "ng", "faulty", "trq_margin"]
                     output: "2.2.null_check.null_count_per_column.json"
@@ -192,7 +199,8 @@ pipeline_base:
                 techniques:
                   distribution_analysis:
                     enabled: true
-                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
+                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
                     params:
                       classification_target: "faulty"
                       regression_target: "trq_margin"
@@ -210,7 +218,8 @@ pipeline_base:
                 techniques:
                   zero_or_negative_check:
                     enabled: true
-                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
                     description: >
                       CONFIRMED RISK: oat min = -19.25°C — Kelvin shift mandatory in Phase 3.
                       ng min = 90.00 — safe, no zero-division risk.
@@ -231,7 +240,8 @@ pipeline_base:
                 techniques:
                   collinearity_analysis:
                     enabled: true
-                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
                     params:
                       target_column: "trq_margin"
                       suspect_pairs:
@@ -252,7 +262,8 @@ pipeline_base:
                 techniques:
                   column_catalog:
                     enabled: true
-                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
                     params:
                       categorize_by_role: true
                       roles:
@@ -269,10 +280,15 @@ pipeline_base:
                 techniques:
                   ks_test_per_feature:
                     enabled: true
+#                    split: [
+#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
+#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
+#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
+#                    ]
                     split: [
-                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
-                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
-                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
+                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet",
+                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_test.parquet",
+                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_validation.parquet"
                     ]
                     params:
                       features: [ "trq_measured", "oat", "mgt", "pa", "ias", "np", "ng" ]
@@ -284,7 +300,8 @@ pipeline_base:
 
                   gmm_exploration:
                     enabled: true
-                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    split: [ "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet" ]
                     decision_rule: >
                       Se BIC minimo a k=4 → conferma Group-K-Fold con k=4 in Phase 4.
                       Se minimo altrove → aggiorna phase_4 regression/classification config.
@@ -296,10 +313,15 @@ pipeline_base:
 
                   feature_drift_summary:
                     enabled: true
+#                    split: [
+#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
+#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
+#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
+#                    ]
                     split: [
-                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
-                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
-                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
+                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet",
+                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_test.parquet",
+                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_validation.parquet"
                     ]
                     params:
                       aggregate_by: "max_ks_statistic"
@@ -311,7 +333,8 @@ pipeline_base:
                 techniques:
                   flight_regime_binning:
                     enabled: true
-                    split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
+                    split: [ "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet" ]
                     description: >
                       CONFIRMED from Query 4: two OAT bins dominate (20°C: 297,713 rows,
                       10°C: 295,229 rows — together 79.8% of train).

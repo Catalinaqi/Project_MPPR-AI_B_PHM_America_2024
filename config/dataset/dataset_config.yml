@@ -21,6 +21,7 @@ datasets:
       train:
         X_TRAIN_FEATURE: "data/raw/train/X_train.csv"
         Y_TRAIN_TARGET: "data/raw/train/Y_train.csv"
+        join_key: "id"
       test:
         X_TEST_FEATURE: "data/raw/test/X_test.csv"
       validation:

@@ -18,7 +18,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # SECTION 3 – Internal imports
 # ---------------------------------------------------------------------------
-from phm_america_2024.configuration.enum_registry_config import PhaseDir, StageSubDir
+from phm_america_2024.configuration.enum_registry_config import Phase, StepsPhase
 from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.common.path_service_common import resolve_path
 
@@ -26,106 +26,6 @@ from phm_america_2024.common.path_service_common import resolve_path
 # SECTION 4 – Module-level logger
 # ---------------------------------------------------------------------------
 log = get_logger(__name__)
-
-
-def _save_json(
-        path: Path,
-        payload: dict[str, Any],
-) -> Path:
-    """Serialise *payload* to a UTF-8 JSON file at *path*.
-
-    Parameters
-    ----------
-    path:
-        Destination file path.  Parent directory must already exist.
-    payload:
-        Arbitrary mapping to serialise; ``datetime`` and ``Path`` objects
-        are coerced to strings via ``default=str``.
-
-    Returns
-    -------
-    Path
-        The path that was written, for call-chaining or audit logging.
-    """
-    # Step 1 – Serialise payload to an indented JSON string
-    content = json.dumps(payload, indent=2, default=str)
-
-    # Step 2 - Ensure the parent directory exists
-    # parents=True creates missing folders; exist_ok=True prevents errors if it exists
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Step 2 – Write encoded content to disk
-    path.write_text(content, encoding="utf-8")
-
-    # Step 3 – Emit info-level confirmation
-    log.info("[artifacts] json saved: %s", path)
-    return path
-
-
-def save_metrics(
-        run_dir: Path,
-        metrics: dict[str, Any],
-) -> Path:
-    """Persist pipeline metrics to ``<run_dir>/metrics.json``.
-
-    Writes the canonical ``metrics.json`` file at the root of the current
-    run directory.  The file is created (or overwritten) on each call, so
-    callers should accumulate all metrics in a single dict before invoking
-    this function.
-
-    Parameters
-    ----------
-    run_dir:
-        Root of the current pipeline run as returned by
-        ``context_utils_core.make_run_dir()``.
-    metrics:
-        Flat or nested mapping of metric names to scalar values.
-
-    Returns
-    -------
-    Path
-        Absolute path of the written ``metrics.json`` file.
-    """
-    # Step 1 – Resolve the canonical metrics file path at the run root
-    out_path = run_dir / StageSubDir.METRICS.value
-
-    # Step 2 – Delegate serialisation to _save_json
-    return _save_json(out_path, metrics)
-
-
-def save_stage_report(
-        run_dir: Path,
-        stage_name: str,
-        payload: dict[str, Any],
-        filename: str,
-) -> Path:
-    """Write a stage-level summary report as JSON.
-
-    The destination directory ``<run_dir>/<stage_name>/reports/`` is
-    expected to already exist (created by ``make_run_dir()``).
-    No ``mkdir()`` call is issued here.
-
-    Parameters
-    ----------
-    run_dir:
-        Root of the current pipeline run.
-    stage_name:
-        CRISP-DM stage sub-directory name (e.g. ``PhaseDir.PHASE2.value``).
-    payload:
-        Mapping of summary statistics or metadata for the stage.
-    filename:
-        Name of file into "output_artifacts"
-
-    Returns
-    -------
-    Path
-        Absolute path of the written ``stage_report.json``.
-    """
-    # Step 1 – Build destination path using the StageSubDir.REPORTS convention
-    report_path = run_dir / stage_name / StageSubDir.REPORTS.value / filename
-
-    # Step 2 – Delegate serialisation to _save_json
-    return _save_json(report_path, payload)
 
 
 def save_table_png(

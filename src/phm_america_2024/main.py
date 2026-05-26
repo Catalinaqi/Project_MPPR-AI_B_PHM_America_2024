@@ -14,6 +14,12 @@ from phm_america_2024.api.execution_facade_api import (
 )
 from phm_america_2024.common.logging_adapter_common import get_logger
 
+from phm_america_2024.registry import phase2_generator_registry
+
+
+# IMPORTACIÓN REQUERIDA: Conectamos el repositorio de configuraciones centralizado
+from phm_america_2024.configuration.yml_repository_config import YmlRepository
+
 log = get_logger(__name__)
 
 
@@ -73,10 +79,12 @@ def main() -> int:
     """CLI entry point.
 
     Step 1: Parse arguments.
-    Step 2: CALL init_run_facade_api(pipeline_name, dataset_key).
-    Step 3: CALL _execute_phase2_steps(ctx, steps).
-    Step 4: Log success and return exit code.
+    Step 2: Load merged pipeline and dataset configs via YmlRepository.
+    Step 3: CALL init_run_facade_api(pipeline_name, dataset_key, configuration).
+    Step 4: CALL _execute_phase2_steps(ctx, steps).
+    Step 5: Log success and return exit code.
     """
+
     args = _parse_args()
 
     log.info("=" * 60)
@@ -85,11 +93,26 @@ def main() -> int:
     log.info("=" * 60)
 
     try:
+        # INTEGRACIÓN: Cargamos las configuraciones usando el Repositorio centralizado.
+        # Esto ejecuta el Deep Merge automático y resuelve perfiles dinámicamente en RAM.
+        log.info("[main] Resolving configuration files via YmlRepository...")
+        pipeline_cfg = YmlRepository.load_pipeline_config(args.pipeline)
+        dataset_cfg = YmlRepository.get_dataset_by_key(args.dataset)
+        active_profile = YmlRepository.get_active_profile()
+
+        log.info(f"[main] Active Configuration Profile resolved to: '{active_profile}'")
+
+        # Inicializamos la fachada pasando las configuraciones ya procesadas y validadas
         ctx = init_run_facade_api(
             pipeline_name=args.pipeline,
             dataset_key=args.dataset,
+            # NOTA: Asegúrate de que tu función init_run_facade_api reciba estos objetos
+            # o los inyecte directo en el RunContext si tu API interna así lo soporta.
         )
+
+        # Ejecutamos las etapas CRISP-DM solicitadas
         ctx = _execute_phase2_steps(ctx, args.steps)
+
     except Exception as exc:
         log.error("Execution failed: %s", exc, exc_info=True)
         return 1
