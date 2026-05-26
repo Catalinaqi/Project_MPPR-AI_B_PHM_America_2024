@@ -1,0 +1,6 @@
+{
+  "join_key": "id",
+  "rows": 300000,
+  "status": "merged_successfully",
+  "infer_datetime": false
+}

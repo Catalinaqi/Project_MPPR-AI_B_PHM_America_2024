@@ -1,0 +1,42 @@
+{
+  "n_rows": 300000,
+  "n_columns": 9,
+  "null_counts": {
+    "trq_measured": {
+      "n_null": 0,
+      "pct_null": 0.0
+    },
+    "oat": {
+      "n_null": 0,
+      "pct_null": 0.0
+    },
+    "mgt": {
+      "n_null": 0,
+      "pct_null": 0.0
+    },
+    "pa": {
+      "n_null": 0,
+      "pct_null": 0.0
+    },
+    "ias": {
+      "n_null": 0,
+      "pct_null": 0.0
+    },
+    "np": {
+      "n_null": 0,
+      "pct_null": 0.0
+    },
+    "ng": {
+      "n_null": 0,
+      "pct_null": 0.0
+    },
+    "faulty": {
+      "n_null": 0,
+      "pct_null": 0.0
+    },
+    "trq_margin": {
+      "n_null": 0,
+      "pct_null": 0.0
+    }
+  }
+}
