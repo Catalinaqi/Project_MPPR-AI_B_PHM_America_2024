@@ -5,6 +5,8 @@ from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.common.context_facade_common import RunContext
 from phm_america_2024.configuration.enum_registry_config import StepsPhase
 from phm_america_2024.phase.phase2_understanding_runner_phase import Phase2DataUnderstandingRunner
+from phm_america_2024.phase.phase3_preparation_runner_phase import Phase3PreparationRunner
+
 
 log = get_logger(__name__)
 

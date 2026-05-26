@@ -214,23 +214,20 @@ class StepOutputArtifact(str, Enum):
 
     flight_regimes_png = "flight_regime_binning"
 
-
-
     # ──────────────────────────────────────────────────────────────────────────
-    # Phase 3 – Data Preparation
+    # Phase 3 – Data Preparation (from regression_pipeline_config.yml)
     # ──────────────────────────────────────────────────────────────────────────
-    # Step 3.1
-    FINAL_FEATURES = "final_features"
-    OVERVIEW_PLOT = "overview_plot"
-    # Step 3.2
-    IMPUTATION_CONSOLIDATED="imputation_consolidated"
-    CLEANING_SUMMARY="cleaning_summary"
-    # Step 3.3
-    TRANSFORMATION_SUMMARY="transformation_summary"
-    # Step 3.4
-    TRAIN_PREPARED="train_prepared"
-    TEST_PREPARED="test_prepared"
-    TRANSFORMERS_PIPELINE="transformers_pipeline"
+    # Step 3.1 – Data Selection
+    selected_regression_train_parquet = "selected_regression_train_parquet"
+    # Step 3.2 – Data Cleaning
+    cleaned_regression_train_parquet = "cleaned_regression_train_parquet"
+    # Step 3.3 – Data Transformation
+    transformed_regression_train_parquet = "transformed_regression_train_parquet"
+    fitted_scaler_regression_artifact = "fitted_scaler_regression_artifact"
+    # Step 3.5 – Data Formatting
+    engineered_train_split = "engineered_train_split"
+    engineered_val_split = "engineered_val_split"
+
 
 class StepsPhase(str, Enum):  # noqa: D101
     STEP_2_1 = "step_2_1_data_acquisition"

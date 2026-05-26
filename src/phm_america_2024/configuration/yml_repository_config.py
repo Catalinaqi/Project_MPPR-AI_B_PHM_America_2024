@@ -1,3 +1,4 @@
+# src/phm_america_2024/configuration/yml_repository_config.py
 from __future__ import annotations
 from pathlib import Path
 from typing import Optional
@@ -10,85 +11,95 @@ log = get_logger(__name__)
 
 class YmlRepository:
     _base_cache: Optional[DictConfig] = None
-    _dataset_cache: Optional[DictConfig] = None  # <-- 1. AGREGAMOS EL NUEVO CACHÉ EN MEMORIA
+    _dataset_cache: Optional[DictConfig] = None
     _project_root: Optional[Path] = None
 
     @classmethod
     def _get_config_root(cls) -> Path:
+        # Step 1: Retrieve or compute project root once
         if cls._project_root is None:
             cls._project_root = find_project_root()
         return cls._project_root / "config"
 
     @classmethod
     def load_dataset_config(cls) -> DictConfig:
-        # 2. SI YA EXISTE EN RAM, DEVOLVEMOS LA COPIA INMEDIATAMENTE SIN IR AL DISCO
+        # Step 1: Return cached config if already loaded (RAM cache)
         if cls._dataset_cache is not None:
+            log.debug("[load_dataset_config] returning cached config")
             return cls._dataset_cache
 
+        # Step 2: Resolve path to dataset_config.yml
         path = cls._get_config_root() / "dataset" / "dataset_config.yml"
-        log.info(f"Loading dataset config from {path}")
+        log.info(f"[load_dataset_config] Loading dataset config from {path}")
 
+        # Step 3: Raise if file missing
         if not path.exists():
-            log.error(f"Dataset config not found: {path}")
+            log.error(f"[load_dataset_config] File not found: {path}")
             raise FileNotFoundError(f"Dataset config not found: {path}")
 
-        # 3. GUARDAMOS EN MEMORIA PARA LA PRÓXIMA CONSULTA
+        # Step 4: Load and cache
         cls._dataset_cache = OmegaConf.load(path)
-        log.info("Dataset config cached successfully")
+        log.info("[load_dataset_config] Dataset config cached successfully")
         return cls._dataset_cache
 
     @classmethod
     def get_dataset_by_key(cls, key: str) -> DictConfig:
-        # Ahora load_dataset_config() es inteligente y no saturará el disco
+        # Step 1: Load dataset config (cached after first call)
         cfg = cls.load_dataset_config()
 
+        # Step 2: Validate key exists
         if key not in cfg.datasets:
             available = list(cfg.datasets.keys())
-            log.error(f"Dataset key '{key}' not found. Available: {available}")
+            log.error(f"[get_dataset_by_key] Key '{key}' not found. Available: {available}")
             raise KeyError(f"Dataset '{key}' not found in dataset_config.yml")
 
-        log.info(f"Retrieved dataset config for key='{key}'")
+        log.info(f"[get_dataset_by_key] Retrieved dataset config for key='{key}'")
         return cfg.datasets[key]
-
-    # ... (el resto del código queda igual)
 
     @classmethod
     def load_base_pipeline_config(cls) -> DictConfig:
+        # Step 1: Return cached base config if already in memory
         if cls._base_cache is None:
+            # Step 2: Resolve path to base_pipeline_config.yml
             path = cls._get_config_root() / "pipeline" / "base_pipeline_config.yml"
-            log.info(f"Loading base pipeline config from {path}")
+            log.info(f"[load_base_pipeline_config] Loading base pipeline config from {path}")
 
+            # Step 3: Raise if file missing
             if not path.exists():
-                log.error(f"Base pipeline config not found: {path}")
+                log.error(f"[load_base_pipeline_config] File not found: {path}")
                 raise FileNotFoundError(f"Base pipeline config not found: {path}")
 
+            # Step 4: Load and cache
             cls._base_cache = OmegaConf.load(path)
-            log.info("Base pipeline config cached successfully")
+            log.info("[load_base_pipeline_config] Base pipeline config cached successfully")
 
         return cls._base_cache
 
     @classmethod
     def load_pipeline_config(cls, pipeline_name: str) -> DictConfig:
-        log.info(f"Loading pipeline config for '{pipeline_name}'")
+        log.info(f"[load_pipeline_config] Loading pipeline config for '{pipeline_name}'")
 
+        # Step 1: Load base config (cached after first call)
         base_cfg = cls.load_base_pipeline_config()
-        pipeline_path = cls._get_config_root() / "pipeline" / f"{pipeline_name}_pipeline_config.yml"
 
+        # Step 2: Resolve path to specific pipeline config (e.g. regression_pipeline_config.yml)
+        pipeline_path = cls._get_config_root() / "pipeline" / f"{pipeline_name}_pipeline_config.yml"
         if not pipeline_path.exists():
-            log.error(f"Pipeline config not found: {pipeline_path}")
+            log.error(f"[load_pipeline_config] File not found: {pipeline_path}")
             raise FileNotFoundError(f"Pipeline config not found: {pipeline_path}")
 
         specific_cfg = OmegaConf.load(pipeline_path)
-        log.info(f"Loaded specific pipeline config from {pipeline_path}")
+        log.info(f"[load_pipeline_config] Loaded specific pipeline config from {pipeline_path}")
 
+        # Step 3: Validate that the root key (e.g. regression_pipeline_config) exists
         pipeline_key = f"{pipeline_name}_pipeline_config"
-
         if pipeline_key not in specific_cfg:
-            log.error(f"Expected key '{pipeline_key}' not found in {pipeline_path}")
+            log.error(f"[load_pipeline_config] Expected key '{pipeline_key}' not found in {pipeline_path}")
             raise KeyError(f"Key '{pipeline_key}' not found in pipeline config")
 
         pipeline_data = specific_cfg[pipeline_key]
 
+        # Step 4: Build skeleton merged config with base metadata, common_base_config, and profiles
         merged = OmegaConf.create({
             "metadata": pipeline_data.get("metadata", {}),
             "common_base_config": base_cfg.pipeline_base.common_base_config,
@@ -96,41 +107,47 @@ class YmlRepository:
             "phases": {}
         })
 
+        # Step 5: Inject common phases from base (e.g. phase2_data_understanding with full structure)
         if "common_phases_config" in base_cfg.pipeline_base:
-            merged.phases.update(base_cfg.pipeline_base.common_phases_config.phases)
+            base_phases = base_cfg.pipeline_base.common_phases_config.phases
+            merged.phases.update(base_phases)
+            log.debug(f"[load_pipeline_config] Injected base phases: {list(base_phases.keys())}")
 
+        # Step 6: Merge specific pipeline phases over base phases
         if "phases" in pipeline_data:
-            # Deep-merge each phase from the specific config into the base phases.
-            # This ensures that partial overrides (e.g. phase2_data_understanding: {enabled: true})
-            # do NOT wipe out the full config from base — only the keys explicitly provided
-            # in the specific pipeline config are overwritten.
             for phase_key, phase_cfg in pipeline_data.phases.items():
                 if phase_key in merged.phases:
                     # Phase exists in base → deep merge (specific overrides take precedence)
                     merged.phases[phase_key] = OmegaConf.merge(
                         merged.phases[phase_key], phase_cfg
                     )
+                    log.debug(f"[load_pipeline_config] Merged phase '{phase_key}' over base")
                 else:
                     # Phase only in specific → add as-is
                     merged.phases[phase_key] = phase_cfg
+                    log.debug(f"[load_pipeline_config] Added new phase '{phase_key}' from specific config")
 
+        # Step 7: Apply runtime overrides from specific config if present
         if "runtime" in pipeline_data:
             merged.common_base_config.runtime.update(pipeline_data.runtime)
-            log.info(f"Runtime overrides applied from {pipeline_name}")
+            log.info(f"[load_pipeline_config] Runtime overrides applied from {pipeline_name}")
 
-        log.info(f"Pipeline config merged successfully for '{pipeline_name}'")
+        log.info(f"[load_pipeline_config] Pipeline config merged successfully. Phases: {list(merged.phases.keys())}")
         return merged
 
     @classmethod
     def get_active_profile(cls) -> str:
+        # Step 1: Resolve path to active_profile.yml
         path = cls._get_config_root() / "pipeline" / "active_profile.yml"
-        log.info(f"Reading active profile from {path}")
+        log.info(f"[get_active_profile] Reading active profile from {path}")
 
+        # Step 2: Default to 'dev' if file missing
         if not path.exists():
-            log.warning(f"Active profile not found: {path}, defaulting to 'dev'")
+            log.warning(f"[get_active_profile] Active profile not found: {path}, defaulting to 'dev'")
             return "dev"
 
+        # Step 3: Load and return active profile value
         profile_cfg = OmegaConf.load(path)
         active = profile_cfg.get("active_profile", "dev")
-        log.info(f"Active profile: {active}")
+        log.info(f"[get_active_profile] Active profile: {active}")
         return active

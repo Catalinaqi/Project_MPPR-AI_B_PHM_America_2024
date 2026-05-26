@@ -280,11 +280,11 @@ pipeline_base:
                 techniques:
                   ks_test_per_feature:
                     enabled: true
-#                    split: [
-#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
-#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
-#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
-#                    ]
+                    #                    split: [
+                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
+                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
+                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
+                    #                    ]
                     split: [
                       "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet",
                       "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_test.parquet",
@@ -313,11 +313,11 @@ pipeline_base:
 
                   feature_drift_summary:
                     enabled: true
-#                    split: [
-#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
-#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
-#                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
-#                    ]
+                    #                    split: [
+                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
+                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
+                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
+                    #                    ]
                     split: [
                       "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet",
                       "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_test.parquet",
@@ -467,6 +467,5 @@ pipeline_base:
               Validation and Test are used only for final generalization scoring.
             phase_4_action: "tune_exclusively_on_train_group_kfold"
             phase_5_action: "final_score_on_validation_and_test_only"
-
 
 

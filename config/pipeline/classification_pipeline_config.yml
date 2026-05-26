@@ -31,337 +31,340 @@ classification_pipeline_config:
         action: "LOG_WARNING"
         message: "WARNING (BIC not at k=4). Overriding absolute minimum k=6 with physical elbow criterion k=4."
 
-phases:
-  # ----------------------------------------------------------------------------
-  # STAGE 2 — DATA UNDERSTANDING (INHERITED & ACTIVE)
-  # ----------------------------------------------------------------------------
-  phase2_data_understanding:
-    enabled: true
+  phases:
+    # ----------------------------------------------------------------------------
+    # STAGE 2 — DATA UNDERSTANDING (INHERITED & ACTIVE)
+    # ----------------------------------------------------------------------------
+    phase2_data_understanding:
+      enabled: true
 
-  # ----------------------------------------------------------------------------
-  # STAGE 3 — DATA PREPARATION (ISOLATED TO TRAINING MOTORS -STEP MODULARITY)
-  # ----------------------------------------------------------------------------
-  phase3_data_preparation:
-    objective: "Clean, transform, and internal split ONLY the 4 training motors."
+    # ----------------------------------------------------------------------------
+    # STAGE 3 — DATA PREPARATION (ISOLATED TO TRAINING MOTORS -STEP MODULARITY)
+    # ----------------------------------------------------------------------------
+    phase3_data_preparation:
+      enabled: true
+      objective: "Clean, transform, and internal split ONLY the 4 training motors."
 
-    # [REGLA 3] DAG Traceability: Ingesta hermética solo del split de entrenamiento
-    read_strategy:
-      mode: "full_flight_records" # Modo de archivo único para asegurar aislamiento
-      input_source:
-        train_parquet: "2.1.data_acquisition.prod_300000_stratified_train.parquet"
+      # [REGLA 3] DAG Traceability: Ingesta hermética solo del split de entrenamiento
+      read_strategy:
+        mode: "full_flight_records" # Modo de archivo único para asegurar aislamiento
+        input_source:
+          train_parquet: "2.1.data_acquisition.prod_300000_stratified_train.parquet"
 
-    steps:
-      # ────────────────────────────────────────────────────────────────────────
-      # STEP 3.1: SELECCIÓN DE VARIABLES
-      # ────────────────────────────────────────────────────────────────────────
-      step_3_1_data_selection:
-        enabled: true
-        description: "Filter operational features and remove irrelevant technical variables."
-        methods:
-          data_selection:
-            enabled: true
-            techniques:
-              dataset_definition:
-                enabled: true
-                params:
-                  include: ["oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured"]
-                  patterns_to_drop: ["id", "uuid", "log", "engine_id"]
-                output: "3.1.selection.definition_trace_log.json"
-              feature_selection:
-                enabled: true
-                params:
-                  remove_constant: true
-                  remove_duplicate: true
-                output: "3.1.selection.filter_trace_log.json"
-        # NUEVO EN OPCIÓN B: Persiste la matriz reducida a disco
-        output_artifacts:
-          selected_classification_train_parquet:
-            path: "3.1.selection.selected_classification_train.parquet"
-            description: "Intermediate classification matrix containing only selected operational columns."
-            consumed_by: ["step_3_2_data_cleaning"]
+      steps:
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.1: SELECCIÓN DE VARIABLES
+        # ────────────────────────────────────────────────────────────────────────
+        step_3_1_data_selection:
+          enabled: true
+          description: "Filter operational features and remove irrelevant technical variables."
+          methods:
+            data_selection:
+              enabled: true
+              techniques:
+                dataset_definition:
+                  enabled: true
+                  params:
+                    include: ["oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured"]
+                    patterns_to_drop: ["id", "uuid", "log", "engine_id"]
+                  output: "3.1.selection.definition_trace_log.json"
+                feature_selection:
+                  enabled: true
+                  params:
+                    remove_constant: true
+                    remove_duplicate: true
+                  output: "3.1.selection.filter_trace_log.json"
+          # NUEVO EN OPCIÓN B: Persiste la matriz reducida a disco
+          output_artifacts:
+            selected_classification_train_parquet:
+              path: "3.1.selection.selected_classification_train.parquet"
+              description: "Intermediate classification matrix containing only selected operational columns."
+              consumed_by: ["step_3_2_data_cleaning"]
 
-      # ────────────────────────────────────────────────────────────────────────
-      # STEP 3.2: LIMPIEZA Y SANITIZACIÓN (SIN CLIPPING PARA TARGET BINARIO)
-      # ────────────────────────────────────────────────────────────────────────
-      step_3_2_data_cleaning:
-        enabled: true
-        description: "Ensure structural integrity. Target clipping disabled for binary classification."
-        methods:
-          data_cleaning:
-            enabled: true
-            techniques:
-              duplicate_handling:
-                enabled: true
-                params:
-                  keep: "first"
-                output: "3.2.cleaning.duplicates_trace.json"
-        # NUEVO EN OPCIÓN B: Consume el parquet de 3.1, lo sanea y crea un nuevo checkpoint
-        output_artifacts:
-          cleaned_classification_train_parquet:
-            path: "3.2.cleaning.cleaned_classification_train.parquet"
-            description: "Intermediate classification matrix deduplicated."
-            consumed_by: ["step_3_3_data_transformation"]
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.2: LIMPIEZA Y SANITIZACIÓN (SIN CLIPPING PARA TARGET BINARIO)
+        # ────────────────────────────────────────────────────────────────────────
+        step_3_2_data_cleaning:
+          enabled: true
+          description: "Ensure structural integrity. Target clipping disabled for binary classification."
+          methods:
+            data_cleaning:
+              enabled: true
+              techniques:
+                duplicate_handling:
+                  enabled: true
+                  params:
+                    keep: "first"
+                  output: "3.2.cleaning.duplicates_trace.json"
+          # NUEVO EN OPCIÓN B: Consume el parquet de 3.1, lo sanea y crea un nuevo checkpoint
+          output_artifacts:
+            cleaned_classification_train_parquet:
+              path: "3.2.cleaning.cleaned_classification_train.parquet"
+              description: "Intermediate classification matrix deduplicated."
+              consumed_by: ["step_3_3_data_transformation"]
 
-      # ────────────────────────────────────────────────────────────────────────
-      # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
-      # ────────────────────────────────────────────────────────────────────────
-      step_3_3_data_transformation:
-        enabled: true
-        description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
-        methods:
-          data_transformation:
-            enabled: true
-            techniques:
-              feature_scaling:
-                enabled: true
-                params:
-                  method: "RobustScaler"
-                  fit_on_train_only: true
-                  features: ["oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured"]
-                output: "3.3.transformation.scaler_fit_trace.json"
-              feature_engineering:
-                enabled: true
-                params:
-                  oat_denominator_protection:
-                    method: "convert_to_kelvin"
-                    offset: 273.15
-                  formulas:
-                    mgt_oat_ratio: "mgt / (oat + 273.15)"
-                    specific_power_index: "np / (ng * (oat + 273.15))"
-                  interactions:
-                    enabled: true
-                    degree: 2
-                    features: ["mgt", "ng", "Torque Measured", "np"]
-                output: "3.3.transformation.engineering_formulas_log.json"
-        # NUEVO EN OPCIÓN B: Consume el parquet de 3.2. Guarda la data transformada y el scaler
-        output_artifacts:
-          transformed_classification_train_parquet:
-            path: "3.3.transformation.transformed_classification_train.parquet"
-            description: "Intermediate classification matrix with scaling applied and engineered features."
-            consumed_by: ["step_3_5_data_formatting"]
-          fitted_scaler_bin:
-            path: "3.3.transformation.robust_scaler_classification.pkl" # Renombrado para no pisar el de regresión
-            description: "Fitted state parameters of the training-isolated RobustScaler model."
-            consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
+        # ────────────────────────────────────────────────────────────────────────
+        step_3_3_data_transformation:
+          enabled: true
+          description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
+          methods:
+            data_transformation:
+              enabled: true
+              techniques:
+                feature_scaling:
+                  enabled: true
+                  params:
+                    method: "RobustScaler"
+                    fit_on_train_only: true
+                    features: ["oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured"]
+                  output: "3.3.transformation.scaler_fit_trace.json"
+                feature_engineering:
+                  enabled: true
+                  params:
+                    oat_denominator_protection:
+                      method: "convert_to_kelvin"
+                      offset: 273.15
+                    formulas:
+                      mgt_oat_ratio: "mgt / (oat + 273.15)"
+                      specific_power_index: "np / (ng * (oat + 273.15))"
+                    interactions:
+                      enabled: true
+                      degree: 2
+                      features: ["mgt", "ng", "Torque Measured", "np"]
+                  output: "3.3.transformation.engineering_formulas_log.json"
+          # NUEVO EN OPCIÓN B: Consume el parquet de 3.2. Guarda la data transformada y el scaler
+          output_artifacts:
+            transformed_classification_train_parquet:
+              path: "3.3.transformation.transformed_classification_train.parquet"
+              description: "Intermediate classification matrix with scaling applied and engineered features."
+              consumed_by: ["step_3_5_data_formatting"]
+            fitted_scaler_bin:
+              path: "3.3.transformation.robust_scaler_classification.pkl" # Renombrado para no pisar el de regresión
+              description: "Fitted state parameters of the training-isolated RobustScaler model."
+              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
-      # ────────────────────────────────────────────────────────────────────────
-      # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS
-      # ────────────────────────────────────────────────────────────────────────
-      step_3_5_data_formatting:
-        enabled: true
-        description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
-        methods:
-          data_formatting:
-            enabled: true
-            techniques:
-              data_split: # REACTIVADO: Necesitamos un set interno para validar la calibración de Fase 4
-                enabled: true
-                params:
-                  test_size: 0.2
-                  random_state: 42
-                  stratify: true
-                output: "3.5.formatting.split_indices_trace.json"
-              dataset_formatting:
-                enabled: true
-                params:
-                  target_col: "faulty"
-                  type_casting: "int64"
-                  to_numpy: true
-                output: "3.5.formatting.arrays_manifest.json"
-        # Consume el parquet de 3.3 y genera los conjuntos finales para las fases siguientes
-        output_artifacts:
-          engineered_train_split:
-            path: "3.5.formatting.classification_internal_train.parquet"
-            description: "Finalized scaling-safe internal training matrix."
-            consumed_by: ["step_4_2_model_training"]
-          engineered_val_split:
-            path: "3.5.formatting.classification_internal_val.parquet"
-            description: "Finalized internal validation split for isotonic calibration."
-            consumed_by: ["step_4_2_model_training", "step_4_4_model_evaluation"]
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS
+        # ────────────────────────────────────────────────────────────────────────
+        step_3_5_data_formatting:
+          enabled: true
+          description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
+          methods:
+            data_formatting:
+              enabled: true
+              techniques:
+                data_split: # REACTIVADO: Necesitamos un set interno para validar la calibración de Fase 4
+                  enabled: true
+                  params:
+                    test_size: 0.2
+                    random_state: 42
+                    stratify: true
+                  output: "3.5.formatting.split_indices_trace.json"
+                dataset_formatting:
+                  enabled: true
+                  params:
+                    target_col: "faulty"
+                    type_casting: "int64"
+                    to_numpy: true
+                  output: "3.5.formatting.arrays_manifest.json"
+          # Consume el parquet de 3.3 y genera los conjuntos finales para las fases siguientes
+          output_artifacts:
+            engineered_train_split:
+              path: "3.5.formatting.classification_internal_train.parquet"
+              description: "Finalized scaling-safe internal training matrix."
+              consumed_by: ["step_4_2_model_training"]
+            engineered_val_split:
+              path: "3.5.formatting.classification_internal_val.parquet"
+              description: "Finalized internal validation split for isotonic calibration."
+              consumed_by: ["step_4_2_model_training", "step_4_4_model_evaluation"]
 
-  # ----------------------------------------------------------------------------
-  # STAGE 4 — MODELING
-  # ----------------------------------------------------------------------------
-  phase4_data_modeling:
-    objective: "Train LightGBM with physical proxy groups, applying post-hoc isotonic calibration."
+    # ----------------------------------------------------------------------------
+    # STAGE 4 — MODELING
+    # ----------------------------------------------------------------------------
+    phase4_data_modeling:
+      enabled: true
+      objective: "Train LightGBM with physical proxy groups, applying post-hoc isotonic calibration."
 
-    read_strategy:
-      mode: "consume_engineered_splits"
-      input_source:
-        train_data: "3.5.formatting.classification_internal_train.parquet"
-        val_data: "3.5.formatting.classification_internal_val.parquet" # Usado solo para fittear la calibración isotónica
+      read_strategy:
+        mode: "consume_engineered_splits"
+        input_source:
+          train_data: "3.5.formatting.classification_internal_train.parquet"
+          val_data: "3.5.formatting.classification_internal_val.parquet" # Usado solo para fittear la calibración isotónica
 
-    steps:
-      step_4_1_algorithm_selection:
-        enabled: true
-        description: "Configure core boosting framework accounting for mild class imbalance."
-        methods:
-          algorithm_selection:
-            enabled: true
-            techniques:
-              single_calibrated_architecture:
-                enabled: true
-                params:
-                  library: "lightgbm"
-                  estimator: "LGBMClassifier"
-                  objective: "binary"
-                  boosting_type: "gbdt"
-                  scale_pos_weight: 1.48
-                  learning_rate: 0.05
-                  n_estimators: 350
-                  max_depth: 6
-                  num_leaves: 31
-                  random_state: 42
-                output: "4.1.modeling.algo_setup_trace.json"
+      steps:
+        step_4_1_algorithm_selection:
+          enabled: true
+          description: "Configure core boosting framework accounting for mild class imbalance."
+          methods:
+            algorithm_selection:
+              enabled: true
+              techniques:
+                single_calibrated_architecture:
+                  enabled: true
+                  params:
+                    library: "lightgbm"
+                    estimator: "LGBMClassifier"
+                    objective: "binary"
+                    boosting_type: "gbdt"
+                    scale_pos_weight: 1.48
+                    learning_rate: 0.05
+                    n_estimators: 350
+                    max_depth: 6
+                    num_leaves: 31
+                    random_state: 42
+                  output: "4.1.modeling.algo_setup_trace.json"
 
-      step_4_2_model_training:
-        enabled: true
-        description: "Execute GMM cross-validation and fit isotonic calibrator for probability honesty."
-        methods:
-          model_training:
-            enabled: true
-            techniques:
-              cross_validation:
-                enabled: true
-                params:
-                  strategy: "GroupKFold"
-                  n_splits: 5
-                  grouping_mechanism:
-                    type: "GMM_Clusterer"
-                    features: ["oat", "mgt", "ias"]
-                    n_clusters: 4
-                    covariance_type: "full"
-                    log_centroids_verification: true
-                output: "4.2.training.cv_fold_execution_trace.json"
-              post_processing_calibration:
-                enabled: true
-                params:
-                  method: "IsotonicRegression"
-                  fit_on_validation_splits: true
-                output: "4.2.training.isotonic_fit_trace.json"
-        output_artifacts:
-          trained_lightgbm_base:
-            path: "4.2.training.lightgbm_raw_classifier.pkl"
-            description: "Serialized raw LightGBM tree structure."
-            consumed_by: ["phase5_evaluation_and_interpretation"]
-          fitted_isotonic_calibrator:
-            path: "4.2.training.isotonic_calibrator.pkl"
-            description: "Probability calibrator mapping raw tree scores to empirical frequencies."
-            consumed_by: ["phase5_evaluation_and_interpretation"]
+        step_4_2_model_training:
+          enabled: true
+          description: "Execute GMM cross-validation and fit isotonic calibrator for probability honesty."
+          methods:
+            model_training:
+              enabled: true
+              techniques:
+                cross_validation:
+                  enabled: true
+                  params:
+                    strategy: "GroupKFold"
+                    n_splits: 5
+                    grouping_mechanism:
+                      type: "GMM_Clusterer"
+                      features: ["oat", "mgt", "ias"]
+                      n_clusters: 4
+                      covariance_type: "full"
+                      log_centroids_verification: true
+                  output: "4.2.training.cv_fold_execution_trace.json"
+                post_processing_calibration:
+                  enabled: true
+                  params:
+                    method: "IsotonicRegression"
+                    fit_on_validation_splits: true
+                  output: "4.2.training.isotonic_fit_trace.json"
+          output_artifacts:
+            trained_lightgbm_base:
+              path: "4.2.training.lightgbm_raw_classifier.pkl"
+              description: "Serialized raw LightGBM tree structure."
+              consumed_by: ["phase5_evaluation_and_interpretation"]
+            fitted_isotonic_calibrator:
+              path: "4.2.training.isotonic_calibrator.pkl"
+              description: "Probability calibrator mapping raw tree scores to empirical frequencies."
+              consumed_by: ["phase5_evaluation_and_interpretation"]
 
-      step_4_4_model_evaluation:
-        enabled: true
-        description: "Enforce validation selection driven by Brier Score to ensure uncertainty quality."
-        methods:
-          model_evaluation:
-            enabled: true
-            techniques:
-              model_selection_criteria:
-                enabled: true
-                params:
-                  primary_metric: "brier_score"
-                  tie_breaker: "roc_auc"
-                output: "4.4.evaluation.ranking_trace.json"
-        output_artifacts:
-          best_classification_metadata:
-            path: "4.4.evaluation.final_best_model_meta.json"
-            description: "Consolidated performance scoreboard."
-            consumed_by: ["phase5_evaluation_and_interpretation"]
+        step_4_4_model_evaluation:
+          enabled: true
+          description: "Enforce validation selection driven by Brier Score to ensure uncertainty quality."
+          methods:
+            model_evaluation:
+              enabled: true
+              techniques:
+                model_selection_criteria:
+                  enabled: true
+                  params:
+                    primary_metric: "brier_score"
+                    tie_breaker: "roc_auc"
+                  output: "4.4.evaluation.ranking_trace.json"
+          output_artifacts:
+            best_classification_metadata:
+              path: "4.4.evaluation.final_best_model_meta.json"
+              description: "Consolidated performance scoreboard."
+              consumed_by: ["phase5_evaluation_and_interpretation"]
 
-  # ----------------------------------------------------------------------------
-  # STAGE 5 — EVALUATION & CALIBRATION AUDIT
-  # ----------------------------------------------------------------------------
-  phase5_evaluation_and_interpretation:
-    objective: "Audit probability honesty on UNSEEN CROSS-ASSET MOTORS."
+    # ----------------------------------------------------------------------------
+    # STAGE 5 — EVALUATION & CALIBRATION AUDIT
+    # ----------------------------------------------------------------------------
+    phase5_evaluation_and_interpretation:
+      enabled: true
+      objective: "Audit probability honesty on UNSEEN CROSS-ASSET MOTORS."
 
-    # ¡LA CLAVE ESTÁ AQUÍ! Carga el scaler, el modelo, y los DATOS DEL CHALLENGE CRUDOS
-    read_strategy:
-      mode: "cross_asset_evaluation"
-      input_source:
-        model_base: "4.2.training.lightgbm_raw_classifier.pkl"
-        calibrator: "4.2.training.isotonic_calibrator.pkl"
-        scaler: "3.3.transformation.robust_scaler.pkl"
-        challenge_test_data: "2.1.data_acquisition.prod_300000_stratified_test.parquet"
-        challenge_val_data: "2.1.data_acquisition.prod_300000_stratified_validation.parquet"
+      # ¡LA CLAVE ESTÁ AQUÍ! Carga el scaler, el modelo, y los DATOS DEL CHALLENGE CRUDOS
+      read_strategy:
+        mode: "cross_asset_evaluation"
+        input_source:
+          model_base: "4.2.training.lightgbm_raw_classifier.pkl"
+          calibrator: "4.2.training.isotonic_calibrator.pkl"
+          scaler: "3.3.transformation.robust_scaler.pkl"
+          challenge_test_data: "2.1.data_acquisition.prod_300000_stratified_test.parquet"
+          challenge_val_data: "2.1.data_acquisition.prod_300000_stratified_validation.parquet"
 
-    steps:
-      step_5_1_interpretation:
-        enabled: true
-        description: "Extract feature weights to understand operational drivers of engine fault."
-        methods:
-          model_interpretation:
-            enabled: true
-            techniques:
-              feature_importance:
-                enabled: true
-                params:
-                  strategy: "model_native"
-                  top_k: 15
-                output: "5.1.plots.feature_importance_data.json"
-              confusion_matrix_analysis:
-                enabled: true
-                params:
-                  normalize: "true"
-                  include_class_report: true
-                output: "5.1.plots.confusion_matrix_data.json"
+      steps:
+        step_5_1_interpretation:
+          enabled: true
+          description: "Extract feature weights to understand operational drivers of engine fault."
+          methods:
+            model_interpretation:
+              enabled: true
+              techniques:
+                feature_importance:
+                  enabled: true
+                  params:
+                    strategy: "model_native"
+                    top_k: 15
+                  output: "5.1.plots.feature_importance_data.json"
+                confusion_matrix_analysis:
+                  enabled: true
+                  params:
+                    normalize: "true"
+                    include_class_report: true
+                  output: "5.1.plots.confusion_matrix_data.json"
 
-      step_5_2_probabilistic_evaluation:
-        enabled: true
-        description: "Validate calibration via reliability plotting and benchmark asset performance loss on hidden data."
-        methods:
-          calibration_audit:
-            enabled: true
-            techniques:
-              reliability_diagram:
-                enabled: true
-                params:
-                  n_bins: 10
-                  strategy: "uniform"
-                output: "5.2.evaluation.reliability_trace.json"
-              performance_degradation_benchmarking:
-                enabled: true
-                params:
-                  expect_test_degradation: true
-                  baseline_comparison: "stratified_random"
-                output: "5.2.evaluation.degradation_trace.json"
-        output_artifacts:
-          evaluation_summary_json:
-            path: "5.2.evaluation.final_classification_metrics_summary.json"
-            description: "Final consolidated classification scores (Brier, AUC, F1) on hidden challenge motors."
-            consumed_by: ["deployment"]
-          reliability_diagram_plot:
-            path: "5.2.evaluation.reliability_diagram.png"
-            description: "Calibration curve validating predicted fault probability honesty on hidden challenge motors."
-            consumed_by: ["deployment"]
+        step_5_2_probabilistic_evaluation:
+          enabled: true
+          description: "Validate calibration via reliability plotting and benchmark asset performance loss on hidden data."
+          methods:
+            calibration_audit:
+              enabled: true
+              techniques:
+                reliability_diagram:
+                  enabled: true
+                  params:
+                    n_bins: 10
+                    strategy: "uniform"
+                  output: "5.2.evaluation.reliability_trace.json"
+                performance_degradation_benchmarking:
+                  enabled: true
+                  params:
+                    expect_test_degradation: true
+                    baseline_comparison: "stratified_random"
+                  output: "5.2.evaluation.degradation_trace.json"
+          output_artifacts:
+            evaluation_summary_json:
+              path: "5.2.evaluation.final_classification_metrics_summary.json"
+              description: "Final consolidated classification scores (Brier, AUC, F1) on hidden challenge motors."
+              consumed_by: ["deployment"]
+            reliability_diagram_plot:
+              path: "5.2.evaluation.reliability_diagram.png"
+              description: "Calibration curve validating predicted fault probability honesty on hidden challenge motors."
+              consumed_by: ["deployment"]
 
-      step_5_3_process_audit:
-        enabled: true
-        description: "Audit transformation constraints and flag potential data leakage occurrences."
-        methods:
-          process_audit:
-            enabled: true
-            techniques:
-              leakage_detection:
-                enabled: true
-                params:
-                  checks: ["train_test_overlap", "scaler_contamination_check"]
-                output: "5.3.audit.leakage_trace.json"
+        step_5_3_process_audit:
+          enabled: true
+          description: "Audit transformation constraints and flag potential data leakage occurrences."
+          methods:
+            process_audit:
+              enabled: true
+              techniques:
+                leakage_detection:
+                  enabled: true
+                  params:
+                    checks: ["train_test_overlap", "scaler_contamination_check"]
+                  output: "5.3.audit.leakage_trace.json"
 
-      step_5_4_decision_making:
-        enabled: true
-        description: "Subject pipeline execution results to final domain engineering verification."
-        methods:
-          decision_making:
-            enabled: true
-            techniques:
-              final_sign_off:
-                enabled: true
-                params:
-                  required_review: true
-                  review_roles: ["preventive_maintenance_engineer", "turbomachinery_specialist"]
-                output: "5.4.decision.sign_off_trace.json"
-        output_artifacts:
-          deployment_sign_off:
-            path: "5.4.decision.final_sign_off_certificate.json"
-            description: "Cryptographic or structured approval marker for production release."
-            consumed_by: ["deployment"]
+        step_5_4_decision_making:
+          enabled: true
+          description: "Subject pipeline execution results to final domain engineering verification."
+          methods:
+            decision_making:
+              enabled: true
+              techniques:
+                final_sign_off:
+                  enabled: true
+                  params:
+                    required_review: true
+                    review_roles: ["preventive_maintenance_engineer", "turbomachinery_specialist"]
+                  output: "5.4.decision.sign_off_trace.json"
+          output_artifacts:
+            deployment_sign_off:
+              path: "5.4.decision.final_sign_off_certificate.json"
+              description: "Cryptographic or structured approval marker for production release."
+              consumed_by: ["deployment"]

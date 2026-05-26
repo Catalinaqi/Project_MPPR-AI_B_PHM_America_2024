@@ -11,10 +11,15 @@ from phm_america_2024.api.execution_facade_api import (
     run_2_2_data_description,
     run_2_3_data_quality_verification,
     run_2_4_data_exploration,
+    run_3_1_data_selection,
 )
 from phm_america_2024.common.logging_adapter_common import get_logger
 
+# ── INVERSIÓN DE CONTROL: REGISTRO DE ARTEFACTOS CENTRALIZADOS ────────────────
+# Al importar estos módulos, Python ejecuta sus decoradores @register_artifact
+# y puebla dinámicamente el diccionario de generadores en el arranque.
 from phm_america_2024.registry import phase2_generator_registry
+from phm_america_2024.registry import phase3_generator_registry  # <── SOLUCIÓN ARQUITECTÓNICA
 
 
 # IMPORTACIÓN REQUERIDA: Conectamos el repositorio de configuraciones centralizado
@@ -53,7 +58,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _execute_phase2_steps(ctx: Any, steps: list[str]) -> Any:
-    """Execute requested Phase 2 steps.
+    """Execute requested Phase 2 and Phase 3 steps.
 
     Step 1: For each step in the list, call the corresponding API function.
     Step 2: Log completion and return updated context.
@@ -63,9 +68,10 @@ def _execute_phase2_steps(ctx: Any, steps: list[str]) -> Any:
         "2.2": ("Data Description", run_2_2_data_description),
         "2.3": ("Data Quality Verification", run_2_3_data_quality_verification),
         "2.4": ("Data Exploration", run_2_4_data_exploration),
+        "3.1": ("Data Selection", run_3_1_data_selection),
     }
 
-    for step_key in ["2.1", "2.2", "2.3", "2.4"]:
+    for step_key in ["2.1", "2.2", "2.3", "2.4", "3.1"]:
         if step_key in steps:
             name, func = step_map[step_key]
             log.info("Executing Phase 2.%s – %s", step_key, name)
@@ -106,8 +112,6 @@ def main() -> int:
         ctx = init_run_facade_api(
             pipeline_name=args.pipeline,
             dataset_key=args.dataset,
-            # NOTA: Asegúrate de que tu función init_run_facade_api reciba estos objetos
-            # o los inyecte directo en el RunContext si tu API interna así lo soporta.
         )
 
         # Ejecutamos las etapas CRISP-DM solicitadas

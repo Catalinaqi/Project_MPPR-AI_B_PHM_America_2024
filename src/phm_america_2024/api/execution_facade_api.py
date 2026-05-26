@@ -14,7 +14,7 @@ from phm_america_2024.configuration.build_factory_config import build_config, Bu
 from phm_america_2024.configuration.enum_registry_config import StepsPhase,ProblemType
 from phm_america_2024.data.download_extractor_data import download_phm_2024_dataset
 
-from phm_america_2024.pipeline.regression_runner_pipeline import run_regression_pipeline
+from phm_america_2024.pipeline.regression_runner_pipeline_back import run_regression_pipeline
 #from phm_america_2024.pipeline.classification_runner_pipeline import run_classification_pipeline
 
 
@@ -224,4 +224,85 @@ def run_2_4_data_exploration(ctx: RunContext) -> RunContext:
     ctx = _dispatch_step(ctx, StepsPhase.STEP_2_4)
     log.debug("[run_2_4_data_exploration] completed")
     log.info("[run_2_4_data_exploration] done")
+    return ctx
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Public step runners — one per CRISP‑DM sub‑step (Phase 3 – Data Preparation)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def run_3_1_data_selection(ctx: RunContext) -> RunContext:
+    """Run Step 3.1 – Data Selection (filter columns & drop constants).
+
+    Step 1: CALL _dispatch_step(ctx, StepsPhase.STEP_3_1).
+    Step 2: Log shape information if available.
+    Step 3: Return updated context.
+    """
+    log.info("[run_3_1_data_selection] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_3_1)
+    log.debug("[run_3_1_data_selection] after dispatch")
+
+    if hasattr(ctx, 'df_selected') and ctx.df_selected is not None:
+        log.info("[run_3_1_data_selection] done df_selected_shape=%s", ctx.df_selected.shape)
+    else:
+        log.warning("[run_3_1_data_selection] done df_selected not available")
+
+    return ctx
+
+
+def run_3_2_data_cleaning(ctx: RunContext) -> RunContext:
+    """Run Step 3.2 – Data Cleaning (outlier clipping, duplicate removal).
+
+    Step 1: CALL _dispatch_step(ctx, StepsPhase.STEP_3_2).
+    Step 2: Log shape information if available.
+    Step 3: Return updated context.
+    """
+    log.info("[run_3_2_data_cleaning] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_3_2)
+    log.debug("[run_3_2_data_cleaning] after dispatch")
+
+    if hasattr(ctx, 'df_cleaned') and ctx.df_cleaned is not None:
+        log.info("[run_3_2_data_cleaning] done df_cleaned_shape=%s", ctx.df_cleaned.shape)
+    else:
+        log.warning("[run_3_2_data_cleaning] done df_cleaned not available")
+
+    return ctx
+
+
+def run_3_3_data_transformation(ctx: RunContext) -> RunContext:
+    """Run Step 3.3 – Data Transformation (scaling & feature engineering).
+
+    Step 1: CALL _dispatch_step(ctx, StepsPhase.STEP_3_3).
+    Step 2: Log shape and scaler info if available.
+    Step 3: Return updated context.
+    """
+    log.info("[run_3_3_data_transformation] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_3_3)
+    log.debug("[run_3_3_data_transformation] after dispatch")
+
+    if hasattr(ctx, 'df_transformed') and ctx.df_transformed is not None:
+        log.info("[run_3_3_data_transformation] done df_transformed_shape=%s", ctx.df_transformed.shape)
+    else:
+        log.warning("[run_3_3_data_transformation] done df_transformed not available")
+
+    return ctx
+
+
+def run_3_5_data_formatting(ctx: RunContext) -> RunContext:
+    """Run Step 3.5 – Data Formatting (internal train/val split & type casting).
+
+    Step 1: CALL _dispatch_step(ctx, StepsPhase.STEP_3_5).
+    Step 2: Log split shapes if available.
+    Step 3: Return updated context.
+    """
+    log.info("[run_3_5_data_formatting] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_3_5)
+    log.debug("[run_3_5_data_formatting] after dispatch")
+
+    if hasattr(ctx, 'df_train_split') and ctx.df_train_split is not None:
+        log.info("[run_3_5_data_formatting] done train_shape=%s val_shape=%s",
+                 ctx.df_train_split.shape,
+                 ctx.df_val_split.shape if hasattr(ctx, 'df_val_split') else "N/A")
+    else:
+        log.warning("[run_3_5_data_formatting] done df_train_split not available")
+
     return ctx

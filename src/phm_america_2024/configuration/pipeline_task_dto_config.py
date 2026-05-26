@@ -121,7 +121,10 @@ class ReadStrategyConfig(BaseModel):
     combine_before_sampling: Optional[bool] = None
     dtype_optimization: Optional[bool] = None
     mode: Optional[str] = None
-    input_source: Optional[str] = None
+    #input_source: Optional[str] = None
+    #input_source: Union[str, dict[str, Any]]
+    # ──── MODIFICA QUESTA LÍNEA (Aggiungi |= None = None) ────
+    input_source: str | dict[str, Any] | None = None
     sample_rows: Optional[int] = None
     input_source_sample: Optional[str] = None       # ← aggiunto
 

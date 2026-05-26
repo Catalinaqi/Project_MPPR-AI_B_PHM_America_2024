@@ -25,324 +25,329 @@ regression_pipeline_config:
         action: "LOG_WARNING"
         message: "WARNING (BIC not at k=4). Overriding absolute minimum k=6 with physical elbow criterion k=4."
 
-phases:
-  # ----------------------------------------------------------------------------
-  # STAGE 2 — DATA UNDERSTANDING
-  # ----------------------------------------------------------------------------
-  phase2_data_understanding:
-    enabled: true
+  phases:
+    # ----------------------------------------------------------------------------
+    # STAGE 2 — DATA UNDERSTANDING
+    # ----------------------------------------------------------------------------
+    phase2_data_understanding:
+      enabled: true
 
-  # ----------------------------------------------------------------------------
-  # STAGE 3 — DATA PREPARATION (ISOLATED TO TRAINING MOTORS - STEP MODULARITY)
-  # ----------------------------------------------------------------------------
-  phase3_data_preparation:
-    objective: "Clean, transform, and internal split ONLY the 4 training motors."
+    # ----------------------------------------------------------------------------
+    # STAGE 3 — DATA PREPARATION (ISOLATED TO TRAINING MOTORS - STEP MODULARITY)
+    # ----------------------------------------------------------------------------
+    phase3_data_preparation:
+      enabled: true
+      objective: "Clean, transform, and internal split ONLY the 4 training motors."
 
-    # [REGLA 3] DAG Traceability: Ingesta hermética solo del split de entrenamiento
-    read_strategy:
-      mode: "full_flight_records"
-      input_source:
-        train_parquet: "2.1.data_acquisition.prod_300000_stratified_train.parquet"
+      # [REGLA 3] DAG Traceability: Ingesta hermética solo del split de entrenamiento
+      read_strategy:
+        mode: "full_flight_records"
+        input_source: #"outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"
+          #train_parquet: "2.1.data_acquisition.prod_300000_stratified_train.parquet"
+          #train_parquet: "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"
+         train_parquet: "K:/00_Code/Manutenzione/Project_MPPR-AI_B_PHM_America_2024/outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"
 
-    steps:
-      # ────────────────────────────────────────────────────────────────────────
-      # STEP 3.1: SELECCIÓN DE VARIABLES
-      # ────────────────────────────────────────────────────────────────────────
-      step_3_1_data_selection:
-        enabled: true
-        description: "Filter operational features and remove irrelevant technical variables."
-        methods:
-          data_selection:
-            enabled: true
-            techniques:
-              dataset_definition:
-                enabled: true
-                params:
-                  include: [ "oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured" ]
-                  patterns_to_drop: [ "id", "uuid", "log", "engine_id" ]
-                output: "3.1.selection.definition_trace_log.json"
-              feature_selection:
-                enabled: true
-                params:
-                  remove_constant: true
-                  remove_duplicate: true
-                output: "3.1.selection.filter_trace_log.json"
-        output_artifacts:
-          selected_regression_train_parquet:
-            path: "3.1.selection.selected_regression_train.parquet"
-            description: "Intermediate regression matrix containing only selected operational columns."
-            consumed_by: [ "step_3_2_data_cleaning" ]
-      # ────────────────────────────────────────────────────────────────────────
-      # STEP 3.2: TRATAMIENTO DE OUTLIERS Y DUPLICADOS (CON CLIPPING EN TRQ_MARGIN)
-      # ────────────────────────────────────────────────────────────────────────
-      step_3_2_data_cleaning:
-        enabled: true
-        description: "Mitigate severe target asymmetries and check training set row duplications."
-        methods:
-          data_cleaning:
-            enabled: true
-            techniques:
-              outlier_handling:
-                enabled: true
-                params:
-                  target_clipping: true
-                  target_variable: "trq_margin"
-                  lower_percentile: 0.01
-                  upper_percentile: 0.99
-                output: "3.2.cleaning.clipping_audit_log.json"
-              duplicate_handling:
-                enabled: true
-                params:
-                  keep: "first"
-                output: "3.2.cleaning.duplicates_trace.json"
-        output_artifacts:
-          cleaned_regression_train_parquet:
-            path: "3.2.cleaning.cleaned_regression_train.parquet"
-            description: "Intermediate regression matrix deduplicated and outlier-clipped."
-            consumed_by: [ "step_3_3_data_transformation" ]
-      # ────────────────────────────────────────────────────────────────────────
-      # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
-      # ────────────────────────────────────────────────────────────────────────
-      step_3_3_data_transformation:
-        enabled: true
-        description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
-        methods:
-          data_transformation:
-            enabled: true
-            techniques:
-              feature_scaling:
-                enabled: true
-                params:
-                  method: "RobustScaler"
-                  fit_on_train_only: true
-                  features: [ "oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured" ]
-                output: "3.3.transformation.scaler_fit_trace.json"
-              feature_engineering:
-                enabled: true
-                params:
-                  oat_denominator_protection:
-                    method: "convert_to_kelvin"
-                    offset: 273.15
-                  formulas:
-                    mgt_oat_ratio: "mgt / (oat + 273.15)"
-                    specific_power_index: "np / (ng * (oat + 273.15))"
-                  interactions:
-                    enabled: true
-                    degree: 2
-                    features: [ "mgt", "ng", "Torque Measured", "np" ]
-                output: "3.3.transformation.engineering_formulas_log.json"
-        output_artifacts:
-          transformed_regression_train_parquet:
-            path: "3.3.transformation.transformed_regression_train.parquet"
-            description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
-            consumed_by: [ "step_3_5_data_formatting" ]
-          fitted_scaler_regression_artifact:
-            path: "3.3.transformation.robust_scaler_regression.pkl"
-            description: "Fitted state parameters of the training-isolated RobustScaler model for regression."
-            consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
-      # ────────────────────────────────────────────────────────────────────────
-      # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS NUMÉRICOS
-      # ────────────────────────────────────────────────────────────────────────
-      step_3_5_data_formatting:
-        enabled: true
-        description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
-        methods:
-          data_formatting:
-            enabled: true
-            techniques:
-              data_split:
-                enabled: true
-                params:
-                  test_size: 0.2
-                  random_state: 42
-                output: "3.5.formatting.split_indices_trace.json"
-              dataset_formatting:
-                enabled: true
-                params:
-                  target_col: "trq_margin"
-                  type_casting: "float64" # Target continuo para NGBoost
-                  to_numpy: true
-                output: "3.5.formatting.arrays_manifest.json"
-        output_artifacts:
-          engineered_train_split:
-            path: "3.5.formatting.regression_internal_train.parquet"
-            description: "Finalized scaling-safe internal training matrix for NGBoost."
-            consumed_by: [ "phase4_data_modeling" ]
-          engineered_val_split:
-            path: "3.5.formatting.regression_internal_val.parquet"
-            description: "Finalized internal validation split for NGBoost early stopping/CV."
-            consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
+      steps:
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.1: SELECCIÓN DE VARIABLES
+        # ────────────────────────────────────────────────────────────────────────
+        step_3_1_data_selection:
+          enabled: true
+          description: "Filter operational features and remove irrelevant technical variables."
+          methods:
+            data_selection:
+              enabled: true
+              techniques:
+                dataset_definition:
+                  enabled: true
+                  params:
+                    include: [ "oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured" ]
+                    patterns_to_drop: [ "id", "uuid", "log", "engine_id" ]
+                  output: "3.1.selection.definition_trace_log.json"
+                feature_selection:
+                  enabled: true
+                  params:
+                    remove_constant: true
+                    remove_duplicate: true
+                  output: "3.1.selection.filter_trace_log.json"
+          output_artifacts:
+            selected_regression_train_parquet:
+              path: "3.1.selection.selected_regression_train.parquet"
+              description: "Intermediate regression matrix containing only selected operational columns."
+              consumed_by: [ "step_3_2_data_cleaning" ]
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.2: TRATAMIENTO DE OUTLIERS Y DUPLICADOS (CON CLIPPING EN TRQ_MARGIN)
+        # ────────────────────────────────────────────────────────────────────────
+        step_3_2_data_cleaning:
+          enabled: true
+          description: "Mitigate severe target asymmetries and check training set row duplications."
+          methods:
+            data_cleaning:
+              enabled: true
+              techniques:
+                outlier_handling:
+                  enabled: true
+                  params:
+                    target_clipping: true
+                    target_variable: "trq_margin"
+                    lower_percentile: 0.01
+                    upper_percentile: 0.99
+                  output: "3.2.cleaning.clipping_audit_log.json"
+                duplicate_handling:
+                  enabled: true
+                  params:
+                    keep: "first"
+                  output: "3.2.cleaning.duplicates_trace.json"
+          output_artifacts:
+            cleaned_regression_train_parquet:
+              path: "3.2.cleaning.cleaned_regression_train.parquet"
+              description: "Intermediate regression matrix deduplicated and outlier-clipped."
+              consumed_by: [ "step_3_3_data_transformation" ]
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
+        # ────────────────────────────────────────────────────────────────────────
+        step_3_3_data_transformation:
+          enabled: true
+          description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
+          methods:
+            data_transformation:
+              enabled: true
+              techniques:
+                feature_scaling:
+                  enabled: true
+                  params:
+                    method: "RobustScaler"
+                    fit_on_train_only: true
+                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured" ]
+                  output: "3.3.transformation.scaler_fit_trace.json"
+                feature_engineering:
+                  enabled: true
+                  params:
+                    oat_denominator_protection:
+                      method: "convert_to_kelvin"
+                      offset: 273.15
+                    formulas:
+                      mgt_oat_ratio: "mgt / (oat + 273.15)"
+                      specific_power_index: "np / (ng * (oat + 273.15))"
+                    interactions:
+                      enabled: true
+                      degree: 2
+                      features: [ "mgt", "ng", "Torque Measured", "np" ]
+                  output: "3.3.transformation.engineering_formulas_log.json"
+          output_artifacts:
+            transformed_regression_train_parquet:
+              path: "3.3.transformation.transformed_regression_train.parquet"
+              description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
+              consumed_by: [ "step_3_5_data_formatting" ]
+            fitted_scaler_regression_artifact:
+              path: "3.3.transformation.robust_scaler_regression.pkl"
+              description: "Fitted state parameters of the training-isolated RobustScaler model for regression."
+              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS NUMÉRICOS
+        # ────────────────────────────────────────────────────────────────────────
+        step_3_5_data_formatting:
+          enabled: true
+          description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
+          methods:
+            data_formatting:
+              enabled: true
+              techniques:
+                data_split:
+                  enabled: true
+                  params:
+                    test_size: 0.2
+                    random_state: 42
+                  output: "3.5.formatting.split_indices_trace.json"
+                dataset_formatting:
+                  enabled: true
+                  params:
+                    target_col: "trq_margin"
+                    type_casting: "float64" # Target continuo para NGBoost
+                    to_numpy: true
+                  output: "3.5.formatting.arrays_manifest.json"
+          output_artifacts:
+            engineered_train_split:
+              path: "3.5.formatting.regression_internal_train.parquet"
+              description: "Finalized scaling-safe internal training matrix for NGBoost."
+              consumed_by: [ "phase4_data_modeling" ]
+            engineered_val_split:
+              path: "3.5.formatting.regression_internal_val.parquet"
+              description: "Finalized internal validation split for NGBoost early stopping/CV."
+              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
-  # ----------------------------------------------------------------------------
-  # STAGE 4 — MODELING (PROBABILISTIC DENSITY ESTIMATION)
-  # ----------------------------------------------------------------------------
-  phase4_data_modeling:
-    objective: "Train NGBoost over simulated operational flight envelope groups to isolate engine-asset features."
+    # ----------------------------------------------------------------------------
+    # STAGE 4 — MODELING (PROBABILISTIC DENSITY ESTIMATION)
+    # ----------------------------------------------------------------------------
+    phase4_data_modeling:
+      enabled: true
+      objective: "Train NGBoost over simulated operational flight envelope groups to isolate engine-asset features."
 
-    # [REGLA 3] DAG Traceability: Insumos de la Fase 3
-    read_strategy:
-      mode: "consume_engineered_splits"
-      input_source:
-        train_data: "3.5.formatting.regression_internal_train.parquet"
-        val_data: "3.5.formatting.regression_internal_val.parquet"
-        scaler: "3.3.transformation.robust_scaler.pkl"
+      # [REGLA 3] DAG Traceability: Insumos de la Fase 3
+      read_strategy:
+        mode: "consume_engineered_splits"
+        input_source:
+          train_data: "3.5.formatting.regression_internal_train.parquet"
+          val_data: "3.5.formatting.regression_internal_val.parquet"
+          scaler: "3.3.transformation.robust_scaler.pkl"
 
-    steps:
-      step_4_1_algorithm_selection:
-        enabled: true
-        description: "Configure NGBoost to output Normal distribution parameters."
-        methods:
-          algorithm_selection:
-            enabled: true
-            techniques:
-              single_probabilistic_architecture:
-                enabled: true
-                params:
-                  library: "ngboost"
-                  estimator: "NGBRegressor"
-                  Dist: "Normal"
-                  Score: "LogScore"
-                  n_estimators: 400
-                  learning_rate: 0.03
-                  Base:
-                    type: "DecisionTreeRegressor"
-                    max_depth: 4
-                  random_state: 42
-                output: "4.1.modeling.algo_setup_trace.json"
+      steps:
+        step_4_1_algorithm_selection:
+          enabled: true
+          description: "Configure NGBoost to output Normal distribution parameters."
+          methods:
+            algorithm_selection:
+              enabled: true
+              techniques:
+                single_probabilistic_architecture:
+                  enabled: true
+                  params:
+                    library: "ngboost"
+                    estimator: "NGBRegressor"
+                    Dist: "Normal"
+                    Score: "LogScore"
+                    n_estimators: 400
+                    learning_rate: 0.03
+                    Base:
+                      type: "DecisionTreeRegressor"
+                      max_depth: 4
+                    random_state: 42
+                  output: "4.1.modeling.algo_setup_trace.json"
 
-      step_4_2_model_training:
-        enabled: true
-        description: "Execute GMM-grouped cross validation."
-        methods:
-          model_training:
-            enabled: true
-            techniques:
-              cross_validation:
-                enabled: true
-                params:
-                  strategy: "GroupKFold"
-                  n_splits: 5
-                  grouping_mechanism:
-                    type: "GMM_Clusterer"
-                    features: [ "oat", "mgt", "ias" ]
-                    n_clusters: 4
-                    covariance_type: "full"
-                    log_centroids_verification: true
-                output: "4.2.training.cv_fold_execution_trace.json"
-        output_artifacts:
-          trained_ngboost_model:
-            path: "4.2.training.ngboost_regressor.pkl"
-            description: "Fitted NGBoost parameters structure ready for variance forecasting inference."
-            consumed_by: [ "step_4_4_model_evaluation", "phase5_evaluation_and_interpretation" ]
+        step_4_2_model_training:
+          enabled: true
+          description: "Execute GMM-grouped cross validation."
+          methods:
+            model_training:
+              enabled: true
+              techniques:
+                cross_validation:
+                  enabled: true
+                  params:
+                    strategy: "GroupKFold"
+                    n_splits: 5
+                    grouping_mechanism:
+                      type: "GMM_Clusterer"
+                      features: [ "oat", "mgt", "ias" ]
+                      n_clusters: 4
+                      covariance_type: "full"
+                      log_centroids_verification: true
+                  output: "4.2.training.cv_fold_execution_trace.json"
+          output_artifacts:
+            trained_ngboost_model:
+              path: "4.2.training.ngboost_regressor.pkl"
+              description: "Fitted NGBoost parameters structure ready for variance forecasting inference."
+              consumed_by: [ "step_4_4_model_evaluation", "phase5_evaluation_and_interpretation" ]
 
-      step_4_4_model_evaluation:
-        enabled: true
-        description: "Select best model using Negative Log-Likelihood (NLL)."
-        methods:
-          model_evaluation:
-            enabled: true
-            techniques:
-              model_selection_criteria:
-                enabled: true
-                params:
-                  primary_metric: "neg_log_likelihood"
-                  tie_breaker: "rmse"
-                output: "4.4.evaluation.ranking_trace.json"
-        output_artifacts:
-          best_regression_model_metadata:
-            path: "4.4.evaluation.final_best_model_meta.json"
-            description: "Consolidated performance scoreboard isolating validation likelihood outcomes."
-            consumed_by: [ "phase5_evaluation_and_interpretation" ]
+        step_4_4_model_evaluation:
+          enabled: true
+          description: "Select best model using Negative Log-Likelihood (NLL)."
+          methods:
+            model_evaluation:
+              enabled: true
+              techniques:
+                model_selection_criteria:
+                  enabled: true
+                  params:
+                    primary_metric: "neg_log_likelihood"
+                    tie_breaker: "rmse"
+                  output: "4.4.evaluation.ranking_trace.json"
+          output_artifacts:
+            best_regression_model_metadata:
+              path: "4.4.evaluation.final_best_model_meta.json"
+              description: "Consolidated performance scoreboard isolating validation likelihood outcomes."
+              consumed_by: [ "phase5_evaluation_and_interpretation" ]
 
-  # ----------------------------------------------------------------------------
-  # STAGE 5 — EVALUATION & UNCERTAINTY INTERPRETATION
-  # ----------------------------------------------------------------------------
-  phase5_evaluation_and_interpretation:
-    objective: "Verify prediction interval calibration honesty on UNSEEN CROSS-ASSET MOTORS."
+    # ----------------------------------------------------------------------------
+    # STAGE 5 — EVALUATION & UNCERTAINTY INTERPRETATION
+    # ----------------------------------------------------------------------------
+    phase5_evaluation_and_interpretation:
+      enabled: true
+      objective: "Verify prediction interval calibration honesty on UNSEEN CROSS-ASSET MOTORS."
 
-    # ¡CORRECCIÓN CRÍTICA APLICADA! Carga el scaler, modelo y los DATOS DEL CHALLENGE CRUDOS
-    read_strategy:
-      mode: "cross_asset_evaluation"
-      input_source:
-        model: "4.2.training.ngboost_regressor.pkl"
-        scaler: "3.3.transformation.robust_scaler.pkl"
-        challenge_test_data: "2.1.data_acquisition.prod_300000_stratified_test.parquet"
-        challenge_val_data: "2.1.data_acquisition.prod_300000_stratified_validation.parquet"
-        metadata: "4.4.evaluation.final_best_model_meta.json"
+      # ¡CORRECCIÓN CRÍTICA APLICADA! Carga el scaler, modelo y los DATOS DEL CHALLENGE CRUDOS
+      read_strategy:
+        mode: "cross_asset_evaluation"
+        input_source:
+          model: "4.2.training.ngboost_regressor.pkl"
+          scaler: "3.3.transformation.robust_scaler.pkl"
+          challenge_test_data: "2.1.data_acquisition.prod_300000_stratified_test.parquet"
+          challenge_val_data: "2.1.data_acquisition.prod_300000_stratified_validation.parquet"
+          metadata: "4.4.evaluation.final_best_model_meta.json"
 
-    steps:
-      step_5_1_interpretation:
-        enabled: true
-        description: "Extract feature coefficients mapping the behavior of both Mu and Sigma sub-trees."
-        methods:
-          model_interpretation:
-            enabled: true
-            techniques:
-              feature_importance:
-                enabled: true
-                params:
-                  strategy: "model_native"
-                  top_k: 15
-                output: "5.1.plots.feature_importance_data.json"
-              permutation_importance:
-                enabled: true
-                params:
-                  n_repeats: 5
-                  scoring: "neg_log_likelihood"
-                output: "5.1.plots.permutation_data.json"
+      steps:
+        step_5_1_interpretation:
+          enabled: true
+          description: "Extract feature coefficients mapping the behavior of both Mu and Sigma sub-trees."
+          methods:
+            model_interpretation:
+              enabled: true
+              techniques:
+                feature_importance:
+                  enabled: true
+                  params:
+                    strategy: "model_native"
+                    top_k: 15
+                  output: "5.1.plots.feature_importance_data.json"
+                permutation_importance:
+                  enabled: true
+                  params:
+                    n_repeats: 5
+                    scoring: "neg_log_likelihood"
+                  output: "5.1.plots.permutation_data.json"
 
-      step_5_2_probabilistic_evaluation:
-        enabled: true
-        description: "Audit true target hit counts inside prediction boundaries on hidden test motors."
-        methods:
-          probabilistic_evaluation:
-            enabled: true
-            techniques:
-              calibration_audit:
-                enabled: true
-                params:
-                  intervals: [ 0.10, 0.50, 0.90 ]
-                output: "5.2.evaluation.intervals_trace.json"
-              performance_degradation_benchmarking:
-                enabled: true
-                params:
-                  expect_test_degradation: true
-                  baseline: "naive_mean"
-                output: "5.2.evaluation.degradation_trace.json"
-        output_artifacts:
-          evaluation_summary_json:
-            path: "5.2.evaluation.final_regression_metrics_summary.json"
-            description: "Final consolidated regression score sheet mapping NLL, RMSE, and interval coverages on hidden motors."
-            consumed_by: [ "deployment" ]
+        step_5_2_probabilistic_evaluation:
+          enabled: true
+          description: "Audit true target hit counts inside prediction boundaries on hidden test motors."
+          methods:
+            probabilistic_evaluation:
+              enabled: true
+              techniques:
+                calibration_audit:
+                  enabled: true
+                  params:
+                    intervals: [ 0.10, 0.50, 0.90 ]
+                  output: "5.2.evaluation.intervals_trace.json"
+                performance_degradation_benchmarking:
+                  enabled: true
+                  params:
+                    expect_test_degradation: true
+                    baseline: "naive_mean"
+                  output: "5.2.evaluation.degradation_trace.json"
+          output_artifacts:
+            evaluation_summary_json:
+              path: "5.2.evaluation.final_regression_metrics_summary.json"
+              description: "Final consolidated regression score sheet mapping NLL, RMSE, and interval coverages on hidden motors."
+              consumed_by: [ "deployment" ]
 
-      step_5_3_process_audit:
-        enabled: true
-        description: "Run automated compliance traces on the transformation pipeline."
-        methods:
-          process_audit:
-            enabled: true
-            techniques:
-              leakage_detection:
-                enabled: true
-                params:
-                  checks: [ "train_test_overlap", "scaler_contamination_check" ]
-                output: "5.3.audit.leakage_trace.json"
+        step_5_3_process_audit:
+          enabled: true
+          description: "Run automated compliance traces on the transformation pipeline."
+          methods:
+            process_audit:
+              enabled: true
+              techniques:
+                leakage_detection:
+                  enabled: true
+                  params:
+                    checks: [ "train_test_overlap", "scaler_contamination_check" ]
+                  output: "5.3.audit.leakage_trace.json"
 
-      step_5_4_decision_making:
-        enabled: true
-        description: "Subject pipeline execution artifacts to engineering domain specialist reviews."
-        methods:
-          decision_making:
-            enabled: true
-            techniques:
-              final_sign_off:
-                enabled: true
-                params:
-                  required_review: true
-                  review_roles: [ "preventive_maintenance_engineer" ]
-                output: "5.4.decision.sign_off_trace.json"
-        output_artifacts:
-          deployment_sign_off:
-            path: "5.4.decision.final_sign_off_certificate.json"
-            description: "Cryptographic or structured approval marker for production release."
-            consumed_by: [ "deployment" ]
+        step_5_4_decision_making:
+          enabled: true
+          description: "Subject pipeline execution artifacts to engineering domain specialist reviews."
+          methods:
+            decision_making:
+              enabled: true
+              techniques:
+                final_sign_off:
+                  enabled: true
+                  params:
+                    required_review: true
+                    review_roles: [ "preventive_maintenance_engineer" ]
+                  output: "5.4.decision.sign_off_trace.json"
+          output_artifacts:
+            deployment_sign_off:
+              path: "5.4.decision.final_sign_off_certificate.json"
+              description: "Cryptographic or structured approval marker for production release."
+              consumed_by: [ "deployment" ]
