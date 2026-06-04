@@ -1,6 +1,7 @@
 # src/phm_america_2024/api/execution_facade_api.py
 from __future__ import annotations
 
+import datetime
 # 1-> Imports: Standard-library
 #----------------------------------------------
 from typing import Any, Optional
@@ -8,7 +9,8 @@ from typing import Any, Optional
 # 2-> Imports: Internal imports
 #----------------------------------------------
 from phm_america_2024.common.logging_adapter_common import get_logger, config_run_logging
-from phm_america_2024.common.context_facade_common import RunContext, create_run_context
+from phm_america_2024.common.context_facade_common import RunContext, create_run_context, \
+    make_run_id
 from phm_america_2024.common.path_service_common import find_project_root
 from phm_america_2024.configuration.build_factory_config import build_config, BuiltConfig
 from phm_america_2024.configuration.enum_registry_config import StepsPhase,ProblemType
@@ -43,6 +45,7 @@ log = get_logger(__name__)
 def init_run_facade_api(
     pipeline_name: str,
     dataset_key: str,
+    resume_run_id: str = None,
     notebook_vars: Optional[dict[str, Any]] = None,
 ) -> RunContext:
     """Initialize a run context for a given pipeline and dataset.
@@ -69,6 +72,16 @@ def init_run_facade_api(
     RunContext
         Initialized run context ready for phase execution.
     """
+
+    if resume_run_id:
+        # Modo "Retomar": Usamos el ID existente
+        run_id = resume_run_id
+        log.info(f"Resuming existing run: {run_id}")
+    else:
+        # Modo "Nuevo": Generamos timestamp (como lo haces actualmente)
+        run_id = make_run_id()
+        log.info(f"Starting new run: {run_id}")
+
     notebook_vars = notebook_vars or {}
 
     log.info(
@@ -97,6 +110,7 @@ def init_run_facade_api(
     ctx = create_run_context(
         config=built.pipeline_config,
         dataset_key=dataset_key,
+        run_id=run_id,
     )
     log.debug("[init_run_facade_api] run context created run_id=%s", ctx.run_id)
 
@@ -113,6 +127,7 @@ def init_run_facade_api(
     log.info("[init_run_facade_api] done run_id=%s run_dir=%s log=%s",
              ctx.run_id, ctx.run_dir, log_file)
     return ctx
+
 
 
 # -----------------------------------------------------------------

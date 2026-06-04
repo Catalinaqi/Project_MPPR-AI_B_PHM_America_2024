@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from ngboost import NGBRegressor
 from ngboost.distns import Normal
 from ngboost.scores import LogScore
 
@@ -15,79 +14,72 @@ log = get_logger(__name__)
 
 
 def single_probabilistic_architecture(
-    df: pd.DataFrame,
-    params: dict[str, Any],
-    ctx: Any,
-    output_dir: Path,
-) -> tuple[pd.DataFrame, dict[str, Any] | None]:
-    """Configure NGBoost to output Normal distribution parameters.
+        df: pd.DataFrame,
+        tech_cfg: dict[str, Any],
+        ctx: Any,
+        output_dir: Path,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Configure NGBoost probabilistic architecture from YAML and persist trace.
 
-    This technique corresponds to the ``algorithm_selection`` method
-    in the regression pipeline config. It does *not* transform the
-    DataFrame; it returns the algorithm configuration as an extra
-    artifact for downstream steps.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame (used here only for logging, not modified).
-    params : dict
-        YAML technique parameters:
-        ``library`` (str) – ignored, forced to ngboost.
-        ``estimator`` (str) – ignored, forced to NGBRegressor.
-        ``Dist`` (str) – distribution family, currently ``Normal``.
-        ``Score`` (str) – scoring rule, currently ``LogScore``.
-        ``n_estimators`` (int)
-        ``learning_rate`` (float)
-        ``Base`` (dict) – base learner config (e.g. ``max_depth``).
-        ``random_state`` (int)
-    ctx : Any
-        RunContext (unused, interface consistency).
-    output_dir : Path
-        Directory to write the trace JSON.
-
-    Returns
-    -------
-    tuple[pd.DataFrame, dict[str, Any] | None]
-        - Unmodified input DataFrame.
-        - Extra artifact dict with key ``"algorithm_config"`` containing
-          the full model configuration dictionary.
+    Args:
+        df: Input DataFrame (unmodified, used for logging only).
+        tech_cfg: YAML technique configuration containing params and output.
+        ctx: Run context holding shared execution state.
+        output_dir: Directory to write the trace JSON artifact.
+    Returns:
+        Unmodified DataFrame and extra artifact dict with key 'algorithm_config'.
     """
     log.debug("[single_probabilistic_architecture] entry – shape=%s", df.shape)
 
-    # Build model configuration from YAML params (with sensible defaults)
-    model_cfg = {
-        "library": "ngboost",
-        "estimator": "NGBRegressor",
+    try:
+        # Step 1: Extract params and output filename from YAML config
+        params: dict[str, Any] = tech_cfg["params"]
+        output_filename: str = tech_cfg["output"]
+        base_params: dict[str, Any] = params["Base"]
+    except KeyError as e:
+        log.error("[single_probabilistic_architecture] YAML key missing in configuration: %s", e)
+        raise
+
+    # Step 2: Build model configuration dict from YAML params
+    model_cfg: dict[str, Any] = {
         "Dist": Normal,
         "Score": LogScore,
-        "n_estimators": params.get("n_estimators", 400),
-        "learning_rate": params.get("learning_rate", 0.03),
+        "n_estimators": params["n_estimators"],
+        "learning_rate": params["learning_rate"],
+        "minibatch_frac": params["minibatch_frac"],
         "Base": {
-            "type": "DecisionTreeRegressor",
-            "max_depth": params.get("Base", {}).get("max_depth", 4),
+            "type": base_params["type"],
+            "max_depth": base_params["max_depth"],
+            "min_samples_leaf": base_params["min_samples_leaf"],
         },
-        "random_state": params.get("random_state", 42),
+        "random_state": params["random_state"],
     }
 
-    # Persist trace log
-    trace = {
-        "library": "ngboost",
-        "estimator": "NGBRegressor",
+    # Step 3: Build serializable trace from YAML params
+    trace: dict[str, Any] = {
+        "library": params["library"],
+        "estimator": params["estimator"],
         "model_configured": {
-            "Dist": "Normal",
-            "Score": "LogScore",
+            "Dist": params["Dist"],
+            "Score": params["Score"],
             "n_estimators": model_cfg["n_estimators"],
             "learning_rate": model_cfg["learning_rate"],
-            "Base": {"max_depth": model_cfg["Base"]["max_depth"]},
+            "minibatch_frac": model_cfg["minibatch_frac"],
+            "Base": {
+                "type": model_cfg["Base"]["type"],
+                "max_depth": model_cfg["Base"]["max_depth"],
+                "min_samples_leaf": model_cfg["Base"]["min_samples_leaf"],
+            },
             "random_state": model_cfg["random_state"],
         },
     }
-    output_path = output_dir / "4.1.modeling.algo_setup_trace.json"
-    output_path.write_text(json.dumps(trace, indent=2, default=str), encoding="utf-8")
-    log.debug("[single_probabilistic_architecture] trace written to %s", output_path)
 
-    # Return unmodified dataframe and the configuration as extra artifact
-    extra = {"algorithm_config": model_cfg}
+    # Step 4: CALL write_text() — serialize trace artifact to disk
+    output_path: Path = output_dir / output_filename
+    output_path.write_text(json.dumps(trace, indent=2, default=str), encoding="utf-8")
+    log.info("[single_probabilistic_architecture] trace written to %s", output_path)
+
+    extra: dict[str, Any] = {"algorithm_config": model_cfg}
+
     log.info("[single_probabilistic_architecture] completed – shape=%s", df.shape)
     return df, extra

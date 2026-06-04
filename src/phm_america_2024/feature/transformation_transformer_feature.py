@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Optional
+from sklearn.preprocessing import PolynomialFeatures
 
 import pandas as pd
 from sklearn.preprocessing import RobustScaler
@@ -158,7 +159,7 @@ def feature_engineering(
         inter_features: list[str] = interactions_cfg.get("features", [])
         existing_inter = [col for col in inter_features if col in df.columns and pd.api.types.is_numeric_dtype(df[col])]
         if degree >= 2 and len(existing_inter) >= 2:
-            from sklearn.preprocessing import PolynomialFeatures
+
             poly = PolynomialFeatures(degree=degree, interaction_only=False, include_bias=False)
             poly_values = poly.fit_transform(df[existing_inter])
             poly_feature_names = poly.get_feature_names_out(existing_inter)

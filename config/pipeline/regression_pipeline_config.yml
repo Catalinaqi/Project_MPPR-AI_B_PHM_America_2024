@@ -187,13 +187,12 @@ regression_pipeline_config:
       read_strategy:
         mode: "consume_engineered_splits"
         input_source:
-          train_data: "K:/00_Code/Manutenzione/Project_MPPR-AI_B_PHM_America_2024/outputs/runs/regression/phm2024/20260604_110122/phase3_data_preparation/3.5.formatting.regression_internal_train.parquet"
-          val_data: "K:/00_Code/Manutenzione/Project_MPPR-AI_B_PHM_America_2024/outputs/runs/regression/phm2024/20260604_110122/phase3_data_preparation/3.5.formatting.regression_internal_val.parquet"
-          scaler: "K:/00_Code/Manutenzione/Project_MPPR-AI_B_PHM_America_2024/outputs/runs/regression/phm2024/20260604_105110/phase3_data_preparation/3.3.transformation.robust_scaler_regression.pkl"
+          train_data: "K:/00_Code/Manutenzione/Project_MPPR-AI_B_PHM_America_2024/outputs/runs/regression/phm2024/20260604_152926/phase3_data_preparation/3.5.formatting.regression_internal_train.parquet"
+          val_data: "K:/00_Code/Manutenzione/Project_MPPR-AI_B_PHM_America_2024/outputs/runs/regression/phm2024/20260604_152926/phase3_data_preparation/3.5.formatting.regression_internal_val.parquet"
+          scaler: "K:/00_Code/Manutenzione/Project_MPPR-AI_B_PHM_America_2024/outputs/runs/regression/phm2024/20260604_152908/phase3_data_preparation/3.3.transformation.robust_scaler_regression.pkl"
           #          train_data: "3.5.formatting.regression_internal_train.parquet"
           #          val_data: "3.5.formatting.regression_internal_val.parquet"
           #          scaler: "3.3.transformation.robust_scaler_regression.pkl"
-
 
       steps:
         step_4_1_algorithm_selection:
@@ -212,9 +211,11 @@ regression_pipeline_config:
                     Score: "LogScore"
                     n_estimators: 400
                     learning_rate: 0.03
+                    minibatch_frac: 0.8
                     Base:
                       type: "DecisionTreeRegressor"
                       max_depth: 4
+                      min_samples_leaf: 20
                     random_state: 42
                   output: "4.1.modeling.algo_setup_trace.json"
 
@@ -228,7 +229,9 @@ regression_pipeline_config:
                 cross_validation:
                   enabled: true
                   params:
+                    random_seed: 7
                     strategy: "GroupKFold"
+                    target_variable: "trq_margin"
                     n_splits: 5
                     grouping_mechanism:
                       type: "GMM_Clusterer"

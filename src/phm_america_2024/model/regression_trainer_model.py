@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Tuple
 
-import pandas as pd
 import numpy as np
-from sklearn.model_selection import GroupKFold
-from sklearn.mixture import GaussianMixture
+import pandas as pd
 from ngboost import NGBRegressor
 from ngboost.distns import Normal
 from ngboost.scores import LogScore
+from sklearn.mixture import GaussianMixture
+from sklearn.model_selection import GroupKFold
+from sklearn.tree import DecisionTreeRegressor
 
 from phm_america_2024.common.logging_adapter_common import get_logger
 
@@ -19,131 +20,222 @@ log = get_logger(__name__)
 
 def algorithm_selection(
         df: pd.DataFrame,
-        params: dict[str, Any],
+        tech_cfg: Dict[str, Any],
         ctx: Any,
         output_dir: Path,
-) -> tuple[pd.DataFrame, dict[str, Any]]:
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Return an NGBRegressor configuration dict (no fitting) and log trace.
 
-    This technique corresponds to step_4_1_algorithm_selection.
-    It does not transform the dataframe (returns as-is) but returns an
-    extra artifact containing the model configuration.
+    Args:
+        df: Input DataFrame.
+        tech_cfg: YAML technique configuration containing params and output.
+        ctx: Run context holding shared execution state.
+        output_dir: Output directory path.
+
+    Returns:
+        Unmodified DataFrame and extra artifact dict with configuration.
     """
     log.debug("[algorithm_selection] entry – shape=%s", df.shape)
 
-    # Build the model configuration from the YAML params
-    model_cfg = {
-        "Dist": Normal,
-        "Score": LogScore,
-        "n_estimators": params.get("n_estimators", 400),
-        "learning_rate": params.get("learning_rate", 0.03),
-        "Base": params.get("Base", {"type": "DecisionTreeRegressor", "max_depth": 4}),
-        "random_state": params.get("random_state", 42),
-    }
+    try:
+        # Step 1: Extract parameters directly from YAML config (Zero hardcoding)
+        params: Dict[str, Any] = tech_cfg["params"]
+        model_cfg: Dict[str, Any] = {
+            "Dist": Normal,
+            "Score": LogScore,
+            "n_estimators": params["n_estimators"],
+            "learning_rate": params["learning_rate"],
+            "minibatch_frac": params["minibatch_frac"],
+            "Base": params["Base"],
+            "random_state": params["random_state"],
+        }
+        output_filename: str = tech_cfg["output"]
+    except KeyError as e:
+        log.error("[algorithm_selection] YAML key missing in configuration: %s", e)
+        raise
 
-    # Persist trace JSON
-    trace = {
+    trace: Dict[str, Any] = {
         "library": "ngboost",
         "estimator": "NGBRegressor",
         "model_configured": model_cfg,
     }
-    output_path = output_dir / "4.1.modeling.algo_setup_trace.json"
-    output_path.write_text(json.dumps(trace, indent=2, default=str), encoding="utf-8")
-    log.debug("[algorithm_selection] trace written to %s", output_path)
 
-    extra = {"algorithm_config": model_cfg}
+    output_path: Path = output_dir / output_filename
+
+    # Step 2: CALL write_text() — serialize trace to disk
+    output_path.write_text(json.dumps(trace, indent=2, default=str), encoding="utf-8")
+    log.info("[algorithm_selection] trace written to %s", output_path)
+
+    extra: Dict[str, Any] = {"algorithm_config": model_cfg}
+
+    log.debug("[algorithm_selection] exit")
     return df, extra
 
 
 def cross_validation(
         df: pd.DataFrame,
-        params: dict[str, Any],
+        tech_cfg: Dict[str, Any],
         ctx: Any,
         output_dir: Path,
-) -> tuple[Any, dict[str, Any]]:
+        algorithm_config: Optional[Dict[str, Any]] = None
+) -> Tuple[Any, Dict[str, Any]]:
     """Execute GMM-grouped GroupKFold cross validation and train NGBoost per fold.
 
-    Returns the best model (lowest validation NLL) and extra artifacts.
+    Args:
+        df: Input DataFrame.
+        tech_cfg: YAML technique configuration containing params and output.
+        ctx: Run context holding shared execution state.
+        output_dir: Output directory path.
+        algorithm_config: Injected configuration from prior Step 4.1.
+
+    Returns:
+        Best trained model (lowest validation NLL) and extra artifacts.
     """
     log.debug("[cross_validation] entry – shape=%s", df.shape)
 
-    # ---------- Configuration ----------
-    # CORRECCIÓN: 'params' ya contiene los valores definidos en el YAML bajo la llave 'params'.
-    n_splits = params.get("n_splits", 5)
-    grouping = params.get("grouping_mechanism", {})
+    try:
+        # Step 1: Extract parameters directly from YAML config (Zero hardcoding)
+        params: Dict[str, Any] = tech_cfg["params"]
+        n_splits: int = params["n_splits"]
+        strategy: str = params["strategy"]
+        if strategy != "GroupKFold":
+            log.error("[cross_validation] unsupported strategy: %s", strategy)
+            raise ValueError(f"Unsupported strategy: {strategy}")
+        grouping: Dict[str, Any] = params["grouping_mechanism"]
+        gmm_features: list[str] = grouping["features"]
+        n_clusters: int = grouping["n_clusters"]
+        cov_type: str = grouping["covariance_type"]
+        random_seed: int = params["random_seed"]
+        target_col: str = params["target_variable"]
+        output_filename: str = tech_cfg["output"]
+    except KeyError as e:
+        log.error("[cross_validation] YAML key missing in configuration: %s", e)
+        raise
 
-    gmm_features = grouping.get("features", ["oat", "mgt", "ias"])
-    n_clusters = grouping.get("n_clusters", 4)
-    cov_type = grouping.get("covariance_type", "full")
 
-    # PROTECCIÓN MATEMÁTICA: n_splits nunca puede ser mayor a n_clusters para GroupKFold
+
+    # Step 2: Validate mathematical boundaries
     if n_splits > n_clusters:
         log.warning(
-            "[cross_validation] CONFLICTO EN YAML: n_splits (%d) es mayor que n_clusters (%d). "
-            "Ajustando n_splits a %d de forma automática para evitar que GroupKFold falle.",
+            "[cross_validation] shift detected: n_splits (%d) > n_clusters (%d). Adjusting n_splits to %d.",
             n_splits, n_clusters, n_clusters
         )
         n_splits = n_clusters
 
-    # Extract target and features
-    target_col = "trq_margin"
-    feature_cols = [c for c in df.columns if c != target_col]
-    X = df[feature_cols].values
-    y = df[target_col].values
+    # Step 3: CALL replace() — sanitize infinite values to NaN
+    df = df.replace([np.inf, -np.inf], np.nan)
+    initial_rows: int = len(df)
 
-    # ---------- GMM clustering on selected features ----------
-    gmm = GaussianMixture(n_components=n_clusters, covariance_type=cov_type, random_state=42)
-    gmm_features_idx = [feature_cols.index(f) for f in gmm_features if f in feature_cols]
+    # Step 4: CALL dropna() — execute row dropping for missing values
+    df = df.dropna()
+    dropped_rows: int = initial_rows - len(df)
+
+    if dropped_rows > 0:
+        log.warning("[cross_validation] Dropped %d rows containing NaN or Infinity.", dropped_rows)
+
+    feature_cols: list[str] = [c for c in df.columns if c != target_col]
+    X: np.ndarray = df[feature_cols].values
+    y: np.ndarray = df[target_col].values
+
+    # Step 5: CALL GaussianMixture() — instantiate GMM clusterer
+    gmm = GaussianMixture(
+        n_components=n_clusters,
+        covariance_type=cov_type,
+        random_state=random_seed
+    )
+
+    gmm_features_idx: list[int] = [feature_cols.index(f) for f in gmm_features if f in feature_cols]
     if len(gmm_features_idx) < len(gmm_features):
-        raise ValueError("Some GMM features not found in dataframe: %s", gmm_features)
-    X_gmm = X[:, gmm_features_idx]
-    cluster_labels = gmm.fit_predict(X_gmm)
+        log.error("[cross_validation] numerical failure / missing features: %s", gmm_features)
+        raise ValueError(f"Some GMM features not found in dataframe: {gmm_features}")
 
-    # Use cluster labels as groups for GroupKFold
+    X_gmm: np.ndarray = X[:, gmm_features_idx]
+
+    # Step 6: CALL fit_predict() — assign flight regime clusters
+    cluster_labels: np.ndarray = gmm.fit_predict(X_gmm)
+
+    # Step 7: CALL GroupKFold() — instantiate folder
     gkf = GroupKFold(n_splits=n_splits)
 
-    # ---------- Training loop ----------
-    best_model = None
-    best_nll = float("inf")
-    fold_results = []
+    if not algorithm_config:
+        log.error("[cross_validation] algorithm_config missing. Step 4.1 must be executed prior.")
+        raise ValueError("algorithm_config is required but was None.")
+
+    try:
+        # Step 8: Extract model hyper-parameters from injected config
+        tree_depth: int = algorithm_config["Base"]["max_depth"]
+        min_samples: int = algorithm_config["Base"]["min_samples_leaf"]
+        n_est: int = algorithm_config["n_estimators"]
+        lr: float = algorithm_config["learning_rate"]
+        mini_batch: float = algorithm_config["minibatch_frac"]
+        algo_seed: int = algorithm_config["random_state"]
+    except KeyError as e:
+        log.error("[cross_validation] YAML key missing in injected algorithm_config: %s", e)
+        raise
+
+    log.info("[cross_validation] NGBoost init: estimators=%d, lr=%s, depth=%d", n_est, lr, tree_depth)
+
+    best_model: Any = None
+    best_nll: float = float("inf")
+    fold_results: list[Dict[str, Any]] = []
 
     for fold_idx, (train_idx, val_idx) in enumerate(gkf.split(X, y, groups=cluster_labels)):
-        log.info("[cross_validation] Fold %d/%d", fold_idx+1, n_splits)
+        log.info("[cross_validation] Fold %d/%d", fold_idx + 1, n_splits)
+
         X_train, X_val = X[train_idx], X[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
 
-        # Use default NGBRegressor params (can be extended via YAML if needed)
+        # Step 9: CALL DecisionTreeRegressor() — instantiate robust base learner
+        base_learner = DecisionTreeRegressor(
+            max_depth=tree_depth,
+            min_samples_leaf=min_samples,
+            random_state=algo_seed
+        )
+
+        # Step 10: CALL NGBRegressor() — instantiate probabilistic model
         model = NGBRegressor(
             Dist=Normal,
             Score=LogScore,
-            n_estimators=400,
-            learning_rate=0.03,
-            random_state=42,
+            Base=base_learner,
+            n_estimators=n_est,
+            learning_rate=lr,
+            minibatch_frac=mini_batch,
+            random_state=algo_seed,
         )
+
+        # Step 11: CALL fit() — train model fold
         model.fit(X_train, y_train)
 
-        # Evaluate NLL
+        # Step 12: CALL pred_dist() — generate normal distribution parameters
         y_pred_dist = model.pred_dist(X_val)
-        nll = -y_pred_dist.logpdf(y_val).mean()
-        rmse = np.sqrt(((y_pred_dist.mean - y_val) ** 2).mean())
+
+        # Step 13: CALL logpdf() — evaluate negative log likelihood
+        nll: float = -y_pred_dist.logpdf(y_val).mean()
+        rmse: float = np.sqrt(((y_pred_dist.mean - y_val) ** 2).mean())
+
         fold_results.append({"fold": fold_idx, "nll": nll, "rmse": rmse})
 
         if nll < best_nll:
             best_nll = nll
             best_model = model
 
-        log.info("[cross_validation] Fold %d NLL=%.4f RMSE=%.4f", fold_idx+1, nll, rmse)
+        log.info("[cross_validation] Fold %d results: NLL=%.4f RMSE=%.4f", fold_idx + 1, nll, rmse)
 
-    # ---------- Persist trace ----------
-    trace = {
+    trace_results: Dict[str, Any] = {
         "n_folds": n_splits,
         "gmm_features": gmm_features,
         "gmm_n_clusters": n_clusters,
         "fold_results": fold_results,
         "best_fold_nll": best_nll,
     }
-    output_path = output_dir / "4.2.training.cv_fold_execution_trace.json"
-    output_path.write_text(json.dumps(trace, indent=2, default=str), encoding="utf-8")
 
-    extra = {"trained_model": best_model}
+    output_path = output_dir / output_filename
+
+    # Step 14: CALL write_text() — serialize cross validation trace to disk
+    output_path.write_text(json.dumps(trace_results, indent=2, default=str), encoding="utf-8")
+    log.info("[cross_validation] trace written to %s", output_path)
+
+    extra: Dict[str, Any] = {"trained_model": best_model}
+
+    log.debug("[cross_validation] exit")
     return best_model, extra

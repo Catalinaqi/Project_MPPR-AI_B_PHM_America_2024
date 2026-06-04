@@ -45,6 +45,14 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="PHM America 2024 – CRISP-DM Pipeline CLI"
     )
+
+    parser.add_argument(
+        "--resume_run",
+        type=str,
+        default=None,
+        help="Run ID to resume (e.g. '20260604_153111'). If provided, it won't create a new run folder.",
+    )
+
     parser.add_argument(
         "--pipeline",
         required=True,
@@ -131,6 +139,7 @@ def main() -> int:
         ctx = init_run_facade_api(
             pipeline_name=args.pipeline,
             dataset_key=args.dataset,
+            resume_run_id=args.resume_run
         )
         # 🔄 POSICIÓN CORRECTA: Ahora que los logs están activos, el mensaje se registrará perfectamente
         log.info("DEBUG: Registered generators: %s", list(get_registered_generators().keys()))
