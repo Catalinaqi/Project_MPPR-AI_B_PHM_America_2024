@@ -4,7 +4,7 @@ from __future__ import annotations
 import pickle
 from pathlib import Path
 from typing import Any, Optional, Tuple
-
+import joblib
 import pandas as pd
 
 from phm_america_2024.common.logging_adapter_common import get_logger
@@ -15,6 +15,7 @@ from phm_america_2024.configuration.read_strategy_repository_config import (
     ReadStrategyContract
 )
 from phm_america_2024.data.csv_loader_data import load_by_strategy
+
 
 log = get_logger(__name__)
 
@@ -204,3 +205,24 @@ def load_pickle(path: str | Path) -> Any:
     # Step 5: Return deserialised object
     log.info("[load_pickle] loaded object_type=%s path=%s", type(obj).__name__, resolved)
     return obj
+
+
+
+def load_pickle_joblib(path: str) -> Any:
+    """Load a serialized Python object (pickle/joblib) from disk."""
+    resolved = resolve_path(Path(path))
+
+    if not resolved.exists():
+        log.error(f"[load_pickle] pickle file not found path={resolved}")
+        raise FileNotFoundError(f"Pickle file not found: {resolved}")
+
+    size_mb = resolved.stat().st_size / (1024 * 1024)
+    log.info(f"[load_pickle] loading size_mb={size_mb:.3f} path={resolved}")
+
+    try:
+        # Usar joblib en lugar de pickle nativo (Estándar para ML/NGBoost)
+        obj: Any = joblib.load(str(resolved))
+        return obj
+    except Exception as e:
+        log.error(f"[load_pickle] load failed path={resolved} error={e}")
+        raise

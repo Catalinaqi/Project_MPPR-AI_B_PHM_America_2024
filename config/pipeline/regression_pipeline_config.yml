@@ -277,7 +277,7 @@ regression_pipeline_config:
         mode: "cross_asset_evaluation"
         input_source:
           model: "4.2.training.ngboost_regressor.pkl"
-          scaler: "3.3.transformation.robust_scaler.pkl"
+          scaler: "3.3.transformation.robust_scaler_regression.pkl"
           challenge_test_data: "2.1.data_acquisition.prod_300000_stratified_test.parquet"
           challenge_val_data: "2.1.data_acquisition.prod_300000_stratified_validation.parquet"
           metadata: "4.4.evaluation.final_best_model_meta.json"

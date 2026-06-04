@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, Tuple
 from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.common.context_facade_common import RunContext
 from phm_america_2024.common.path_service_common import resolve_path
-from phm_america_2024.data.load_loader_data import load_parquet, load_pickle
+from phm_america_2024.data.load_loader_data import load_parquet, load_pickle_joblib
 from phm_america_2024.registry.generator_registry_registry import write_output_artifacts
 from phm_america_2024.configuration.enum_registry_config import StepsPhase, StepOutputArtifact
 
@@ -240,17 +240,22 @@ class Phase4ModelingRunner:
             log.info("[_load_input_dataframe] loaded shape=%s", getattr(df, "shape", "N/A"))
 
         elif step_val == StepsPhase.STEP_4_4.value:
-            # Step 5: CALL get() — retrieve model path from configuration
-            read_strategy = self.step_cfg.get("read_strategy", {})
-            input_source = read_strategy.get("input_source", {})
-            model_path_str: str = input_source.get("model_data", StepOutputArtifact.trained_ngboost_model.value)
+            # Step 5: CALL extract dynamic path from configuration
+            try:
+                phase_cfg = self.ctx.config.phases["phase4_data_modeling"]
+                step_4_2_cfg = phase_cfg["steps"]["step_4_2_model_training"]
+                model_path_str: str = step_4_2_cfg["output_artifacts"]["trained_ngboost_model"]["path"]
+            except (KeyError, AttributeError) as e:
+                log.error("[_load_input_dataframe] Error dynamically resolving model path: %s", e)
+                raise ValueError("Could not extract trained_ngboost_model path from configuration.")
+
             log.debug("[_load_input_dataframe] model_data path from config: %s", model_path_str)
 
             # Step 6: CALL resolve_path() — normalize model path object
             path_model: Path = resolve_path(self.ctx.phase4_dir / model_path_str)
 
-            # Step 7: CALL load_pickle() — deserialize model object
-            model: Any = load_pickle(str(path_model))
+            # Step 7: CALL load_pickle_joblib() — deserialize model object
+            model: Any = load_pickle_joblib(str(path_model))
             log.info("[_load_input_dataframe] model loaded from: %s", path_model)
             df = model
 
