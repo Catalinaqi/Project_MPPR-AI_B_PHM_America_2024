@@ -28,6 +28,7 @@ from phm_america_2024.common.logging_adapter_common import get_logger
 # decorators to dynamically populate the runtime generator dictionary.
 from phm_america_2024.registry import phase2_generator_registry
 from phm_america_2024.registry import phase3_generator_registry
+from phm_america_2024.registry import phase4_generator_registry
 
 from phm_america_2024.registry.generator_registry_registry import get_registered_generators
 

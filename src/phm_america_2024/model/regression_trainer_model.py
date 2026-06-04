@@ -211,7 +211,13 @@ def cross_validation(
 
         # Step 13: CALL logpdf() — evaluate negative log likelihood
         nll: float = -y_pred_dist.logpdf(y_val).mean()
-        rmse: float = np.sqrt(((y_pred_dist.mean - y_val) ** 2).mean())
+
+        # Obtenemos el array de medias (las predicciones puntuales reales)
+        pred_means = y_pred_dist.mean()
+
+        # Calculamos RMSE usando numpy puramente para evitar problemas de tipos
+        errors = pred_means - y_val
+        rmse: float = np.sqrt(np.mean(errors ** 2))
 
         fold_results.append({"fold": fold_idx, "nll": nll, "rmse": rmse})
 
