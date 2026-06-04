@@ -5,6 +5,7 @@ import sys
 import argparse
 from typing import Any
 
+# Import all facade step orchestration API functions
 from phm_america_2024.api.execution_facade_api import (
     init_run_facade_api,
     run_2_1_data_acquisition,
@@ -12,21 +13,24 @@ from phm_america_2024.api.execution_facade_api import (
     run_2_3_data_quality_verification,
     run_2_4_data_exploration,
     run_3_1_data_selection,
+    run_3_2_data_cleaning,
+    run_3_3_data_transformation,
+    run_3_5_data_formatting,
 )
 from phm_america_2024.common.logging_adapter_common import get_logger
 
-# ── INVERSIÓN DE CONTROL: REGISTRO DE ARTEFACTOS CENTRALIZADOS ────────────────
-# Al importar estos módulos, Python ejecuta sus decoradores @register_artifact
-# y puebla dinámicamente el diccionario de generadores en el arranque.
+# ── INVERSION OF CONTROL: CENTRALIZED ARTIFACT REGISTRY ─────────────────────
+# By importing these modules, Python runs their internal @register_artifact
+# decorators to dynamically populate the runtime generator dictionary.
 from phm_america_2024.registry import phase2_generator_registry
-from phm_america_2024.registry import phase3_generator_registry  # <── SOLUCIÓN ARQUITECTÓNICA
+from phm_america_2024.registry import phase3_generator_registry
 
+from phm_america_2024.registry.generator_registry_registry import get_registered_generators
 
-# IMPORTACIÓN REQUERIDA: Conectamos el repositorio de configuraciones centralizado
+# Connect with the centralized configuration infrastructure repository
 from phm_america_2024.configuration.yml_repository_config import YmlRepository
 
 log = get_logger(__name__)
-
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments.
@@ -57,11 +61,12 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _execute_phase2_steps(ctx: Any, steps: list[str]) -> Any:
-    """Execute requested Phase 2 and Phase 3 steps.
+def _execute_pipeline_steps(ctx: Any, steps: list[str]) -> Any:
+    """Execute requested Phase 2 and Phase 3 steps based on logical DAG order.
 
-    Step 1: For each step in the list, call the corresponding API function.
-    Step 2: Log completion and return updated context.
+    Step 1: Define step metadata map and execution order.
+    Step 2: Sequentially process each step requested by user CLI arguments.
+    Step 3: Return updated run context.
     """
     step_map = {
         "2.1": ("Data Acquisition", run_2_1_data_acquisition),
@@ -69,14 +74,20 @@ def _execute_phase2_steps(ctx: Any, steps: list[str]) -> Any:
         "2.3": ("Data Quality Verification", run_2_3_data_quality_verification),
         "2.4": ("Data Exploration", run_2_4_data_exploration),
         "3.1": ("Data Selection", run_3_1_data_selection),
+        "3.2": ("Data Cleaning", run_3_2_data_cleaning),
+        "3.3": ("Data Transformation", run_3_3_data_transformation),
+        "3.5": ("Data Formatting", run_3_5_data_formatting),
     }
 
-    for step_key in ["2.1", "2.2", "2.3", "2.4", "3.1"]:
+    # Strict operational sequence order for the pipeline execution loop
+    execution_sequence = ["2.1", "2.2", "2.3", "2.4", "3.1", "3.2", "3.3", "3.5"]
+
+    for step_key in execution_sequence:
         if step_key in steps:
             name, func = step_map[step_key]
-            log.info("Executing Phase 2.%s – %s", step_key, name)
+            log.info("Executing Pipeline Step %s – %s", step_key, name)
             ctx = func(ctx)
-            log.info("Phase 2.%s completed", step_key)
+            log.info("Pipeline Step %s completed", step_key)
 
     return ctx
 
@@ -86,8 +97,8 @@ def main() -> int:
 
     Step 1: Parse arguments.
     Step 2: Load merged pipeline and dataset configs via YmlRepository.
-    Step 3: CALL init_run_facade_api(pipeline_name, dataset_key, configuration).
-    Step 4: CALL _execute_phase2_steps(ctx, steps).
+    Step 3: CALL init_run_facade_api(pipeline_name, dataset_key).
+    Step 4: CALL _execute_pipeline_steps(ctx, steps).
     Step 5: Log success and return exit code.
     """
 
@@ -99,8 +110,8 @@ def main() -> int:
     log.info("=" * 60)
 
     try:
-        # INTEGRACIÓN: Cargamos las configuraciones usando el Repositorio centralizado.
-        # Esto ejecuta el Deep Merge automático y resuelve perfiles dinámicamente en RAM.
+        # Load all target configurations using the centralized configuration repository.
+        # This triggers automatic deep merges and profile resolution tasks.
         log.info("[main] Resolving configuration files via YmlRepository...")
         pipeline_cfg = YmlRepository.load_pipeline_config(args.pipeline)
         dataset_cfg = YmlRepository.get_dataset_by_key(args.dataset)
@@ -108,14 +119,16 @@ def main() -> int:
 
         log.info(f"[main] Active Configuration Profile resolved to: '{active_profile}'")
 
-        # Inicializamos la fachada pasando las configuraciones ya procesadas y validadas
+        # Initialize the runtime facade orchestration engine context payload
         ctx = init_run_facade_api(
             pipeline_name=args.pipeline,
             dataset_key=args.dataset,
         )
+        # 🔄 POSICIÓN CORRECTA: Ahora que los logs están activos, el mensaje se registrará perfectamente
+        log.info("DEBUG: Registered generators: %s", list(get_registered_generators().keys()))
 
-        # Ejecutamos las etapas CRISP-DM solicitadas
-        ctx = _execute_phase2_steps(ctx, args.steps)
+        # Trigger execution loop for all requested CRISP-DM workflow blocks
+        ctx = _execute_pipeline_steps(ctx, args.steps)
 
     except Exception as exc:
         log.error("Execution failed: %s", exc, exc_info=True)

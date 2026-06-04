@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -55,18 +56,7 @@ class Phase3PreparationRunner:
     }
 
     def __init__(self, ctx: RunContext, step_key: str, step_cfg: dict[str, Any]) -> None:
-        """
-        Initialize the data‑preparation runner for a specific step.
-
-        Parameters
-        ----------
-        ctx : RunContext
-            Global execution context.
-        step_key : str
-            Identifier for the current pipeline step.
-        step_cfg : dict[str, Any]
-            Configuration dictionary for the step (including injected read_strategy).
-        """
+        """Initialize the data‑preparation runner for a specific step."""
         self.ctx: RunContext = ctx
         self.step_key: str = step_key
         self.step_cfg: dict[str, Any] = step_cfg
@@ -85,14 +75,7 @@ class Phase3PreparationRunner:
     # ──────────────────────────────────────────────────────────────────────────
 
     def run(self) -> RunContext:
-        """Execute the configured methods and techniques for this step.
-
-        Step 1: Load the input DataFrame from the previous phase/step.
-        Step 2: Iterate over methods → enabled techniques, apply each.
-        Step 3: Collect extra artifacts from techniques (e.g., fitted scaler).
-        Step 4: Persist all output artifacts via the registry.
-        Step 5: Return updated context.
-        """
+        """Execute the configured methods and techniques for this step."""
         log.info("[Phase3PreparationRunner] run step='%s'", self.step_key)
 
         # ── Step 1: load input DataFrame ───────────────────────────────────
@@ -133,19 +116,10 @@ class Phase3PreparationRunner:
     def _load_input_dataframe(self) -> Any:
         """Load the input DataFrame from the previous step's artifact.
 
-        For step 3.1 the input comes from phase2's train parquet.
-        For later steps it comes from the previous step's output artifact
-        (registered in ctx.artifacts).
-
-        Returns
-        -------
-        pd.DataFrame
-            Loaded DataFrame ready for the first technique.
+        Supports dynamic fallback scanning across past execution workspaces to allow
+        isolated step execution commands.
         """
-        import pandas as pd
-
         if self.step_key == StepsPhase.STEP_3_1.value:
-            # Step 1: load from phase2 output (defined in global read_strategy.input_source)
             input_config = self.step_cfg.get("input_source", {})
             train_path_rel = input_config.get("train_parquet")
             if not train_path_rel:
@@ -153,23 +127,52 @@ class Phase3PreparationRunner:
                 raise ValueError("Missing train_parquet in input_source for step 3.1")
             full_path = resolve_path(self.ctx.phase2_dir / train_path_rel)
             log.debug("[_load_input_dataframe] loading from phase2 artifact: %s", full_path)
+            df = load_parquet(str(full_path))
+            log.info("[_load_input_dataframe] loaded shape=%s", df.shape)
+            return df
         else:
-            # Step 2: retrieve artifact path from context registry
-            # Determine which artifact key to load based on step
-            input_artifact_key = self._get_input_artifact_key_for_step()
-            artifact_path = self.ctx.artifacts.get(input_artifact_key)
-            if not artifact_path:
-                log.error("[_load_input_dataframe] Artifact '%s' not found in context. "
-                          "Run previous step first.", input_artifact_key)
-                raise RuntimeError(f"Required artifact '{input_artifact_key}' missing. "
-                                   "Execute the preceding step.")
-            full_path = resolve_path(artifact_path)
-            log.debug("[_load_input_dataframe] loading from context artifact: %s", full_path)
+            # Determine previous target file based on the current step lineage context
+            if self.step_key == StepsPhase.STEP_3_2.value:
+                prev_file = "3.1.selection.selected_regression_train.parquet"
+            elif self.step_key == StepsPhase.STEP_3_3.value:
+                prev_file = "3.2.cleaning.cleaned_regression_train.parquet"
+            elif self.step_key == StepsPhase.STEP_3_5.value:
+                prev_file = "3.3.transformation.transformed_regression_train.parquet"
+            else:
+                raise ValueError(f"Unsupported step: {self.step_key}")
 
-        # Step 3: load parquet into DataFrame
-        df = load_parquet(str(full_path))
-        log.info("[_load_input_dataframe] loaded shape=%s", df.shape)
-        return df
+            # Strategy A: Check local path from current runtime folder first
+            full_path = resolve_path(self.base_dir / prev_file)
+            if full_path.exists():
+                log.debug("[_load_input_dataframe] MVP loading directly from current active run directory: %s", full_path)
+                df = load_parquet(str(full_path))
+                log.info("[_load_input_dataframe] loaded shape=%s", df.shape)
+                return df
+
+            # Strategy B: Dynamic fallback lookback traversal engine over historical runs
+            log.warning("[_load_input_dataframe] Artifact '%s' missing in active run workspace. Scanning history...", prev_file)
+
+            # Navigates up from 'outputs/runs/regression/phm2024/TIMESTAMP/phase3_data_preparation' to 'phm2024'
+            runs_root = self.base_dir.parent.parent
+            if runs_root.exists() and runs_root.is_dir():
+                # Sort historical timestamp folders by execution date
+                past_runs = sorted(
+                    [d for d in runs_root.iterdir() if d.is_dir()],
+                    key=os.path.getmtime,
+                    reverse=True
+                )
+
+                for run_dir in past_runs:
+                    candidate_file = run_dir / "phase3_data_preparation" / prev_file
+                    if candidate_file.exists():
+                        log.info("✅ [Standalone Fallback] Found missing data lineage file at: %s", candidate_file)
+                        df = load_parquet(str(candidate_file))
+                        log.info("[_load_input_dataframe] loaded shape=%s from fallback", df.shape)
+                        return df
+
+            # Absolute fail guard if dependencies cannot be resolved across the system
+            log.error("[_load_input_dataframe] Precursor dependency file '%s' could not be resolved.", prev_file)
+            raise FileNotFoundError(f"Missing upstream data target artifact: {prev_file}. Run preceding phases once.")
 
     def _get_input_artifact_key_for_step(self) -> str:
         """Return the artifact key that this step consumes."""
@@ -190,52 +193,39 @@ class Phase3PreparationRunner:
     # ──────────────────────────────────────────────────────────────────────────
 
     def _execute_technique(
-        self,
-        technique_name: str,
-        tech_cfg: dict[str, Any],
-        df: Any,
+            self,
+            technique_name: str,
+            tech_cfg: dict[str, Any],
+            df: Any,
     ) -> tuple[Any, dict[str, Any] | None]:
-        """Apply the feature function for a single technique.
-
-        Parameters
-        ----------
-        technique_name : str
-            Name from YAML (e.g. ``"dataset_definition"``).
-        tech_cfg : dict
-            Technique configuration including ``params`` and ``output``.
-        df : pd.DataFrame
-            Current DataFrame to process.
-
-        Returns
-        -------
-        tuple[Any, dict[str, Any] | None]
-            - Updated DataFrame.
-            - Optional extra artifact dict (e.g. ``{"scaler": fitted_scaler}``).
-        """
+        """Apply the feature function for a single technique."""
         func = self._TECHNIQUE_DISPATCH.get(technique_name)
         if func is None:
             log.warning("[_execute_technique] unknown technique '%s' – skipping", technique_name)
             return df, None
 
         params = tech_cfg.get("params", {})
-        output_dir = self.base_dir  # trace logs written by feature functions
+        output_dir = self.base_dir
 
         log.debug("[_execute_technique] calling '%s' with params=%s", technique_name, list(params.keys()))
 
-        # Special handling: some techniques return (df, extra_artifact)
         if technique_name in ("feature_scaling", "feature_engineering", "dataset_formatting"):
             df_new, extra = func(df, params, self.ctx, output_dir)
         elif technique_name == "data_split":
-            # data_split returns (train_df, val_df, extra)
             train_df, val_df, extra = func(df, params, self.ctx, output_dir)
-            # We need to persist both train and val. We'll pass the train_df as main,
-            # but we also need to store val_df in extra_artifacts for persistence.
             df_new = train_df
-            extra["val_df"] = val_df  # inject val_df for the registry to use
+            extra["val_df"] = val_df
             return df_new, extra
         else:
             df_new = func(df, params, self.ctx, output_dir)
             extra = None
+
+        # ── Normalizar llave del artifact extra para coincidir con el generador ──
+        if extra is not None and technique_name == "feature_scaling":
+            # feature_scaling devuelve {'scaler': scaler_obj}
+            # El generador espera context_data['fitted_scaler_regression_artifact'] con {'scaler': ...}
+            base_key = StepOutputArtifact.fitted_scaler_regression_artifact.value  # "fitted_scaler_regression_artifact"
+            extra = {base_key: {"scaler": extra["scaler"]}}
 
         return df_new, extra
 
@@ -244,37 +234,24 @@ class Phase3PreparationRunner:
     # ──────────────────────────────────────────────────────────────────────────
 
     def _persist_artifacts(self, df: Any, extra_artifacts: dict[str, Any]) -> None:
-        """Build the context_data payload and call write_output_artifacts.
-
-        The step's output_artifacts from YAML define what must be persisted.
-        We map each artifact key to the corresponding DataFrame or extra object.
-        """
+        """Build the context_data payload and call write_output_artifacts."""
         output_artifacts_cfg = self.step_cfg.get("output_artifacts", {})
         context_data: dict[str, Any] = {}
 
-        # Step 1: add the main DataFrame(s) to context_data
-        # For step 3.5 there are two parquet artifacts: train and val
         if self.step_key == StepsPhase.STEP_3_5.value:
-            # The main df is train_df; val_df is in extra_artifacts
             train_key = StepOutputArtifact.engineered_train_split.value
             val_key = StepOutputArtifact.engineered_val_split.value
             context_data[train_key] = df
             context_data[val_key] = extra_artifacts.get("val_df")
         else:
-            # Single main artifact: the final DataFrame
             main_artifact_key = self._get_main_artifact_key()
             if main_artifact_key:
                 context_data[main_artifact_key] = df
 
-
-        # Step 2: add extra artifacts (e.g., fitted scaler)
         for extra_key, extra_value in extra_artifacts.items():
-            if extra_key != "val_df":  # val_df already handled
-                # The extra artifact key from YAML for the scaler is
-                # "fitted_scaler_regression_artifact" (see StepOutputArtifact)
+            if extra_key != "val_df":
                 context_data[extra_key] = extra_value
 
-        # Step 3: call registry
         log.debug("[_persist_artifacts] Dispatching to registry with keys: %s", list(context_data.keys()))
         write_output_artifacts(
             ctx=self.ctx,
@@ -283,6 +260,7 @@ class Phase3PreparationRunner:
             base_dir=self.base_dir,
             **context_data,
         )
+
 
     def _get_main_artifact_key(self) -> str | None:
         """Return the artifact key for the main DataFrame of this step."""

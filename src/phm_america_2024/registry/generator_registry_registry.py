@@ -68,6 +68,9 @@ def write_output_artifacts(
         # Step 2: CALL _ARTIFACT_GENERATORS.get — retrieve mapped generator function
         generator = _ARTIFACT_GENERATORS.get((step_key, artifact_key))
 
+        log.info("DEBUG: Buscando generador para step_key='%s', artifact_key='%s'", step_key, artifact_key)
+        log.info("DEBUG: Registro actual contiene: %s", list(_ARTIFACT_GENERATORS.keys()))
+
         if generator:
             log.debug("[write_output_artifacts] Executing key='%s'", artifact_key)
             try:
@@ -111,3 +114,6 @@ def _register_artifact_path(
     # Step 3: CALL ctx.register_artifact — update the run context
     ctx.register_artifact(artifact_key, abs_path)
     log.debug("[_register_artifact_path] Registered '%s' to '%s'", artifact_key, abs_path)
+
+def get_registered_generators() -> dict:
+    return dict(_ARTIFACT_GENERATORS)

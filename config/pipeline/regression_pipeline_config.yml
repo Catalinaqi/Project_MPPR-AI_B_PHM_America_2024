@@ -61,8 +61,8 @@ regression_pipeline_config:
                 dataset_definition:
                   enabled: true
                   params:
-                    include: [ "oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured" ]
-                    patterns_to_drop: [ "id", "uuid", "log", "engine_id" ]
+                    include: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_margin","trq_measured" ]
+                    patterns_to_drop: [ "id"]
                   output: "3.1.selection.definition_trace_log.json"
                 feature_selection:
                   enabled: true
@@ -118,7 +118,7 @@ regression_pipeline_config:
                   params:
                     method: "RobustScaler"
                     fit_on_train_only: true
-                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured" ]
+                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_margin","trq_measured" ]
                   output: "3.3.transformation.scaler_fit_trace.json"
                 feature_engineering:
                   enabled: true
@@ -132,7 +132,7 @@ regression_pipeline_config:
                     interactions:
                       enabled: true
                       degree: 2
-                      features: [ "mgt", "ng", "Torque Measured", "np" ]
+                      features: [ "mgt", "ng", "trq_measured", "np" ]
                   output: "3.3.transformation.engineering_formulas_log.json"
           output_artifacts:
             transformed_regression_train_parquet:
