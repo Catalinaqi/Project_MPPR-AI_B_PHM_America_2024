@@ -16,6 +16,10 @@ from phm_america_2024.api.execution_facade_api import (
     run_3_2_data_cleaning,
     run_3_3_data_transformation,
     run_3_5_data_formatting,
+    run_4_1_algorithm_selection,
+    run_4_2_model_training,
+    run_4_4_model_evaluation,
+
 )
 from phm_america_2024.common.logging_adapter_common import get_logger
 
@@ -55,7 +59,7 @@ def _parse_args() -> argparse.Namespace:
         "--steps",
         nargs="*",
         default=["2.1"],
-        choices=["2.1", "2.2", "2.3", "2.4", "3.1", "3.2", "3.3", "3.5", "4.1", "4.2", "4.3", "4.4", "4.5"],
+        choices=["2.1", "2.2", "2.3", "2.4", "3.1", "3.2", "3.3", "3.5", "4.1", "4.2", "4.4", "4.5"],
         help="Phase steps to execute (e.g. '2.1' '2.2'). Default: '2.1'",
     )
     return parser.parse_args()
@@ -77,10 +81,14 @@ def _execute_pipeline_steps(ctx: Any, steps: list[str]) -> Any:
         "3.2": ("Data Cleaning", run_3_2_data_cleaning),
         "3.3": ("Data Transformation", run_3_3_data_transformation),
         "3.5": ("Data Formatting", run_3_5_data_formatting),
+        "4.1": ("Algorithm Selection", run_4_1_algorithm_selection),
+        "4.2": ("Model Training", run_4_2_model_training),
+        "4.4": ("Model Evaluation", run_4_4_model_evaluation),
     }
 
     # Strict operational sequence order for the pipeline execution loop
-    execution_sequence = ["2.1", "2.2", "2.3", "2.4", "3.1", "3.2", "3.3", "3.5"]
+    execution_sequence = ["2.1", "2.2", "2.3", "2.4", "3.1", "3.2", "3.3", "3.5",
+                          "4.1", "4.2", "4.4"]
 
     for step_key in execution_sequence:
         if step_key in steps:

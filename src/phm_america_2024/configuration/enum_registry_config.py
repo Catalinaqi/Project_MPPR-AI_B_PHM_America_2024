@@ -228,6 +228,14 @@ class StepOutputArtifact(str, Enum):
     engineered_train_split = "engineered_train_split"
     engineered_val_split = "engineered_val_split"
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Phase 4 – Modeling (from regression_pipeline_config.yml)
+    # ──────────────────────────────────────────────────────────────────────────
+    # Step 4.2 – Model Training
+    trained_ngboost_model = "trained_ngboost_model"
+    # Step 4.4 – Model Evaluation
+    best_regression_model_metadata = "best_regression_model_metadata"
+
 
 class StepsPhase(str, Enum):  # noqa: D101
     STEP_2_1 = "step_2_1_data_acquisition"
@@ -240,10 +248,8 @@ class StepsPhase(str, Enum):  # noqa: D101
     STEP_3_4 = "step_3_4_data_integration"
     STEP_3_5 = "step_3_5_data_formatting"
     STEP_4_1 = "step_4_1_algorithm_selection"
-    STEP_4_2 = "step_4_2_pretrain_analysis"
-    STEP_4_3 = "step_4_3_model_training"
-    STEP_4_4 = "step_4_4_test_design"
-    STEP_4_5 = "step_4_5_model_evaluation"
+    STEP_4_2 = "step_4_2_model_training"
+    STEP_4_4 = "step_4_4_model_evaluation"
     STEP_5_1 = "step_5_1_interpretation"
     STEP_5_2 = "step_5_2_business_evaluation"
     STEP_5_3 = "step_5_3_process_audit"

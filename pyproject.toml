@@ -17,6 +17,7 @@ dependencies = [
     "omegaconf (>=2.3.0,<3.0.0)",
     "pydantic (>=2.13.4,<3.0.0)",
     "pyarrow (>=24.0.0,<25.0.0)",
+    "ngboost (>=0.5.10,<0.6.0)",
 ]
 
 

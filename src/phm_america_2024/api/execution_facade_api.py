@@ -306,3 +306,24 @@ def run_3_5_data_formatting(ctx: RunContext) -> RunContext:
         log.warning("[run_3_5_data_formatting] done df_train_split not available")
 
     return ctx
+
+def run_4_1_algorithm_selection(ctx: RunContext) -> RunContext:
+    log.info("[run_4_1_algorithm_selection] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_4_1)
+    log.debug("[run_4_1_algorithm_selection] completed")
+    log.info("[run_4_1_algorithm_selection] done")
+    return ctx
+
+def run_4_2_model_training(ctx: RunContext) -> RunContext:
+    log.info("[run_4_2_model_training] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_4_2)
+    log.debug("[run_4_2_model_training] completed")
+    log.info("[run_4_2_model_training] done")
+    return ctx
+
+def run_4_4_model_evaluation(ctx: RunContext) -> RunContext:
+    log.info("[run_4_4_model_evaluation] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_4_4)
+    log.debug("[run_4_4_model_evaluation] completed")
+    log.info("[run_4_4_model_evaluation] done")
+    return ctx

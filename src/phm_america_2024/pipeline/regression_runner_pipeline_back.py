@@ -5,12 +5,15 @@ from phm_america_2024.common.context_facade_common import RunContext
 from phm_america_2024.configuration.enum_registry_config import StepsPhase
 from phm_america_2024.phase.phase2_understanding_runner_phase import Phase2DataUnderstandingRunner
 from phm_america_2024.phase.phase3_preparation_runner_phase import Phase3PreparationRunner
+from phm_america_2024.phase.phase4_modeling_runner_phase import Phase4ModelingRunner
 
 log = get_logger(__name__)
 
-# Build prefix sets from StepsPhase enum – single source of truth
+# Build prefix sets from StepsPhase enum
 _PHASE2_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_2_")}
 _PHASE3_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_3_")}
+_PHASE4_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_4_")}
+
 
 
 def run_regression_pipeline(ctx: RunContext, steps: list[str]) -> RunContext:
@@ -27,8 +30,8 @@ def run_regression_pipeline(ctx: RunContext, steps: list[str]) -> RunContext:
 
     for step_name in steps:
         try:
-            # Step 1: check if step belongs to Phase 2 or Phase 3
-            if step_name in _PHASE2_STEPS or step_name in _PHASE3_STEPS:
+            # Step 1: check if step belongs to Phase 2 or Phase 3 or Phase 4
+            if step_name in _PHASE2_STEPS or step_name in _PHASE3_STEPS  or step_name in _PHASE4_STEPS:
                 ctx = _exec_step(ctx, step_name)
             else:
                 log.warning(
@@ -77,6 +80,9 @@ def _exec_step(ctx: RunContext, step_key: str) -> RunContext:
     elif step_key.startswith("step_3_"):
         phase_config_key = "phase3_data_preparation"
         runner_cls = Phase3PreparationRunner
+    elif step_key.startswith("step_4_"):
+        phase_config_key = "phase4_data_modeling"
+        runner_cls = Phase4ModelingRunner
     else:
         log.error("[_exec_step] unknown phase for step_key='%s'", step_key)
         raise ValueError(f"Unknown phase for step: {step_key}")
