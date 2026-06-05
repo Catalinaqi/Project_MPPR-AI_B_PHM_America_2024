@@ -32,4 +32,7 @@ packages = [
 [tool.poetry.group.dev.dependencies]
 python-dotenv = "^1.2.2"
 omegaconf = "^2.3.0"
+ruff = "^0.15.16"
+mypy = "^2.1.0"
+deptry = "^0.25.1"
 

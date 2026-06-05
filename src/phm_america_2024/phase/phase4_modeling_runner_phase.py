@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import os
 import json
-import yaml
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from phm_america_2024.common.logging_adapter_common import get_logger
-from phm_america_2024.common.context_facade_common import RunContext
+from phm_america_2024.pipeline.utils.context_facade_common import RunContext
 from phm_america_2024.common.path_service_common import resolve_path
-from phm_america_2024.data.load_loader_data import load_parquet, load_pickle_joblib
+from phm_america_2024.common.io_service_common import load_parquet, load_pickle_joblib
 from phm_america_2024.registry.generator_registry_registry import write_output_artifacts
-from phm_america_2024.configuration.enum_registry_config import StepsPhase, StepOutputArtifact
+from phm_america_2024.domain.enum_registry_domain import StepsPhase, StepOutputArtifact
 
-from phm_america_2024.model.algorithm_selector_model import single_probabilistic_architecture
+from phm_america_2024.model.algorithm_selector_model import (
+    single_probabilistic_architecture,
+)
 from phm_america_2024.model.regression_trainer_model import cross_validation
 from phm_america_2024.model.regression_evaluator_model import model_selection_criteria
 
@@ -29,7 +30,9 @@ class Phase4ModelingRunner:
         "model_selection_criteria": model_selection_criteria,
     }
 
-    def __init__(self, ctx: RunContext, step_key: str, step_cfg: Dict[str, Any]) -> None:
+    def __init__(
+        self, ctx: RunContext, step_key: str, step_cfg: Dict[str, Any]
+    ) -> None:
         """Initialize the modeling runner phase.
 
         Args:
@@ -47,10 +50,16 @@ class Phase4ModelingRunner:
         self.base_dir: Path = getattr(ctx, "phase4_dir", None)
 
         if self.base_dir is None:
-            log.error("[Phase4ModelingRunner] YAML key missing or context error: phase4_dir is None")
+            log.error(
+                "[Phase4ModelingRunner] YAML key missing or context error: phase4_dir is None"
+            )
             raise RuntimeError("phase4_dir missing from RunContext")
 
-        log.debug("[Phase4ModelingRunner] init step='%s' base_dir='%s'", self.step_key, self.base_dir)
+        log.debug(
+            "[Phase4ModelingRunner] init step='%s' base_dir='%s'",
+            self.step_key,
+            self.base_dir,
+        )
 
     def run(self) -> RunContext:
         """Run the configured techniques for this phase.
@@ -68,20 +77,31 @@ class Phase4ModelingRunner:
         extra_artifacts: Dict[str, Any] = {}
 
         # Step 2: CALL getattr() — retrieve cached algorithm configuration from memory
-        algorithm_config_cache: Optional[Dict[str, Any]] = getattr(self.ctx, "algorithm_config", None)
+        algorithm_config_cache: Optional[Dict[str, Any]] = getattr(
+            self.ctx, "algorithm_config", None
+        )
         if algorithm_config_cache is not None:
             log.debug("[Phase4ModelingRunner] algorithm_config found in context cache")
         else:
             log.debug("[Phase4ModelingRunner] algorithm_config not in cache")
 
         # Step 3: CALL _load_algorithm_config_from_disk() — fallback to disk if running granularly
-        if algorithm_config_cache is None and self.step_key == StepsPhase.STEP_4_2.value:
-            log.warning("[Phase4ModelingRunner] algorithm_config missing from cache – attempting disk load for independent execution")
+        if (
+            algorithm_config_cache is None
+            and self.step_key == StepsPhase.STEP_4_2.value
+        ):
+            log.warning(
+                "[Phase4ModelingRunner] algorithm_config missing from cache – attempting disk load for independent execution"
+            )
             algorithm_config_cache = self._load_algorithm_config_from_disk()
             if algorithm_config_cache is not None:
-                log.info("[Phase4ModelingRunner] algorithm_config successfully loaded from disk")
+                log.info(
+                    "[Phase4ModelingRunner] algorithm_config successfully loaded from disk"
+                )
             else:
-                log.error("[Phase4ModelingRunner] algorithm_config could not be loaded from disk – step will fail")
+                log.error(
+                    "[Phase4ModelingRunner] algorithm_config could not be loaded from disk – step will fail"
+                )
 
         # Step 4: CALL get() — extract methods dictionary from config
         methods: Dict[str, Any] = self.step_cfg.get("methods", {})
@@ -90,19 +110,28 @@ class Phase4ModelingRunner:
         # Step 5: CALL items() — iterate over configured methods
         for method_name, method_cfg in methods.items():
             if not method_cfg.get("enabled", True):
-                log.debug("[Phase4ModelingRunner] method '%s' disabled – skip", method_name)
+                log.debug(
+                    "[Phase4ModelingRunner] method '%s' disabled – skip", method_name
+                )
                 continue
 
             log.info("[Phase4ModelingRunner] executing method='%s'", method_name)
 
             # Step 6: CALL get() — extract techniques dictionary from method
             techniques: Dict[str, Any] = method_cfg.get("techniques", {})
-            log.debug("[Phase4ModelingRunner] techniques in method '%s': %s", method_name, list(techniques.keys()))
+            log.debug(
+                "[Phase4ModelingRunner] techniques in method '%s': %s",
+                method_name,
+                list(techniques.keys()),
+            )
 
             # Step 7: CALL items() — iterate over configured techniques
             for tech_name, tech_cfg in techniques.items():
                 if not tech_cfg.get("enabled", True):
-                    log.debug("[Phase4ModelingRunner] technique '%s' disabled – skip", tech_name)
+                    log.debug(
+                        "[Phase4ModelingRunner] technique '%s' disabled – skip",
+                        tech_name,
+                    )
                     continue
 
                 log.info("[Phase4ModelingRunner] executing technique='%s'", tech_name)
@@ -113,7 +142,11 @@ class Phase4ModelingRunner:
                 )
 
                 if art is not None:
-                    log.debug("[Phase4ModelingRunner] technique '%s' returned artifacts: %s", tech_name, list(art.keys()))
+                    log.debug(
+                        "[Phase4ModelingRunner] technique '%s' returned artifacts: %s",
+                        tech_name,
+                        list(art.keys()),
+                    )
 
                     # Step 9: CALL update() — merge output artifacts
                     extra_artifacts.update(art)
@@ -122,11 +155,20 @@ class Phase4ModelingRunner:
                         algorithm_config_cache = art["algorithm_config"]
                         # Step 10: CALL setattr() — persist algorithm configuration in context
                         setattr(self.ctx, "algorithm_config", algorithm_config_cache)
-                        log.debug("[Phase4ModelingRunner] algorithm_config cached in context from technique '%s'", tech_name)
+                        log.debug(
+                            "[Phase4ModelingRunner] algorithm_config cached in context from technique '%s'",
+                            tech_name,
+                        )
                 else:
-                    log.debug("[Phase4ModelingRunner] technique '%s' returned no artifacts", tech_name)
+                    log.debug(
+                        "[Phase4ModelingRunner] technique '%s' returned no artifacts",
+                        tech_name,
+                    )
 
-        log.debug("[Phase4ModelingRunner] all techniques completed – extra_artifacts keys: %s", list(extra_artifacts.keys()))
+        log.debug(
+            "[Phase4ModelingRunner] all techniques completed – extra_artifacts keys: %s",
+            list(extra_artifacts.keys()),
+        )
 
         # Step 11: CALL _persist_artifacts() — serialize phase results
         self._persist_artifacts(df, extra_artifacts)
@@ -147,11 +189,19 @@ class Phase4ModelingRunner:
             artifact_filename = "4.1.modeling.algo_setup_trace.json"
             artifact_path: Path = self.base_dir / artifact_filename
 
-            log.debug("[_load_algorithm_config_from_disk] Looking for artifact at: %s", artifact_path)
+            log.debug(
+                "[_load_algorithm_config_from_disk] Looking for artifact at: %s",
+                artifact_path,
+            )
 
             if not artifact_path.exists():
-                log.error("[_load_algorithm_config_from_disk] Artifact file not found: %s", artifact_path)
-                log.error("Did you forget to pass --resume_run <run_id> or execute step 4.1 first?")
+                log.error(
+                    "[_load_algorithm_config_from_disk] Artifact file not found: %s",
+                    artifact_path,
+                )
+                log.error(
+                    "Did you forget to pass --resume_run <run_id> or execute step 4.1 first?"
+                )
                 return None
 
             # Deserializar JSON artifact
@@ -159,17 +209,26 @@ class Phase4ModelingRunner:
                 trace_data: Dict[str, Any] = json.load(f)
 
             # Extraemos la configuración del modelo de adentro del JSON
-            model_configured: Optional[Dict[str, Any]] = trace_data.get("model_configured")
+            model_configured: Optional[Dict[str, Any]] = trace_data.get(
+                "model_configured"
+            )
 
-            log.debug("[_load_algorithm_config_from_disk] model_configured keys: %s",
-                      list(model_configured.keys()) if model_configured else None)
-            log.info("[_load_algorithm_config_from_disk] successfully loaded config from disk")
+            log.debug(
+                "[_load_algorithm_config_from_disk] model_configured keys: %s",
+                list(model_configured.keys()) if model_configured else None,
+            )
+            log.info(
+                "[_load_algorithm_config_from_disk] successfully loaded config from disk"
+            )
             log.debug("[_load_algorithm_config_from_disk] exit")
 
             return model_configured
 
         except Exception as e:
-            log.error("[_load_algorithm_config_from_disk] failed to load configuration from disk: %s", e)
+            log.error(
+                "[_load_algorithm_config_from_disk] failed to load configuration from disk: %s",
+                e,
+            )
             return None
 
     def _get_explicit_train_path(self) -> str:
@@ -184,16 +243,26 @@ class Phase4ModelingRunner:
 
         # Step 1: CALL get() — extract read strategy from step config
         read_strategy: Dict[str, Any] = self.step_cfg.get("read_strategy", {})
-        log.debug("[_get_explicit_train_path] read_strategy from step_cfg: %s", bool(read_strategy))
+        log.debug(
+            "[_get_explicit_train_path] read_strategy from step_cfg: %s",
+            bool(read_strategy),
+        )
 
         if not read_strategy and hasattr(self.ctx, "phase_cfg"):
-            log.debug("[_get_explicit_train_path] read_strategy not in step_cfg – falling back to phase_cfg")
+            log.debug(
+                "[_get_explicit_train_path] read_strategy not in step_cfg – falling back to phase_cfg"
+            )
             # Step 2: CALL getattr() — fallback to phase config
             read_strategy = getattr(self.ctx, "phase_cfg", {}).get("read_strategy", {})
-            log.debug("[_get_explicit_train_path] read_strategy from phase_cfg: %s", bool(read_strategy))
+            log.debug(
+                "[_get_explicit_train_path] read_strategy from phase_cfg: %s",
+                bool(read_strategy),
+            )
 
         if not read_strategy:
-            log.error("[_get_explicit_train_path] YAML key missing: read_strategy not found in step or phase config")
+            log.error(
+                "[_get_explicit_train_path] YAML key missing: read_strategy not found in step or phase config"
+            )
             raise ValueError("read_strategy must be defined in YAML configuration.")
 
         # Step 3: CALL get() — extract input source dictionary
@@ -201,10 +270,14 @@ class Phase4ModelingRunner:
 
         # Step 4: CALL get() — extract train_data path string
         explicit_train: Optional[str] = input_source.get("train_data")
-        log.debug("[_get_explicit_train_path] resolved train_data path: %s", explicit_train)
+        log.debug(
+            "[_get_explicit_train_path] resolved train_data path: %s", explicit_train
+        )
 
         if not explicit_train:
-            log.error("[_get_explicit_train_path] YAML key missing: train_data not found under input_source")
+            log.error(
+                "[_get_explicit_train_path] YAML key missing: train_data not found under input_source"
+            )
             raise ValueError("train_data must be defined under input_source in YAML.")
 
         log.debug("[_get_explicit_train_path] exit")
@@ -227,8 +300,13 @@ class Phase4ModelingRunner:
 
             # Step 2: CALL exists() — verify file presence
             if not os.path.exists(explicit_train):
-                log.error("[_load_input_dataframe] train data file not found: %s", explicit_train)
-                raise FileNotFoundError(f"Configured train_data path does not exist: {explicit_train}")
+                log.error(
+                    "[_load_input_dataframe] train data file not found: %s",
+                    explicit_train,
+                )
+                raise FileNotFoundError(
+                    f"Configured train_data path does not exist: {explicit_train}"
+                )
 
             log.info("[_load_input_dataframe] using train_data: %s", explicit_train)
 
@@ -237,19 +315,31 @@ class Phase4ModelingRunner:
 
             # Step 4: CALL load_parquet() — deserialize dataframe
             df: Any = load_parquet(str(path))
-            log.info("[_load_input_dataframe] loaded shape=%s", getattr(df, "shape", "N/A"))
+            log.info(
+                "[_load_input_dataframe] loaded shape=%s", getattr(df, "shape", "N/A")
+            )
 
         elif step_val == StepsPhase.STEP_4_4.value:
             # Step 5: CALL extract dynamic path from configuration
             try:
                 phase_cfg = self.ctx.config.phases["phase4_data_modeling"]
                 step_4_2_cfg = phase_cfg["steps"]["step_4_2_model_training"]
-                model_path_str: str = step_4_2_cfg["output_artifacts"]["trained_ngboost_model"]["path"]
+                model_path_str: str = step_4_2_cfg["output_artifacts"][
+                    "trained_ngboost_model"
+                ]["path"]
             except (KeyError, AttributeError) as e:
-                log.error("[_load_input_dataframe] Error dynamically resolving model path: %s", e)
-                raise ValueError("Could not extract trained_ngboost_model path from configuration.")
+                log.error(
+                    "[_load_input_dataframe] Error dynamically resolving model path: %s",
+                    e,
+                )
+                raise ValueError(
+                    "Could not extract trained_ngboost_model path from configuration."
+                )
 
-            log.debug("[_load_input_dataframe] model_data path from config: %s", model_path_str)
+            log.debug(
+                "[_load_input_dataframe] model_data path from config: %s",
+                model_path_str,
+            )
 
             # Step 6: CALL resolve_path() — normalize model path object
             path_model: Path = resolve_path(self.ctx.phase4_dir / model_path_str)
@@ -267,11 +357,11 @@ class Phase4ModelingRunner:
         return df
 
     def _execute_technique(
-            self,
-            technique_name: str,
-            tech_cfg: Dict[str, Any],
-            df: Any,
-            algorithm_config: Optional[Dict[str, Any]] = None
+        self,
+        technique_name: str,
+        tech_cfg: Dict[str, Any],
+        df: Any,
+        algorithm_config: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, Optional[Dict[str, Any]]]:
         """Dispatch to the specific technique function.
 
@@ -289,11 +379,17 @@ class Phase4ModelingRunner:
         func = self._TECHNIQUE_DISPATCH.get(technique_name)
 
         if func is None:
-            log.warning("[_execute_technique] unknown technique '%s' – skipping", technique_name)
+            log.warning(
+                "[_execute_technique] unknown technique '%s' – skipping", technique_name
+            )
             return df, None
 
         output_dir: Path = self.base_dir
-        log.debug("[_execute_technique] dispatching to '%s' output_dir='%s'", technique_name, output_dir)
+        log.debug(
+            "[_execute_technique] dispatching to '%s' output_dir='%s'",
+            technique_name,
+            output_dir,
+        )
 
         if technique_name == "model_selection_criteria":
             # Step 2: CALL func() — execute evaluation logic passing full tech_cfg
@@ -303,9 +399,14 @@ class Phase4ModelingRunner:
             return model, extra
 
         elif technique_name == "cross_validation":
-            log.debug("[_execute_technique] algorithm_config present: %s", algorithm_config is not None)
+            log.debug(
+                "[_execute_technique] algorithm_config present: %s",
+                algorithm_config is not None,
+            )
             # Step 3: CALL func() — execute training logic passing full tech_cfg
-            df_new, extra = func(df, tech_cfg, self.ctx, output_dir, algorithm_config=algorithm_config)
+            df_new, extra = func(
+                df, tech_cfg, self.ctx, output_dir, algorithm_config=algorithm_config
+            )
             log.info("[_execute_technique] '%s' completed", technique_name)
             log.debug("[_execute_technique] exit")
             return df_new, extra
@@ -326,28 +427,51 @@ class Phase4ModelingRunner:
         Returns:
             None
         """
-        log.debug("[_persist_artifacts] entry step='%s' artifacts=%s", self.step_key, list(extra_artifacts.keys()))
+        log.debug(
+            "[_persist_artifacts] entry step='%s' artifacts=%s",
+            self.step_key,
+            list(extra_artifacts.keys()),
+        )
         context_data: Dict[str, Any] = {}
 
         if self.step_key == StepsPhase.STEP_4_2.value:
             # Step 1: CALL get() — extract trained model from artifacts
             trained_model = extra_artifacts.get("trained_model")
             context_data[StepOutputArtifact.trained_ngboost_model.value] = trained_model
-            log.debug("[_persist_artifacts] trained_model present: %s", trained_model is not None)
+            log.debug(
+                "[_persist_artifacts] trained_model present: %s",
+                trained_model is not None,
+            )
 
         elif self.step_key == StepsPhase.STEP_4_4.value:
             # Step 2: CALL get() — extract evaluation metadata from artifacts
             best_metadata = extra_artifacts.get("best_model_metadata")
-            context_data[StepOutputArtifact.best_regression_model_metadata.value] = best_metadata
-            log.debug("[_persist_artifacts] best_model_metadata present: %s", best_metadata is not None)
+            context_data[StepOutputArtifact.best_regression_model_metadata.value] = (
+                best_metadata
+            )
+            log.debug(
+                "[_persist_artifacts] best_model_metadata present: %s",
+                best_metadata is not None,
+            )
 
         # Step 3: CALL update() — consolidate remaining artifacts
         remaining = {k: v for k, v in extra_artifacts.items() if k != "trained_model"}
         context_data.update(remaining)
-        log.debug("[_persist_artifacts] final context_data keys: %s", list(context_data.keys()))
+        log.debug(
+            "[_persist_artifacts] final context_data keys: %s",
+            list(context_data.keys()),
+        )
 
         # Step 4: CALL write_output_artifacts() — serialize data to output directory
-        write_output_artifacts(self.ctx, self.step_key, self.step_cfg, self.base_dir, **context_data)
+        write_output_artifacts(
+            self.ctx,
+            self.step_key,
+            self.step_cfg,
+            self.base_dir,
+            **context_data,
+        )
 
-        log.info("[_persist_artifacts] artifacts persisted for step='%s'", self.step_key)
+        log.info(
+            "[_persist_artifacts] artifacts persisted for step='%s'", self.step_key
+        )
         log.debug("[_persist_artifacts] exit")

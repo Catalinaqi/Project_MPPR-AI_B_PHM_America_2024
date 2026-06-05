@@ -79,7 +79,7 @@ from typing import Optional
 # =============================================================================
 # SECTION 3 – Internal imports
 # =============================================================================
-from phm_america_2024.common.enum_registry_common import LogLevel, normalize_log_level
+from phm_america_2024.domain.enum_registry_domain import LogLevel, normalize_log_level
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SECTION 4 — Level logger

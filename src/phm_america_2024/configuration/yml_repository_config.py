@@ -7,6 +7,11 @@ from omegaconf import OmegaConf, DictConfig
 from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.common.path_service_common import find_project_root
 
+"""
+Handles I/O operations for YAML configurations, leveraging OmegaConf for dynamic 
+interpolation and deep merging of base and task-specific files.
+"""
+
 log = get_logger(__name__)
 
 class YmlRepository:

@@ -19,6 +19,10 @@ from phm_america_2024.api.execution_facade_api import (
     run_4_1_algorithm_selection,
     run_4_2_model_training,
     run_4_4_model_evaluation,
+    run_5_1_interpretation,
+    run_5_2_probabilistic_evaluation,
+    run_5_3_process_audit,
+    run_5_4_decision_making
 
 )
 from phm_america_2024.common.logging_adapter_common import get_logger
@@ -29,6 +33,7 @@ from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.registry import phase2_generator_registry
 from phm_america_2024.registry import phase3_generator_registry
 from phm_america_2024.registry import phase4_generator_registry
+from phm_america_2024.registry import phase5_generator_registry
 
 from phm_america_2024.registry.generator_registry_registry import get_registered_generators
 
@@ -68,7 +73,8 @@ def _parse_args() -> argparse.Namespace:
         "--steps",
         nargs="*",
         default=["2.1"],
-        choices=["2.1", "2.2", "2.3", "2.4", "3.1", "3.2", "3.3", "3.5", "4.1", "4.2", "4.4", "4.5"],
+        choices=["2.1", "2.2", "2.3", "2.4", "3.1", "3.2", "3.3", "3.5", "4.1",
+                 "4.2", "4.4", "4.5","5.1","5.2","5.3","5.4"],
         help="Phase steps to execute (e.g. '2.1' '2.2'). Default: '2.1'",
     )
     return parser.parse_args()
@@ -93,11 +99,15 @@ def _execute_pipeline_steps(ctx: Any, steps: list[str]) -> Any:
         "4.1": ("Algorithm Selection", run_4_1_algorithm_selection),
         "4.2": ("Model Training", run_4_2_model_training),
         "4.4": ("Model Evaluation", run_4_4_model_evaluation),
+        "5.1": ("Interpretation", run_5_1_interpretation),
+        "5.2": ("Probabilistic Evaluation", run_5_2_probabilistic_evaluation),
+        "5.3": ("Process Audit", run_5_3_process_audit),
+        "5.4": ("Decision Making", run_5_4_decision_making),
     }
 
     # Strict operational sequence order for the pipeline execution loop
     execution_sequence = ["2.1", "2.2", "2.3", "2.4", "3.1", "3.2", "3.3", "3.5",
-                          "4.1", "4.2", "4.4"]
+                          "4.1", "4.2", "4.4","5.1", "5.2", "5.3", "5.4",]
 
     for step_key in execution_sequence:
         if step_key in steps:

@@ -6,10 +6,10 @@ from typing import Any
 import joblib
 
 from phm_america_2024.registry.generator_registry_registry import register_artifact
-from phm_america_2024.data.persist_persister_data import save_json, save_parquet
+from phm_america_2024.common.io_service_common import save_json
 from phm_america_2024.common.path_service_common import resolve_path
 from phm_america_2024.common.logging_adapter_common import get_logger
-from phm_america_2024.configuration.enum_registry_config import StepsPhase, StepOutputArtifact
+from phm_america_2024.domain.enum_registry_domain import StepsPhase, StepOutputArtifact
 
 log = get_logger(__name__)
 

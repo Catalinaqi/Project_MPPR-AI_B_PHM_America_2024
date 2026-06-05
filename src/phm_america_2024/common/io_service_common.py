@@ -1,18 +1,20 @@
-# src/phm_america_2024/data/persist_persister_data.py
+# src/phm_america_2024/data/io_service_common.py
 from __future__ import annotations
 
 import json
 import pickle
 from pathlib import Path
-from typing import Any, cast
-
+from typing import Any, cast, Optional, Tuple
+import joblib
 import numpy as np
 import pandas as pd
 from omegaconf import Container, DictConfig, ListConfig, OmegaConf
 
 from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.common.path_service_common import resolve_path
-from phm_america_2024.configuration.enum_registry_config import Phase
+
+
+# io: input/output (write/read artifacts to disk)
 
 log = get_logger(__name__)
 
@@ -293,3 +295,77 @@ def save_numpy(
         resolved,
     )
     return resolved
+
+# -----------------------------------------------------------------------------
+# Existing artifact loaders (Parquet/Pickle) kept below...
+# -----------------------------------------------------------------------------
+
+def load_parquet(path: str | Path, *, columns: Optional[list[str]] = None) -> pd.DataFrame:
+    # Step 1: Resolve path to absolute location
+    resolved = resolve_path(path)
+    log.debug("[load_parquet] path=%s columns=%s", resolved, columns)
+
+    # Step 2: Validate file existence
+    if not resolved.exists():
+        log.error("[load_parquet] parquet file not found path=%s", resolved)
+        raise FileNotFoundError(f"Parquet file not found: {resolved}")
+
+    # Step 3: Load parquet dataframe
+    try:
+        log.info("[load_parquet] loading path=%s", resolved)
+        df: pd.DataFrame = pd.read_parquet(resolved, columns=columns)
+    except Exception:
+        log.exception("[load_parquet] read_parquet failed path=%s", resolved)
+        raise
+
+    # Step 4: Return loaded dataframe
+    log.info("[load_parquet] loaded rows=%d cols=%d path=%s", len(df), df.shape[1], resolved)
+    return df
+
+
+def load_pickle(path: str | Path) -> Any:
+    # Step 1: Resolve path to absolute location
+    resolved: Path = resolve_path(path)
+    log.debug("[load_pickle] resolved path=%s", resolved)
+
+    # Step 2: Validate file existence
+    if not resolved.exists():
+        log.error("[load_pickle] pickle file not found path=%s", resolved)
+        raise FileNotFoundError(f"Pickle file not found: {resolved}")
+
+    # Step 3: Log file size
+    size_mb: float = resolved.stat().st_size / (1024**2)
+    log.info("[load_pickle] loading size_mb=%.3f path=%s", size_mb, resolved)
+
+    # Step 4: Deserialise object
+    try:
+        with resolved.open("rb") as fh:
+            obj: Any = pickle.load(fh)  # noqa: S301
+    except Exception:
+        log.exception("[load_pickle] pickle.load failed path=%s", resolved)
+        raise
+
+    # Step 5: Return deserialised object
+    log.info("[load_pickle] loaded object_type=%s path=%s", type(obj).__name__, resolved)
+    return obj
+
+
+
+def load_pickle_joblib(path: str) -> Any:
+    """Load a serialized Python object (pickle/joblib) from disk."""
+    resolved = resolve_path(Path(path))
+
+    if not resolved.exists():
+        log.error(f"[load_pickle] pickle file not found path={resolved}")
+        raise FileNotFoundError(f"Pickle file not found: {resolved}")
+
+    size_mb = resolved.stat().st_size / (1024 * 1024)
+    log.info(f"[load_pickle] loading size_mb={size_mb:.3f} path={resolved}")
+
+    try:
+        # Usar joblib en lugar de pickle nativo (Estándar para ML/NGBoost)
+        obj: Any = joblib.load(str(resolved))
+        return obj
+    except Exception as e:
+        log.error(f"[load_pickle] load failed path={resolved} error={e}")
+        raise

@@ -7,9 +7,14 @@ from omegaconf import DictConfig, OmegaConf
 from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.configuration.yml_repository_config import YmlRepository
 from phm_america_2024.configuration.pipeline_task_dto_config import PipelineConfig
-from phm_america_2024.configuration.enum_registry_config import StepsPhase,ProblemType
+from phm_america_2024.domain.enum_registry_domain import ProblemType
 
 log = get_logger(__name__)
+
+"""
+The central orchestrator that merges base YAMLs, task-specific YAMLs, and 
+active profiles, ultimately enforcing Pydantic structural validation before runtime.
+"""
 
 DEFAULT_OUTPUT_ROOT = "outputs"
 

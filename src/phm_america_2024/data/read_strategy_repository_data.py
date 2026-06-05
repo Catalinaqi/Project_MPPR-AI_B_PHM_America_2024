@@ -1,14 +1,18 @@
-# src/phm_america_2024/configuration/read_strategy_repository_config.py
+# src/phm_america_2024/configuration/read_strategy_repository_data.py
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from phm_america_2024.common.logging_adapter_common import get_logger
-from phm_america_2024.configuration.enum_registry_config import ReadMode, normalize_read_mode
+from phm_america_2024.domain.enum_registry_domain import ReadMode, normalize_read_mode
 
 log = get_logger(__name__)
 
+"""
+Strongly typed immutable contracts (Dataclasses) that strictly parse and validate 
+how data should be ingested, sampled, and chunked.
+"""
 
 @dataclass(frozen=True)
 class ReadStrategyContract:

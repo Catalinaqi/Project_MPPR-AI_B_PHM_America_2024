@@ -39,8 +39,8 @@ from omegaconf import DictConfig
 # SECTION 3 – Internal imports
 # =============================================================================
 from phm_america_2024.common.logging_adapter_common import get_logger
-from phm_america_2024.common.path_service_common import find_project_root, resolve_path
-from phm_america_2024.configuration.enum_registry_config import Phase
+from phm_america_2024.common.path_service_common import resolve_path
+from phm_america_2024.domain.enum_registry_domain import Phase
 # ──────────────────────────────────────────────────────────────────────────────
 # SECTION 4 — Level logger
 # ──────────────────────────────────────────────────────────────────────────────

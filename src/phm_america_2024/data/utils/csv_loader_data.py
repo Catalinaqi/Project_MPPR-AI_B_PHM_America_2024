@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import inspect
-import json
 from pathlib import Path
 from typing import Any, Dict, Generator, Optional, Tuple
 
@@ -10,8 +9,8 @@ import pandas as pd
 
 from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.common.path_service_common import resolve_path
-from phm_america_2024.configuration.enum_registry_config import ReadMode
-from phm_america_2024.configuration.read_strategy_repository_config import ReadStrategyContract
+from phm_america_2024.domain.enum_registry_domain import ReadMode
+from phm_america_2024.data.read_strategy_repository_data import ReadStrategyContract
 
 log = get_logger(__name__)
 

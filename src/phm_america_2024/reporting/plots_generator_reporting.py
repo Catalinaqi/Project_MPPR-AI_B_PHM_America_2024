@@ -4,10 +4,8 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 # SECTION 1 – Standard-library imports
 # ---------------------------------------------------------------------------
-import json
-import pickle
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict
 
 # ---------------------------------------------------------------------------
 # SECTION 2 – Third-party imports
@@ -15,6 +13,9 @@ from typing import Any, Optional
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Backend seguro para evitar problemas de GUI
+import seaborn as sns
 
 
 # ---------------------------------------------------------------------------
@@ -130,3 +131,56 @@ def plot_gmm_curve(
 
     size_kb = output_path.stat().st_size / 1024
     log.info("[plot_gmm_curve] saved size_kb=%.2f path=%s", size_kb, output_path)
+
+def plot_feature_importance(importance_data: Dict[str, float], top_k: int) -> plt.Figure:
+    """Generate bar chart for model native feature importance."""
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    sns.barplot(
+        x=list(importance_data.values()),
+        y=list(importance_data.keys()),
+        palette="viridis",
+        hue=list(importance_data.keys()),
+        legend=False,
+        ax=ax
+    )
+    ax.set_title(f"Top {top_k} Feature Importances (NGBoost Native)")
+    ax.set_xlabel("Average Importance (Mu & Sigma Sub-trees)")
+    ax.set_ylabel("Features")
+
+    return fig
+
+def plot_permutation_importance(perm_data: Dict[str, Any], scoring: str, top_k: int = 15) -> plt.Figure:
+    """Generate bar chart with error bars for permutation importance."""
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    feature_names = perm_data["feature_names"]
+    importances_mean = np.array(perm_data["importances_mean"])
+    importances_std = np.array(perm_data["importances_std"])
+
+    sorted_idx = importances_mean.argsort()[::-1]
+    sorted_features = [feature_names[i] for i in sorted_idx]
+    sorted_means = importances_mean[sorted_idx]
+    sorted_stds = importances_std[sorted_idx]
+
+    top_k_plot = min(top_k, len(sorted_features))
+    y_pos = np.arange(top_k_plot)
+
+    ax.barh(
+        y_pos,
+        sorted_means[:top_k_plot],
+        xerr=sorted_stds[:top_k_plot],
+        align='center',
+        alpha=0.8,
+        color='steelblue',
+        ecolor='black',
+        capsize=3
+    )
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(sorted_features[:top_k_plot])
+    ax.invert_yaxis()
+    ax.set_title(f"Permutation Importance ({scoring}) - Top {top_k_plot}")
+    ax.set_xlabel("Mean Importance Decrease")
+    ax.set_ylabel("Features")
+
+    return fig

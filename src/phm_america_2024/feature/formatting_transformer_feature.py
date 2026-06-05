@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
@@ -143,7 +142,9 @@ def dataset_formatting(
         df[target_col] = df[target_col].astype(type_casting)
         log.debug("[dataset_formatting] cast '%s' to %s", target_col, type_casting)
     else:
-        log.warning("[dataset_formatting] target_col '%s' not found – skipping cast", target_col)
+        log.warning(
+            "[dataset_formatting] target_col '%s' not found – skipping cast", target_col
+        )
 
     # Step 2: optionally convert to numpy arrays
     arrays: dict[str, Any] = {}
@@ -157,7 +158,9 @@ def dataset_formatting(
             "y_shape": list(y.shape),
             "feature_names": feature_cols,
         }
-        log.debug("[dataset_formatting] converted to numpy – X=%s, y=%s", X.shape, y.shape)
+        log.debug(
+            "[dataset_formatting] converted to numpy – X=%s, y=%s", X.shape, y.shape
+        )
     elif to_numpy:
         log.warning("[dataset_formatting] cannot convert to numpy – target_col missing")
 
@@ -169,7 +172,9 @@ def dataset_formatting(
         "arrays_metadata": arrays,
     }
     output_path = output_dir / "3.5.formatting.arrays_manifest.json"
-    output_path.write_text(json.dumps(manifest, indent=2, default=str), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
+    )
     log.debug("[dataset_formatting] manifest written to %s", output_path)
 
     # Step 4: build extra artifact
@@ -180,5 +185,7 @@ def dataset_formatting(
     if arrays:
         extra["arrays"] = arrays
 
-    log.info("[dataset_formatting] completed – shape=%s, dtype=%s", df.shape, type_casting)
+    log.info(
+        "[dataset_formatting] completed – shape=%s, dtype=%s", df.shape, type_casting
+    )
     return df, extra

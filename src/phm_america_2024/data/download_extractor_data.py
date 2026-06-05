@@ -1,4 +1,4 @@
-# src/phm_america_2024/common/download_extractor_data.py
+# src/phm_america_2024/data/download_extractor_data.py
 
 from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.common.path_service_common import resolve_path

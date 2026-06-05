@@ -302,6 +302,15 @@ regression_pipeline_config:
                     n_repeats: 5
                     scoring: "neg_log_likelihood"
                   output: "5.1.plots.permutation_data.json"
+          output_artifacts:
+            fi_importance_plot:
+              path: "5.1.plots.feature_importance.png"
+              description: "Top 15 features by ensemble contribution."
+              consumed_by: [ "report_generator" ]
+            fi_permutation_plot:
+               path: "5.1.plots.permutation_importance.png"
+               description: "Feature importance via target permutation."
+               consumed_by: [ "report_generator" ]
 
         step_5_2_probabilistic_evaluation:
           enabled: true
@@ -326,6 +335,15 @@ regression_pipeline_config:
               path: "5.2.evaluation.final_regression_metrics_summary.json"
               description: "Final consolidated regression score sheet mapping NLL, RMSE, and interval coverages on hidden motors."
               consumed_by: [ "deployment" ]
+            # --- Plots (PNG) ---
+            eval_calibration_plot:
+              path: "5.2.plots.calibration_curve.png"
+              description: "Reliability diagram mapping calibration honesty."
+              consumed_by: [ "report_generator", "quality_audit" ]
+            eval_degradation_plot:
+              path: "5.2.plots.degradation_comparison.png"
+              description: "Benchmark comparison against naive_mean baseline."
+              consumed_by: [ "report_generator", "quality_audit" ]
 
         step_5_3_process_audit:
           enabled: true

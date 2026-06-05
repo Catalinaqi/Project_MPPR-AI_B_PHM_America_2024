@@ -31,48 +31,15 @@ pipeline_base:
       format: "parquet"
       compression: "snappy"
 
-  # ── CONFIRMED DATASET SIZES (from DuckDB COUNT queries) ─────────────────
-  # df_train:      742,625 rows  — 94.54% of total — has X and Y labels
-  # df_validation:  21,436 rows  —  2.73% of total — X only, no Y labels
-  # df_test:        21,436 rows  —  2.73% of total — X only, no Y labels
-  # Total:         785,497 rows
-  # ─────────────────────────────────────────────────────────────────────────
-  dataset_sizes:
-    train:      742625
-    validation: 21436
-    test:       21436
-    total:      785497
-    train_pct:  94.54
-    val_pct:    2.73
-    test_pct:   2.73
-
-  # ── CONFIRMED COLUMN SCHEMA (from DESCRIBE df_train) ────────────────────
-  # All feature columns are DOUBLE and nullable.
-  # id and faulty are BIGINT.
-  # No datetime columns — data is shuffled, no temporal order exists.
-  # ─────────────────────────────────────────────────────────────────────────
-  confirmed_schema:
-    columns:
-      id:           {type: BIGINT,  role: identifier,             nullable: true}
-      trq_measured: {type: DOUBLE,  role: feature,                nullable: true,  note: "Real-time measured torque"}
-      oat:          {type: DOUBLE,  role: feature,                nullable: true,  note: "Outside air temperature — can be negative, Kelvin shift required in Phase 3"}
-      mgt:          {type: DOUBLE,  role: feature,                nullable: true,  note: "Mean gas temperature"}
-      pa:           {type: DOUBLE,  role: feature,                nullable: true,  note: "Power available"}
-      ias:          {type: DOUBLE,  role: feature,                nullable: true,  note: "Indicated airspeed"}
-      np:           {type: DOUBLE,  role: feature,                nullable: true,  note: "Net power"}
-      ng:           {type: DOUBLE,  role: feature,                nullable: true,  note: "Compressor speed — min confirmed 90.00, no zero-division risk"}
-      faulty:       {type: BIGINT,  role: target_classification,  nullable: true,  note: "Binary label: 0=nominal, 1=faulty"}
-      trq_margin:   {type: DOUBLE,  role: target_regression,      nullable: true,  note: "Torque margin % — heavy negative skew confirmed (-2.75)"}
-
   profiles:
     dev:
-      enabled: false
+      enabled: true
       description: "Fast iteration — stratified sample for development"
       mode: "sample"
       sample_rows: 7000
       stratify_column: "faulty"   # confirmed lowercase
     prod:
-      enabled: true
+      enabled: false
       description: >
         Full-scale execution. Train has 742,625 rows (94.54% of total).
         Sample capped at 300,000 to keep memory manageable on CPU while
@@ -119,7 +86,6 @@ pipeline_base:
                     params:
                       join_key: "id"
                       infer_datetime: false  # Shuffled data — no timestamp exists
-                    output: "2.1.data_acquisition.merged_train.json"
             output_artifacts:
               sample_x_y_train_parquet:
                 path: "2.1.data_acquisition.sample_train.parquet"
@@ -127,25 +93,19 @@ pipeline_base:
                   Random sample of 300,000 rows from df_train (merged X+Y).
                   Contains all features + faulty + trq_margin.
                   Primary input for all Phase 2 profiling steps and Phase 3 feature engineering.
-                  consumed_by: [ "step_2_2", "step_2_3", "step_2_4", "phase_3", "phase_4" ]
-
+                consumed_by: [ "step_2_2", "step_2_3", "step_2_4", "phase_3", "phase_4" ]
               sample_x_test_parquet:
                 path: "2.1.data_acquisition.sample_test.parquet"
                 description: >
                   Full df_test loaded as-is (21,436 rows — no sampling needed).
                   Features only, no labels. Not used until Phase 5 final scoring.
-                  consumed_by: [ "phase_5" ]
-
+                consumed_by: [ "phase_5" ]
               sample_x_validation_parquet:
                 path: "2.1.data_acquisition.sample_validation.parquet"
                 description: >
                   Full df_validation loaded as-is (21,436 rows — no sampling needed).
                   Features only, no labels. Not used until Phase 5 final scoring.
-                  consumed_by: [ "phase_5" ]
-
-              load_and_merge_x_y:
-                path: "2.1.data_acquisition.metadata_merged_train.json"
-                description: "Metadata de los datos consolidados X+Y."
+                consumed_by: [ "phase_5" ]
 
           #Capire le distribuzioni  → giustifica RobustScaler in Phase 3
           step_2_2_data_description:
@@ -157,8 +117,6 @@ pipeline_base:
                 techniques:
                   column_metadata:
                     enabled: true
-                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
-                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
                     params:
                       include_cardinality: false  # All features are continuous DOUBLE
                       include_dtypes: true
@@ -170,8 +128,6 @@ pipeline_base:
                 techniques:
                   basic_stats:
                     enabled: true
-                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
-                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
                     params:
                       numeric_only: true
                       metrics: ["count", "mean", "std", "min", "max", "skewness"]
@@ -187,8 +143,6 @@ pipeline_base:
                 techniques:
                   null_count_per_column:
                     enabled: true
-                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
-                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
                     params:
                       columns: ["trq_measured", "oat", "mgt", "pa", "ias", "np", "ng", "faulty", "trq_margin"]
                     output: "2.2.null_check.null_count_per_column.json"
@@ -199,8 +153,6 @@ pipeline_base:
                 techniques:
                   distribution_analysis:
                     enabled: true
-                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
-                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
                     params:
                       classification_target: "faulty"
                       regression_target: "trq_margin"
@@ -218,8 +170,6 @@ pipeline_base:
                 techniques:
                   zero_or_negative_check:
                     enabled: true
-                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
-                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
                     description: >
                       CONFIRMED RISK: oat min = -19.25°C — Kelvin shift mandatory in Phase 3.
                       ng min = 90.00 — safe, no zero-division risk.
@@ -240,8 +190,6 @@ pipeline_base:
                 techniques:
                   collinearity_analysis:
                     enabled: true
-                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
-                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
                     params:
                       target_column: "trq_margin"
                       suspect_pairs:
@@ -262,8 +210,6 @@ pipeline_base:
                 techniques:
                   column_catalog:
                     enabled: true
-                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
-                    split: ["outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"]
                     params:
                       categorize_by_role: true
                       roles:
@@ -280,16 +226,6 @@ pipeline_base:
                 techniques:
                   ks_test_per_feature:
                     enabled: true
-                    #                    split: [
-                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
-                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
-                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
-                    #                    ]
-                    split: [
-                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet",
-                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_test.parquet",
-                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_validation.parquet"
-                    ]
                     params:
                       features: [ "trq_measured", "oat", "mgt", "pa", "ias", "np", "ng" ]
                       reference_split: "train"
@@ -300,8 +236,6 @@ pipeline_base:
 
                   gmm_exploration:
                     enabled: true
-                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
-                    split: [ "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet" ]
                     decision_rule: >
                       Se BIC minimo a k=4 → conferma Group-K-Fold con k=4 in Phase 4.
                       Se minimo altrove → aggiorna phase_4 regression/classification config.
@@ -313,16 +247,6 @@ pipeline_base:
 
                   feature_drift_summary:
                     enabled: true
-                    #                    split: [
-                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}",
-                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_test_parquet}",
-                    #                      "${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_validation_parquet}"
-                    #                    ]
-                    split: [
-                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet",
-                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_test.parquet",
-                      "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_validation.parquet"
-                    ]
                     params:
                       aggregate_by: "max_ks_statistic"
                       flag_critical_shifts: true
@@ -333,8 +257,6 @@ pipeline_base:
                 techniques:
                   flight_regime_binning:
                     enabled: true
-                    #split: ["${phases.phase2_data_understanding.steps.step_2_1_data_acquisition.output_artifacts.sample_x_y_train_parquet}"]
-                    split: [ "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet" ]
                     description: >
                       CONFIRMED from Query 4: two OAT bins dominate (20°C: 297,713 rows,
                       10°C: 295,229 rows — together 79.8% of train).

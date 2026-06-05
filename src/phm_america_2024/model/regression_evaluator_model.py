@@ -8,16 +8,16 @@ import numpy as np
 import pandas as pd
 
 from phm_america_2024.common.logging_adapter_common import get_logger
-from phm_america_2024.data.load_loader_data import load_parquet
+from phm_america_2024.common.io_service_common import load_parquet
 
 log = get_logger(__name__)
 
 
 def model_selection_criteria(
-        model: Any,
-        tech_cfg: dict[str, Any],
-        ctx: Any,
-        output_dir: Path,
+    model: Any,
+    tech_cfg: dict[str, Any],
+    ctx: Any,
+    output_dir: Path,
 ) -> tuple[Any, dict[str, Any]]:
     """Evaluate best model on validation data and compute NLL + RMSE.
 
@@ -40,10 +40,16 @@ def model_selection_criteria(
         output_filename: str = tech_cfg["output"]
 
         # Extraemos dinámicamente la variable objetivo desde la configuración del paso 4.2
-        target_variable: str = ctx.config.phases["phase4_data_modeling"]["steps"]["step_4_2_model_training"]["methods"]["model_training"]["techniques"]["cross_validation"]["params"]["target_variable"]
+        target_variable: str = ctx.config.phases["phase4_data_modeling"]["steps"][
+            "step_4_2_model_training"
+        ]["methods"]["model_training"]["techniques"]["cross_validation"]["params"][
+            "target_variable"
+        ]
 
         # Extraemos la ruta de validación de la read_strategy global
-        val_data_path: str = ctx.config.phases["phase4_data_modeling"]["read_strategy"]["input_source"]["val_data"]
+        val_data_path: str = ctx.config.phases["phase4_data_modeling"]["read_strategy"][
+            "input_source"
+        ]["val_data"]
     except KeyError as e:
         log.error(f"Missing required parameter in YAML configuration: {e}")
         raise ValueError(f"YAML configuration error: missing {e}")
@@ -63,7 +69,9 @@ def model_selection_criteria(
     dropped_rows = initial_len - len(val_data)
 
     if dropped_rows > 0:
-        log.warning(f"Dropped {dropped_rows} rows containing NaN or Infinity from validation data.")
+        log.warning(
+            f"Dropped {dropped_rows} rows containing NaN or Infinity from validation data."
+        )
 
     # Step 4: Extract features and target strictly using the YAML target variable
     X_val = val_data.drop(columns=[target_variable])
@@ -79,7 +87,9 @@ def model_selection_criteria(
     y_pred_mean = dist.mean()
     rmse_score: float = float(np.sqrt(((y_pred_mean - y_val) ** 2).mean()))
 
-    log.info(f"Metrics computed successfully: NLL={nll_score:.4f}, RMSE={rmse_score:.4f}")
+    log.info(
+        f"Metrics computed successfully: NLL={nll_score:.4f}, RMSE={rmse_score:.4f}"
+    )
 
     # Step 6: Format metrics and trace dictionaries (Model excluded to avoid JSON crash)
     metrics = {

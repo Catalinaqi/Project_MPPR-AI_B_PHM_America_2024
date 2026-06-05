@@ -4,10 +4,15 @@ from typing import Optional, Dict, List, Any, Union
 from pydantic import BaseModel, Field, field_validator
 
 from phm_america_2024.common.logging_adapter_common import get_logger
-from phm_america_2024.configuration.enum_registry_config import Phase, StepsPhase
+from phm_america_2024.domain.enum_registry_domain import Phase
 
 log = get_logger(__name__)
 
+"""
+Pydantic Data Transfer Objects (DTOs) that enforce strict schema validation for 
+the YAML configurations. Acts as a rigid contract to prevent silent typos and 
+ensure traceability.
+"""
 
 # ═════════════════════════════════════════════════════════════════════════════
 # DATASET CONFIG SCHEMAS

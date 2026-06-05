@@ -1,5 +1,6 @@
 # src/phm_america_2024/configuration/enum_regsitry_config.py
 from __future__ import annotations
+
 """
 =============================================================================
 Why this module exists
@@ -69,12 +70,12 @@ from enum import Enum
 # =============================================================================
 # SECTION 3 – Internal imports
 # =============================================================================
-from phm_america_2024.common.logging_adapter_common import get_logger
+# from phm_america_2024.common.logging_adapter_common import get_logger
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SECTION 4 — Level logger
 # ──────────────────────────────────────────────────────────────────────────────
-log = get_logger(__name__)
+# log = get_logger(__name__)
 
 # =============================================================================
 # SECTION 1 — ENUMS
@@ -92,6 +93,49 @@ log = get_logger(__name__)
 # =============================================================================
 # SECTION 7 — Class
 # =============================================================================
+
+
+class LogLevel(str, Enum):
+    """Logging verbosity level for a pipeline run.
+
+    Inherits from ``str`` so that instances compare equal to their string
+    values, enabling direct YAML comparison and use with
+    ``logging.getLevelName()``.  Maps 1-to-1 with Python's five standard
+    logging levels.
+
+    The YAML key ``runtime.log_level`` must be one of these values.
+
+    Attributes
+    ----------
+    DEBUG : str
+        Most verbose — emits all operations.  Use for troubleshooting.
+    INFO : str
+        Major milestones only — stage start/end, key metrics.
+    WARNING : str
+        Non-blocking issues that may affect results.
+    ERROR : str
+        Blocking failures that prevent stage completion.
+    CRITICAL : str
+        Unrecoverable failures that abort the entire pipeline run.
+    """
+
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+
+    def __str__(self) -> str:
+        """Return the YAML-compatible string value (e.g. ``"DEBUG"``).
+
+        Returns
+        -------
+        str
+            The enum member's string value.
+        """
+        return self.value
+
+
 class ProblemType(str, Enum):
     """
     Top-level ML problem family — drives pipeline branch selection.
@@ -186,6 +230,7 @@ class Phase(str, Enum):
 
 class StepOutputArtifact(str, Enum):
     """Keys for output_artifacts in Phase 2 steps YAML configuration."""
+
     # ──────────────────────────────────────────────────────────────────────────
     # Phase 2 – Data Understanding
     # ──────────────────────────────────────────────────────────────────────────
@@ -198,17 +243,17 @@ class StepOutputArtifact(str, Enum):
 
     # Step 2.2
     column_metadata_json = "column_metadata"
-    sensor_stats_json =  "basic_stats"
+    sensor_stats_json = "basic_stats"
     null_count_json = "null_count_per_column"
     target_distribution_json = "distribution_analysis"
 
     # Step 2.3
-    zero_or_negative_check_json =   "zero_or_negative_check"
+    zero_or_negative_check_json = "zero_or_negative_check"
     collinearity_json = "collinearity_analysis"
 
     # Step 2.4
-    column_catalog_json =  "column_catalog"
-    ks_report_json =      "ks_test_per_feature"
+    column_catalog_json = "column_catalog"
+    ks_report_json = "ks_test_per_feature"
     gmm_curve_png = "gmm_exploration"
     drift_summary_json = "feature_drift_summary"
 
@@ -236,6 +281,10 @@ class StepOutputArtifact(str, Enum):
     # Step 4.4 – Model Evaluation
     best_regression_model_metadata = "best_regression_model_metadata"
 
+    # ── Phase 5 – Evaluation & Interpretation ──
+    evaluation_summary_json = "evaluation_summary_json"  # step_5_2
+    deployment_sign_off = "deployment_sign_off"  # step_5_4
+
 
 class StepsPhase(str, Enum):  # noqa: D101
     STEP_2_1 = "step_2_1_data_acquisition"
@@ -258,16 +307,18 @@ class StepsPhase(str, Enum):  # noqa: D101
     def __str__(self) -> str:
         return self.value
 
+
 # =============================================================================
 # SECTION 8 — Private functions
 # =============================================================================
 # (none required – )
 
+
 # =============================================================================
 # SECTION 9 — Public functions
 # ============================================================================
 def normalize_problem_type(
-        value: str | ProblemType,
+    value: str | ProblemType,
 ) -> ProblemType:
     """
     Normalize a raw string or existing enum into a ``ProblemType`` member.
@@ -294,7 +345,7 @@ def normalize_problem_type(
     """
     # Step 1: Pass-through if already a valid enum — avoids redundant work.
     if isinstance(value, ProblemType):
-        log.debug("[normalize_problem_type] already enum value=%s", value.value)
+        # log.debug("[normalize_problem_type] already enum value=%s", value.value)
         return value
 
     # Step 2: Normalise to lowercase stripped string to tolerate YAML casing.
@@ -305,11 +356,11 @@ def normalize_problem_type(
         result = ProblemType(normalised)
     except ValueError:
         valid = [m.value for m in ProblemType]
-        log.error("[normalize_problem_type] invalid value=%r valid=%s", value, valid)
+        # log.error("[normalize_problem_type] invalid value=%r valid=%s", value, valid)
         raise ValueError(f"Unknown ProblemType={value!r}. Valid values: {valid}")
 
     # Step 4: Log resolved value and return.
-    log.debug("[normalize_problem_type] resolved value=%r -> %s", value, result.value)
+    # log.debug("[normalize_problem_type] resolved value=%r -> %s", value, result.value)
     return result
 
 
@@ -335,7 +386,7 @@ def normalize_read_mode(value: str | ReadMode) -> ReadMode:
     """
     # Step 1: Pass-through if already a valid enum — avoids redundant work.
     if isinstance(value, ReadMode):
-        log.debug("[normalize_read_mode] already enum value=%s", value.value)
+        # log.debug("[normalize_read_mode] already enum value=%s", value.value)
         return value
 
     # Step 2: Normalise to lowercase stripped string to tolerate YAML casing.
@@ -346,10 +397,56 @@ def normalize_read_mode(value: str | ReadMode) -> ReadMode:
         result = ReadMode(normalised)
     except ValueError:
         valid = [m.value for m in ReadMode]
-        log.error("[normalize_read_mode] invalid value=%r valid=%s", value, valid)
+        # log.error("[normalize_read_mode] invalid value=%r valid=%s", value, valid)
         raise ValueError(f"Unknown ReadMode={value!r}. Valid values: {valid}")
 
     # Step 4: Log resolved value and return.
-    log.debug("[normalize_read_mode] resolved value=%r -> %s", value, result.value)
+    # log.debug("[normalize_read_mode] resolved value=%r -> %s", value, result.value)
     return result
 
+
+def normalize_log_level(
+    value: str | LogLevel,
+) -> LogLevel:
+    """Normalise a raw string or existing enum into a ``LogLevel`` member.
+
+    Accepts the YAML string exactly as written (any case) and returns the
+    canonical ``LogLevel`` enum.  Raises ``ValueError`` immediately if the
+    value is unrecognised — no silent fallback.
+
+    Parameters
+    ----------
+    value : str | LogLevel
+        Raw YAML string (e.g. ``"debug"``, ``"INFO"``) or an existing
+        ``LogLevel`` member.
+
+    Returns
+    -------
+    LogLevel
+        The corresponding enum member.
+
+    Raises
+    ------
+    ValueError
+        If *value* does not match any ``LogLevel`` member after normalisation.
+        The error message lists all valid values.
+    """
+    # Step 1: Pass-through if already a valid enum — avoids redundant work.
+    if isinstance(value, LogLevel):
+        return value
+
+    # Step 2: Strip whitespace and convert to uppercase — YAML authors may
+    #         write lowercase or mixed-case (e.g. "debug", "Debug").
+    normalised: str = (value or "").strip().upper()
+
+    # Step 3: Parse into enum — raises ValueError on unrecognised values
+    #         with a message that lists all accepted members.
+    try:
+        return LogLevel(normalised)
+    except ValueError:
+        valid = [m.value for m in LogLevel]
+        raise ValueError(
+            f"[normalize_log_level] Unknown LogLevel={value!r}. "
+            f"Valid values: {valid}. "
+            f"Check runtime.log_level in the pipeline YAML."
+        )

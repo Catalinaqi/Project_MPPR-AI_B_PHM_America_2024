@@ -1,7 +1,6 @@
 # src/phm_america_2024/api/execution_facade_api.py
 from __future__ import annotations
 
-import datetime
 # 1-> Imports: Standard-library
 #----------------------------------------------
 from typing import Any, Optional
@@ -9,14 +8,14 @@ from typing import Any, Optional
 # 2-> Imports: Internal imports
 #----------------------------------------------
 from phm_america_2024.common.logging_adapter_common import get_logger, config_run_logging
-from phm_america_2024.common.context_facade_common import RunContext, create_run_context, \
+from phm_america_2024.pipeline.utils.context_facade_common import RunContext, create_run_context, \
     make_run_id
 from phm_america_2024.common.path_service_common import find_project_root
 from phm_america_2024.configuration.build_factory_config import build_config, BuiltConfig
-from phm_america_2024.configuration.enum_registry_config import StepsPhase,ProblemType
+from phm_america_2024.domain.enum_registry_domain import StepsPhase,ProblemType
 from phm_america_2024.data.download_extractor_data import download_phm_2024_dataset
 
-from phm_america_2024.pipeline.regression_runner_pipeline_back import run_regression_pipeline
+from phm_america_2024.pipeline.regression_runner_pipeline import run_regression_pipeline
 #from phm_america_2024.pipeline.classification_runner_pipeline import run_classification_pipeline
 
 
@@ -341,4 +340,33 @@ def run_4_4_model_evaluation(ctx: RunContext) -> RunContext:
     ctx = _dispatch_step(ctx, StepsPhase.STEP_4_4)
     log.debug("[run_4_4_model_evaluation] completed")
     log.info("[run_4_4_model_evaluation] done")
+    return ctx
+
+# (aggiungere dopo run_4_4_model_evaluation)
+
+def run_5_1_interpretation(ctx: RunContext) -> RunContext:
+    log.info("[run_5_1_interpretation] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_5_1)
+    log.info("[run_5_1_interpretation] done")
+    return ctx
+
+
+def run_5_2_probabilistic_evaluation(ctx: RunContext) -> RunContext:
+    log.info("[run_5_2_probabilistic_evaluation] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_5_2)
+    log.info("[run_5_2_probabilistic_evaluation] done")
+    return ctx
+
+
+def run_5_3_process_audit(ctx: RunContext) -> RunContext:
+    log.info("[run_5_3_process_audit] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_5_3)
+    log.info("[run_5_3_process_audit] done")
+    return ctx
+
+
+def run_5_4_decision_making(ctx: RunContext) -> RunContext:
+    log.info("[run_5_4_decision_making] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_5_4)
+    log.info("[run_5_4_decision_making] done")
     return ctx

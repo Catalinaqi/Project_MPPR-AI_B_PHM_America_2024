@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Tuple, Optional
 from pathlib import Path
 from phm_america_2024.common.logging_adapter_common import get_logger
-from phm_america_2024.common.context_facade_common import RunContext
+from phm_america_2024.pipeline.utils.context_facade_common import RunContext
 from phm_america_2024.common.path_service_common import resolve_path
 
 log = get_logger(__name__)

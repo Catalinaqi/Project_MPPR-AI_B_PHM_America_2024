@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 
 from phm_america_2024.common.logging_adapter_common import get_logger
-from phm_america_2024.common.context_facade_common import RunContext
+from phm_america_2024.pipeline.utils.context_facade_common import RunContext
 
 log = get_logger(__name__)
 

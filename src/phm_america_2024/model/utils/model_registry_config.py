@@ -10,7 +10,6 @@ from sklearn.svm import SVC, SVR
 from xgboost import XGBClassifier, XGBRegressor
 
 from phm_america_2024.common.logging_adapter_common import get_logger
-from phm_america_2024.configuration.enum_registry_config import ProblemType
 
 log = get_logger(__name__)
 
