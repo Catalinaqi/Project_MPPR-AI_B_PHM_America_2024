@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 #   -> Raise FileNotFoundError to secure down-stream components.
 # =============================================================================
 def download_phm_2024_dataset(
-        force: bool = False,
+    force: bool = False,
 ) -> None:
     """
     Validate the local availability of the PHM 2024 Challenge dataset in data/raw/.
@@ -77,7 +77,9 @@ def download_phm_2024_dataset(
             return
 
         # 3. Handle missing assets path via explicit logging and error raising
-        logger.warning("Missing dataset components detected in local repository workspace.")
+        logger.warning(
+            "Missing dataset components detected in local repository workspace."
+        )
 
         # Identify specific missing files for cleaner debugging outputs
         for dest in all_destinations:
