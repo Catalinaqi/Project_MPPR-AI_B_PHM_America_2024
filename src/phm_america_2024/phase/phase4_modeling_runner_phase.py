@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -299,28 +298,32 @@ class Phase4ModelingRunner:
 
         if step_val in (StepsPhase.STEP_4_1.value, StepsPhase.STEP_4_2.value):
             # Step 1: CALL _get_explicit_train_path() — resolve yaml train data path
+            # 1. Obtener solo el nombre del archivo del YAML
             explicit_train: str = self._get_explicit_train_path()
 
+            # Step 2: Construir la ruta completa usando phase3_dir
+            # phase3_dir es la carpeta donde la Fase 3 guardó los resultados
+            # self.ctx.phase3_dir debe existir en tu objeto RunContext
+            path: Path = Path(self.ctx.phase3_dir) / explicit_train
+
             # Step 2: CALL exists() — verify file presence
-            if not os.path.exists(explicit_train):
+            if not path.exists():
                 log.error(
                     "[_load_input_dataframe] train data file not found: %s",
-                    explicit_train,
+                    path,
                 )
                 raise FileNotFoundError(
-                    f"Configured train_data path does not exist: {explicit_train}"
+                    f"Configured train_data path does not exist: {path}"
                 )
 
-            log.info("[_load_input_dataframe] using train_data: %s", explicit_train)
-
-            # Step 3: CALL resolve_path() — normalize path object
-            path: Path = resolve_path(Path(explicit_train))
+            log.info("[_load_input_dataframe] using train_data: %s", path)
 
             # Step 4: CALL load_parquet() — deserialize dataframe
             df: Any = load_parquet(str(path))
             log.info(
                 "[_load_input_dataframe] loaded shape=%s", getattr(df, "shape", "N/A")
             )
+            return df
 
         elif step_val == StepsPhase.STEP_4_4.value:
             # Step 5: CALL extract dynamic path from configuration

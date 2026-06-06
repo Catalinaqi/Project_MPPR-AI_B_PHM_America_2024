@@ -52,18 +52,6 @@ class Phase3PreparationRunner:
         "dataset_formatting": dataset_formatting,
     }
 
-    # Mapping technique_name → StepOutputArtifact key for the main DataFrame
-    # (the key used in output_artifacts in YAML)
-    # 🔄 ¡SOLUCIÓN MAESTRA!: Corregimos el mapeo para que use el step_key (StepsPhase)
-    # De esta forma la variable de clase cobra total sentido y centraliza la configuración.
-    _TECHNIQUE_TO_MAIN_ARTIFACT_KEY: dict[str, str] = {
-        StepsPhase.STEP_3_1.value: StepOutputArtifact.selected_regression_train_parquet.value,
-        StepsPhase.STEP_3_2.value: StepOutputArtifact.cleaned_regression_train_parquet.value,
-        StepsPhase.STEP_3_3.value: StepOutputArtifact.transformed_regression_train_parquet.value,
-        # StepsPhase.STEP_3_3.value: StepOutputArtifact.fitted_scaler_regression_artifact.value,
-        StepsPhase.STEP_3_5.value: StepOutputArtifact.engineered_train_split.value,
-    }
-
     def __init__(
         self, ctx: RunContext, step_key: str, step_cfg: dict[str, Any]
     ) -> None:
@@ -263,44 +251,40 @@ class Phase3PreparationRunner:
 
     def _persist_artifacts(self, df: Any, extra_artifacts: dict[str, Any]) -> None:
         """Build the context_data payload and call write_output_artifacts."""
-        log.debug(
-            "[_persist_artifacts] entry step='%s' artifacts=%s",
-            self.step_key,
-            list(extra_artifacts.keys()),
-        )
+        log.debug("[_persist_artifacts] entry step='%s'", self.step_key)
+
         context_data: dict[str, Any] = {}
 
-        # Validación de seguridad: Aseguramos que 'df' (Train) esté presente
-        if df is not None:
-            context_data[StepOutputArtifact.engineered_train_split.value] = df
+        # 1. Gestionar el DataFrame principal y artefactos específicos
+        # Paso 3.5 tiene lógica especial porque genera DOS parquets (train y val)
+        if self.step_key == StepsPhase.STEP_3_5.value:
+            # Validación: df debe existir para ser el train split
+            if df is not None:
+                context_data[StepOutputArtifact.engineered_train_split.value] = df
+
+            # Buscamos el val_df en los artefactos extra
+            if "val_df" in extra_artifacts:
+                context_data[StepOutputArtifact.engineered_val_split.value] = (
+                    extra_artifacts["val_df"]
+                )
         else:
-            log.error("[_persist_artifacts] df (Train) is None! Registry will fail.")
+            # Para los demás pasos, buscamos el nombre del parquet en la config del YAML
+            output_artifacts_cfg = self.step_cfg.get("output_artifacts", {})
+            for key in output_artifacts_cfg.keys():
+                if "parquet" in key:
+                    context_data[key] = df
+                    break
 
-        # 1. Intentar registrar el DF principal usando la configuración del YAML
-        output_artifacts_cfg = self.step_cfg.get("output_artifacts", {})
-        for key, info in output_artifacts_cfg.items():
-            if "parquet" in key and "internal_train" in key:  # Específico para 3.5
-                context_data[key] = df
-                break
-            elif "parquet" in key and "internal_train" not in key:  # Para otros pasos
-                context_data[key] = df
-                break
-
-        # 2. FLEXIBILIDAD: Inyectamos todo lo que la técnica devolvió
-        # Si la técnica devolvió {"fitted_scaler_regression_artifact": ...},
-        # esto lo registrará bajo ese nombre exacto.
+        # 2. Inyectar todo lo demás (Scalers, indices, etc.)
         for key, value in extra_artifacts.items():
-            if key == "trace":
-                continue  # Ya se guardó como JSON
+            if key in [
+                "trace",
+                "val_df",
+            ]:  # 'val_df' ya se trató arriba, 'trace' se ignoró
+                continue
+            context_data[key] = value
 
-            # Mapeo específico para el Paso 3.5 si es necesario
-            if key == "val_df":
-                context_data[StepOutputArtifact.engineered_val_split.value] = value
-            elif key == "train_df":  # O como lo llame tu función data_split
-                context_data[StepOutputArtifact.engineered_train_split.value] = value
-            else:
-                context_data[key] = value
-
+        # 3. Guardado final
         if not context_data:
             log.warning(
                 "[_persist_artifacts] No artifacts to persist for %s", self.step_key
@@ -312,19 +296,15 @@ class Phase3PreparationRunner:
             list(context_data.keys()),
         )
 
-        # 3. Guardado final
-        if context_data:
-            write_output_artifacts(
-                ctx=self.ctx,
-                step_key=self.step_key,
-                step_cfg=self.step_cfg,
-                base_dir=self.base_dir,
-                **context_data,
-            )
-            log.info(
-                "Artifacts persisted for step '%s': %s",
-                self.step_key,
-                list(context_data.keys()),
-            )
-        else:
-            log.warning("No artifacts found to persist for step '%s'", self.step_key)
+        write_output_artifacts(
+            ctx=self.ctx,
+            step_key=self.step_key,
+            step_cfg=self.step_cfg,
+            base_dir=self.base_dir,
+            **context_data,
+        )
+        log.info(
+            "Artifacts persisted for step '%s': %s",
+            self.step_key,
+            list(context_data.keys()),
+        )

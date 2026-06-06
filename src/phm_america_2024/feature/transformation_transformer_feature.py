@@ -15,7 +15,7 @@ log = get_logger(__name__)
 
 def feature_scaling(
     df: pd.DataFrame,
-    params: dict[str, Any],
+    tech_cfg: dict[str, Any],  # params: dict[str, Any],
     ctx: Any,
     output_dir: Path,
 ) -> tuple[pd.DataFrame, Optional[dict[str, Any]]]:
@@ -47,9 +47,32 @@ def feature_scaling(
           ``RobustScaler`` instance, or ``None`` if no features were scaled.
     """
     log.debug("[feature_scaling] entry – shape=%s", df.shape)
+    log.info("[feature_scaling] Columnas actuales: %s", df.columns.tolist())
 
+    # 1. EXTRACCIÓN CORRECTA: El diccionario real de parámetros vive dentro de "params"
+    params = tech_cfg.get("params", {})
+
+    # 2. Ahora sí, accedemos a lo que necesitamos
     method: str = params.get("method", "RobustScaler")
+    log.info("[feature_scaling] metodos requeridas en YAML: %s", method)
+
     features: list[str] = params.get("features", [])
+    log.info("[feature_scaling] Columnas requeridas en YAML: %s", features)
+
+    # ----------------
+
+    # 1. INICIALIZACIÓN SEGURA
+    # Creamos el diccionario que retornaremos siempre, aunque esté vacío
+    extra_artifacts = {}
+    artifact_key = "fitted_scaler_regression_artifact"
+
+    # Valores por defecto para el trace (si no se escala nada)
+    trace = {
+        "method": method,
+        "features_scaled": [],
+        "scaler_centers_": None,
+        "scaler_scales_": None,
+    }
 
     # Step 1: verify method is supported
     if method != "RobustScaler":
@@ -70,8 +93,6 @@ def feature_scaling(
             "[feature_scaling] requested columns not found or non-numeric: %s", missing
         )
 
-    scaler_artifact: Optional[dict[str, Any]] = None
-
     if existing_features:
         # Step 3: fit scaler on the provided features
         scaler = RobustScaler()
@@ -84,32 +105,34 @@ def feature_scaling(
             len(existing_features),
             existing_features,
         )
-        scaler_artifact = {"scaler": scaler}
+        # Actualizamos el trace con los valores reales
+        trace["features_scaled"] = existing_features
+        trace["scaler_centers_"] = scaler.center_.tolist()
+        trace["scaler_scales_"] = scaler.scale_.tolist()
+
+        # Guardamos el objeto escalador en el diccionario de retorno
+        extra_artifacts[artifact_key] = {"scaler": scaler}
+
+        log.info("[feature_scaling] scaled %d features", len(existing_features))
     else:
         log.warning(
             "[feature_scaling] no valid features to scale – returning unchanged"
         )
 
     # Step 4: persist fit trace
-    trace = {
-        "method": method,
-        "features_scaled": existing_features,
-        "scaler_centers_": scaler.center_.tolist() if existing_features else None,
-        "scaler_scales_": scaler.scale_.tolist() if existing_features else None,
-    }
+    extra_artifacts["trace"] = trace
     output_path = output_dir / "3.3.transformation.scaler_fit_trace.json"
     output_path.write_text(json.dumps(trace, indent=2, default=str), encoding="utf-8")
-    log.debug("[feature_scaling] trace written to %s", output_path)
 
     log.info("[feature_scaling] completed – shape=%s", df.shape)
-    return df, scaler_artifact
-    # artifact_key = "fitted_scaler_regression_artifact"
-    # return df, {artifact_key: {"scaler": scaler}}
+
+    # 5. RETORNO SEGURO
+    return df, extra_artifacts
 
 
 def feature_engineering(
     df: pd.DataFrame,
-    params: dict[str, Any],
+    tech_cfg: dict[str, Any],  # params: dict[str, Any],
     ctx: Any,
     output_dir: Path,
 ) -> tuple[pd.DataFrame, None]:
@@ -142,6 +165,10 @@ def feature_engineering(
         - DataFrame with added engineered columns.
         - None (no extra artifacts).
     """
+
+    # 1. EXTRACCIÓN CORRECTA
+    params = tech_cfg.get("params", {})
+
     log.debug("[feature_engineering] entry – shape=%s", df.shape)
 
     formulas: dict[str, str] = params.get("formulas", {})

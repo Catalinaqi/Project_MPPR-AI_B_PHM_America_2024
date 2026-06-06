@@ -188,12 +188,9 @@ regression_pipeline_config:
       read_strategy:
         mode: "consume_engineered_splits"
         input_source:
-          train_data: "K:/00_Code/Manutenzione/Project_MPPR-AI_B_PHM_America_2024/outputs/runs/regression/phm2024/20260604_191546/phase3_data_preparation/3.5.formatting.regression_internal_train.parquet"
-          val_data: "K:/00_Code/Manutenzione/Project_MPPR-AI_B_PHM_America_2024/outputs/runs/regression/phm2024/20260604_191546/phase3_data_preparation/3.5.formatting.regression_internal_val.parquet"
-          scaler: "K:/00_Code/Manutenzione/Project_MPPR-AI_B_PHM_America_2024/outputs/runs/regression/phm2024/20260604_191505/phase3_data_preparation/3.3.transformation.robust_scaler_regression.pkl"
-          #          train_data: "3.5.formatting.regression_internal_train.parquet"
-          #          val_data: "3.5.formatting.regression_internal_val.parquet"
-          #          scaler: "3.3.transformation.robust_scaler_regression.pkl"
+          train_data: "3.5.formatting.regression_internal_train.parquet"
+          val_data: "3.5.formatting.regression_internal_val.parquet"
+          scaler: "3.3.transformation.robust_scaler_regression.pkl"
 
       steps:
         step_4_1_algorithm_selection:

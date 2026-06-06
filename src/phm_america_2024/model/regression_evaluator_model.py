@@ -57,11 +57,22 @@ def model_selection_criteria(
     log.info("Computing real evaluation metrics (NLL and RMSE)")
 
     # Step 2: CALL load_parquet() — dynamically load validation split
-    if not Path(val_data_path).exists():
-        log.error(f"Validation data not found at {val_data_path}")
-        raise FileNotFoundError(f"Validation file missing: {val_data_path}")
+    # Step 2: Resolve path correctly using phase3_dir
+    # Obtenemos el directorio donde la Fase 3 guardó los archivos
+    phase3_dir = getattr(ctx, "phase3_dir", None)
+    if not phase3_dir:
+        log.error("phase3_dir not found in context. Cannot resolve validation path.")
+        raise ValueError("phase3_dir missing in RunContext")
 
-    val_data: pd.DataFrame = load_parquet(val_data_path)
+    # Construimos la ruta absoluta uniendo el directorio + el nombre del archivo
+    full_val_path = Path(phase3_dir) / val_data_path
+
+    if not full_val_path.exists():
+        log.error(f"Validation data not found at {full_val_path}")
+        raise FileNotFoundError(f"Validation file missing: {full_val_path}")
+
+    val_data: pd.DataFrame = load_parquet(str(full_val_path))
+    log.info(f"Loaded validation data from {full_val_path}")
 
     # Step 3: CALL replace() and dropna() — Remove Infinity and NaN values before predicting
     initial_len = len(val_data)
