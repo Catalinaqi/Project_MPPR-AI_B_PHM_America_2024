@@ -237,7 +237,7 @@ class StepOutputArtifact(str, Enum):
     # Step 2.1
     load_and_merge_json = "load_and_merge_x_y"
 
-    sample_x_y_train_parquet = "sample_x_y_train_parquet"
+    sample_x_y_train_parquet = "sample_x_y_train_parquet"  # sample_x_y_train_parquet
     sample_x_test_parquet = "sample_x_test_parquet"
     sample_x_validation_parquet = "sample_x_validation_parquet"
 

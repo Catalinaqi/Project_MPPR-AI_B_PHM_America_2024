@@ -39,13 +39,13 @@ regression_pipeline_config:
       enabled: true
       objective: "Clean, transform, and internal split ONLY the 4 training motors."
 
-      # [REGLA 3] DAG Traceability: Ingesta hermética solo del split de entrenamiento
       read_strategy:
         mode: "full_flight_records"
-        input_source: #"outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"
-          #train_parquet: "2.1.data_acquisition.prod_300000_stratified_train.parquet"
-          #train_parquet: "outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"
-         train_parquet: "K:/00_Code/Manutenzione/Project_MPPR-AI_B_PHM_America_2024/outputs/runs/regression/phm2024/20260526_081615/phase2_data_understanding/2.1.data_acquisition.prod_300000_stratified_train.parquet"
+        input_source:
+         #train_parquet: "2.1.data_acquisition.*_stratified_train.parquet"
+         description: <
+           train_parquet -> 2.1.data_acquisition.*_stratified_train.parquet
+           Data acquisition step 2.1 x+y train stratified parquet.
 
       steps:
         # ────────────────────────────────────────────────────────────────────────
@@ -61,6 +61,7 @@ regression_pipeline_config:
                 dataset_definition:
                   enabled: true
                   params:
+                    mode: "full_flight_records"
                     include: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_margin","trq_measured" ]
                     patterns_to_drop: [ "id"]
                   output: "3.1.selection.definition_trace_log.json"

@@ -88,20 +88,20 @@ pipeline_base:
                       infer_datetime: false  # Shuffled data — no timestamp exists
             output_artifacts:
               sample_x_y_train_parquet:
-                path: "2.1.data_acquisition.sample_train.parquet"
+                path: "2.1.data_acquisition-sample_x_y_train.parquet"
                 description: >
                   Random sample of 300,000 rows from df_train (merged X+Y).
                   Contains all features + faulty + trq_margin.
                   Primary input for all Phase 2 profiling steps and Phase 3 feature engineering.
                 consumed_by: [ "step_2_2", "step_2_3", "step_2_4", "phase_3", "phase_4" ]
               sample_x_test_parquet:
-                path: "2.1.data_acquisition.sample_test.parquet"
+                path: "2.1.data_acquisition-sample_x_test.parquet"
                 description: >
                   Full df_test loaded as-is (21,436 rows — no sampling needed).
                   Features only, no labels. Not used until Phase 5 final scoring.
                 consumed_by: [ "phase_5" ]
               sample_x_validation_parquet:
-                path: "2.1.data_acquisition.sample_validation.parquet"
+                path: "2.1.data_acquisition-sample_x_validation.parquet"
                 description: >
                   Full df_validation loaded as-is (21,436 rows — no sampling needed).
                   Features only, no labels. Not used until Phase 5 final scoring.
@@ -120,7 +120,7 @@ pipeline_base:
                     params:
                       include_cardinality: false  # All features are continuous DOUBLE
                       include_dtypes: true
-                    output: "2.2.schema_analysis.column_metadata.json"
+                    output: "2.2.data_description-schema_analysis.column_metadata.json"
 
               descriptive_statistics:
                 enabled: true
@@ -133,7 +133,7 @@ pipeline_base:
                       metrics: ["count", "mean", "std", "min", "max", "skewness"]
                       # Confirmed column names — all lowercase
                       columns: ["mgt", "oat", "trq_measured", "pa", "ias", "np", "ng"]
-                    output: "2.2.descriptive_statistics.sensor_stats.json"
+                    output: "2.2.data_description-sensor_stats.json"
 
               null_check:
                 enabled: true
@@ -145,7 +145,7 @@ pipeline_base:
                     enabled: true
                     params:
                       columns: ["trq_measured", "oat", "mgt", "pa", "ias", "np", "ng", "faulty", "trq_margin"]
-                    output: "2.2.null_check.null_count_per_column.json"
+                    output: "2.2.data_description-null_count_per_column.json"
 
               target_distribution:
                 enabled: true
@@ -159,7 +159,7 @@ pipeline_base:
                       compute_imbalance_ratio: true
                       compute_skewness: true
                       fit_distributions: [ "norm", "skewnorm", "gamma" ]
-                    output: "2.2.target_distribution.json"
+                    output: "2.2.data_description-distribution_analysis.json"
           #Trovare anomalie fisiche → giustifica regole fisiche + Kelvin shift
           step_2_3_data_quality_assessment:
             enabled: true
@@ -176,7 +176,7 @@ pipeline_base:
                     params:
                       check_columns: ["oat", "ng"]   # confirmed lowercase
                       flag_if_less_than_or_equal_to: 0
-                    output: "2.3.physical_limits_detection.zero_or_negative_check.json"
+                    output: "2.3.data_quality_assessment-zero_or_negative_check.json"
 
               potential_leakage_detection:
                 enabled: true
@@ -199,7 +199,7 @@ pipeline_base:
                         - ["trq_measured", "trq_margin"]    # PENDING — direct leakage check
                       leakage_threshold: 0.95
                       secondary_threshold: 0.85  # Applied to trq_measured vs trq_margin only
-                    output: "2.3.quality.collinearity.json"
+                    output: "2.3.data_quality_assessment-quality.collinearity.json"
           #Scoprire struttura latente → giustifica GMM k=4 in Phase 4
           step_2_4_data_exploration:
             enabled: true
@@ -218,7 +218,7 @@ pipeline_base:
                         temperatures:  ["oat", "mgt"]
                         power_metrics: ["pa", "np", "trq_measured"]
                         speeds:        ["ng", "ias"]
-                    output: "2.4.exploration.column_catalog.json"
+                    output: "2.4.data_exploration-column_catalog.json"
 
               domain_shift_analysis:
                 enabled: true
@@ -232,7 +232,7 @@ pipeline_base:
                       compare_splits: [ "validation", "test" ]
                       significance_level: 0.01
                       shift_threshold: 0.1  # KS statistic > 0.1 = shift detectado
-                    output: "2.4.domain_shift.ks_report.json"
+                    output: "2.4.data_exploration-ks_test_per_feature.json"
 
                   gmm_exploration:
                     enabled: true
@@ -243,14 +243,14 @@ pipeline_base:
                       k_range: [ 2, 3, 4, 5, 6 ]
                       features: [ "oat", "ng", "pa", "mgt" ]
                       selection_criterion: "BIC"
-                    output: "2.4.gmm_exploration.bic_aic_curve.png"
+                    output: "2.4.data_exploration-gmm_exploration.bic_aic_curve.png"
 
                   feature_drift_summary:
                     enabled: true
                     params:
                       aggregate_by: "max_ks_statistic"
                       flag_critical_shifts: true
-                    output: "2.4.domain_shift.drift_summary.json"
+                    output: "2.4.data_exploration-drift_summary.json"
 
               visual_eda:
                 enabled: true
@@ -266,7 +266,7 @@ pipeline_base:
                       column: "oat"
                       bin_size: 10
                       plot_type: "hist"
-                    output: "2.4.visual_eda.flight_regimes.png"
+                    output: "2.4.data_exploration-visual_eda.flight_regimes.png"
 
         # ══════════════════════════════════════════════════════════════════════
         # DYNAMIC WARNINGS — all confirmed by DuckDB queries

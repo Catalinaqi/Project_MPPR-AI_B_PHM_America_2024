@@ -283,6 +283,9 @@ class Phase4ModelingRunner:
         log.debug("[_get_explicit_train_path] exit")
         return explicit_train
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Input loading
+    # ──────────────────────────────────────────────────────────────────────────
     def _load_input_dataframe(self) -> Any:
         """Load the required DataFrame based on step configuration.
 
@@ -356,6 +359,9 @@ class Phase4ModelingRunner:
         log.debug("[_load_input_dataframe] exit")
         return df
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Technique execution
+    # ──────────────────────────────────────────────────────────────────────────
     def _execute_technique(
         self,
         technique_name: str,

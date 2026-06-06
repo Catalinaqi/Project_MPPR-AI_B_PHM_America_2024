@@ -53,13 +53,22 @@ def feature_scaling(
 
     # Step 1: verify method is supported
     if method != "RobustScaler":
-        log.warning("[feature_scaling] unknown method='%s' – falling back to RobustScaler", method)
+        log.warning(
+            "[feature_scaling] unknown method='%s' – falling back to RobustScaler",
+            method,
+        )
 
     # Step 2: filter only existing numeric features
-    existing_features = [col for col in features if col in df.columns and pd.api.types.is_numeric_dtype(df[col])]
+    existing_features = [
+        col
+        for col in features
+        if col in df.columns and pd.api.types.is_numeric_dtype(df[col])
+    ]
     missing = set(features) - set(existing_features)
     if missing:
-        log.warning("[feature_scaling] requested columns not found or non-numeric: %s", missing)
+        log.warning(
+            "[feature_scaling] requested columns not found or non-numeric: %s", missing
+        )
 
     scaler_artifact: Optional[dict[str, Any]] = None
 
@@ -72,11 +81,14 @@ def feature_scaling(
 
         log.info(
             "[feature_scaling] scaled %d features: %s",
-            len(existing_features), existing_features,
+            len(existing_features),
+            existing_features,
         )
         scaler_artifact = {"scaler": scaler}
     else:
-        log.warning("[feature_scaling] no valid features to scale – returning unchanged")
+        log.warning(
+            "[feature_scaling] no valid features to scale – returning unchanged"
+        )
 
     # Step 4: persist fit trace
     trace = {
@@ -91,6 +103,8 @@ def feature_scaling(
 
     log.info("[feature_scaling] completed – shape=%s", df.shape)
     return df, scaler_artifact
+    # artifact_key = "fitted_scaler_regression_artifact"
+    # return df, {artifact_key: {"scaler": scaler}}
 
 
 def feature_engineering(
@@ -137,7 +151,10 @@ def feature_engineering(
 
     engineering_log: dict[str, Any] = {
         "formulas_applied": [],
-        "interactions": {"degree": interactions_cfg.get("degree", 2), "features_used": []},
+        "interactions": {
+            "degree": interactions_cfg.get("degree", 2),
+            "features_used": [],
+        },
     }
 
     # Step 1: evaluate each formula safely
@@ -146,21 +163,30 @@ def feature_engineering(
         try:
             # Evaluate expression using available columns as local variables
             df[name] = eval(expr, {"__builtins__": {}}, df.to_dict("series"))
-            engineering_log["formulas_applied"].append({"name": name, "expression": expr})
+            engineering_log["formulas_applied"].append(
+                {"name": name, "expression": expr}
+            )
             log.debug("[feature_engineering] computed formula '%s' -> '%s'", name, expr)
         except Exception as exc:
             log.error("[feature_engineering] formula '%s' failed: %s", name, exc)
-            engineering_log.setdefault("formula_errors", []).append({"name": name, "error": str(exc)})
+            engineering_log.setdefault("formula_errors", []).append(
+                {"name": name, "error": str(exc)}
+            )
 
     # Step 2: generate polynomial interactions if enabled
     interactions_enabled: bool = interactions_cfg.get("enabled", False)
     if interactions_enabled:
         degree: int = interactions_cfg.get("degree", 2)
         inter_features: list[str] = interactions_cfg.get("features", [])
-        existing_inter = [col for col in inter_features if col in df.columns and pd.api.types.is_numeric_dtype(df[col])]
+        existing_inter = [
+            col
+            for col in inter_features
+            if col in df.columns and pd.api.types.is_numeric_dtype(df[col])
+        ]
         if degree >= 2 and len(existing_inter) >= 2:
-
-            poly = PolynomialFeatures(degree=degree, interaction_only=False, include_bias=False)
+            poly = PolynomialFeatures(
+                degree=degree, interaction_only=False, include_bias=False
+            )
             poly_values = poly.fit_transform(df[existing_inter])
             poly_feature_names = poly.get_feature_names_out(existing_inter)
             # Add new columns, avoid overwriting existing ones
@@ -168,19 +194,28 @@ def feature_engineering(
                 if poly_name not in df.columns:
                     df[poly_name] = poly_values[:, i]
                 else:
-                    log.debug("[feature_engineering] interaction column '%s' already exists – skipping", poly_name)
+                    log.debug(
+                        "[feature_engineering] interaction column '%s' already exists – skipping",
+                        poly_name,
+                    )
             engineering_log["interactions"]["features_used"] = existing_inter
             engineering_log["interactions"]["n_new_columns"] = len(poly_feature_names)
             log.info(
                 "[feature_engineering] added %d polynomial interaction columns (degree=%d)",
-                len(poly_feature_names), degree,
+                len(poly_feature_names),
+                degree,
             )
         else:
-            log.warning("[feature_engineering] insufficient features for interactions: %s", existing_inter)
+            log.warning(
+                "[feature_engineering] insufficient features for interactions: %s",
+                existing_inter,
+            )
 
     # Step 3: persist engineering log
     output_path = output_dir / "3.3.transformation.engineering_formulas_log.json"
-    output_path.write_text(json.dumps(engineering_log, indent=2, default=str), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(engineering_log, indent=2, default=str), encoding="utf-8"
+    )
     log.debug("[feature_engineering] trace written to %s", output_path)
 
     log.info("[feature_engineering] completed – shape=%s", df.shape)

@@ -83,12 +83,26 @@ def data_split(
     log.debug("[data_split] trace written to %s", output_path)
 
     # Step 4: return DataFrames and extra artifacts (indices)
+    # extra = {
+    #     "train_indices": train_indices,
+    #     "val_indices": val_indices,
+    # }
+    # log.info("[data_split] completed")
+    # return train_df, val_df, extra
+
+    # Empaquetamos todo en el diccionario extra
     extra = {
-        "train_indices": train_indices,
-        "val_indices": val_indices,
+        "trace": trace,
+        "val_df": val_df,  # <- El val_df viaja aquí dentro
+        "train_indices": train_df.index.tolist(),
+        "val_indices": val_df.index.tolist(),
     }
-    log.info("[data_split] completed")
-    return train_df, val_df, extra
+
+    return train_df, {
+        "trace": trace,
+        "val_df": val_df,
+        "train_df": train_df,  # <-- Verifica que esto no sea None
+    }
 
 
 def dataset_formatting(

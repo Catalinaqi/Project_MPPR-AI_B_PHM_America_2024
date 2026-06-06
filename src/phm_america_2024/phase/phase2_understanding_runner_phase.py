@@ -262,14 +262,14 @@ class Phase2DataUnderstandingRunner:
 
         # Extraer la ruta de salida definida a nivel de técnica
         output_key = tech_cfg.get("output")
-        output_path: Path = resolve_path(self.base_dir / output_key)
+
         if not output_key:
             log.debug(
                 "[_execute_technique] '%s' has no output key – executing in memory only",
                 technique_name,
             )
         else:
-            # output_path
+            output_path: Path = resolve_path(self.base_dir / output_key)
             if self._should_skip(output_path):
                 log.info(
                     "[_execute_technique] '%s' artifact exists – skipping computation",
