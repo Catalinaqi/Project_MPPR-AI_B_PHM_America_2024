@@ -1,4 +1,4 @@
-# src/phm_america_2024/configuration/enum_regsitry_config.py
+# src/phm_america_2024/configuration/enum_registry_config.py
 from __future__ import annotations
 
 """
@@ -272,6 +272,7 @@ class StepOutputArtifact(str, Enum):
     # Step 3.5 – Data Formatting
     engineered_train_split = "engineered_train_split"
     engineered_val_split = "engineered_val_split"
+    engineered_test_split = "engineered_test_split"
 
     # ──────────────────────────────────────────────────────────────────────────
     # Phase 4 – Modeling (from regression_pipeline_config.yml)

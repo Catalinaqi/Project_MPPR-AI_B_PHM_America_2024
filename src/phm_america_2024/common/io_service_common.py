@@ -1,10 +1,10 @@
-# src/phm_america_2024/data/io_service_common.py
+# src/phm_america_2024/common/io_service_common.py
 from __future__ import annotations
 
 import json
 import pickle
 from pathlib import Path
-from typing import Any, cast, Optional, Tuple
+from typing import Any, cast, Optional
 import joblib
 import numpy as np
 import pandas as pd
@@ -50,10 +50,10 @@ def _convert_configs(obj: Any) -> Any:
 
 
 def save_parquet(
-        df: pd.DataFrame,
-        path: str | Path,
-        *,
-        compression: str,
+    df: pd.DataFrame,
+    path: str | Path,
+    *,
+    compression: str,
 ) -> Path:
     """Save a pandas DataFrame into a compressed Parquet artifact."""
     # Step 1: Guard against persisting an empty DataFrame -- likely a bug.
@@ -109,8 +109,8 @@ def save_parquet(
 
 
 def save_pickle(
-        obj: Any,
-        path: str | Path,
+    obj: Any,
+    path: str | Path,
 ) -> Path:
     """Serialize any pipeline artifact using standard pickle protocol."""
     # Step 1: Guard against persisting None -- likely a pipeline bug.
@@ -162,10 +162,10 @@ def save_pickle(
 
 
 def save_json(
-        obj: Any,
-        path: str | Path,
-        *,
-        indent: int = 2,
+    obj: Any,
+    path: str | Path,
+    *,
+    indent: int = 2,
 ) -> Path:
     """Save configurations, summaries or operational evaluation metrics to JSON."""
     # Step 1: Guard against persisting None -- likely a pipeline bug.
@@ -208,7 +208,7 @@ def save_json(
                 indent=indent,
                 ensure_ascii=False,
                 sort_keys=False,
-                cls=_NumpyEncoder
+                cls=_NumpyEncoder,
             )
     except TypeError as err:
         log.error(
@@ -233,8 +233,8 @@ def save_json(
 
 
 def save_numpy(
-        arr: Any,
-        path: str | Path,
+    arr: Any,
+    path: str | Path,
 ) -> Path:
     """Save raw multidimensional structures in optimized binary NumPy (.npy) format."""
     # Step 1: Guard against None and validate target type.
@@ -296,11 +296,15 @@ def save_numpy(
     )
     return resolved
 
+
 # -----------------------------------------------------------------------------
 # Existing artifact loaders (Parquet/Pickle) kept below...
 # -----------------------------------------------------------------------------
 
-def load_parquet(path: str | Path, *, columns: Optional[list[str]] = None) -> pd.DataFrame:
+
+def load_parquet(
+    path: str | Path, *, columns: Optional[list[str]] = None
+) -> pd.DataFrame:
     # Step 1: Resolve path to absolute location
     resolved = resolve_path(path)
     log.debug("[load_parquet] path=%s columns=%s", resolved, columns)
@@ -319,7 +323,9 @@ def load_parquet(path: str | Path, *, columns: Optional[list[str]] = None) -> pd
         raise
 
     # Step 4: Return loaded dataframe
-    log.info("[load_parquet] loaded rows=%d cols=%d path=%s", len(df), df.shape[1], resolved)
+    log.info(
+        "[load_parquet] loaded rows=%d cols=%d path=%s", len(df), df.shape[1], resolved
+    )
     return df
 
 
@@ -346,9 +352,10 @@ def load_pickle(path: str | Path) -> Any:
         raise
 
     # Step 5: Return deserialised object
-    log.info("[load_pickle] loaded object_type=%s path=%s", type(obj).__name__, resolved)
+    log.info(
+        "[load_pickle] loaded object_type=%s path=%s", type(obj).__name__, resolved
+    )
     return obj
-
 
 
 def load_pickle_joblib(path: str) -> Any:

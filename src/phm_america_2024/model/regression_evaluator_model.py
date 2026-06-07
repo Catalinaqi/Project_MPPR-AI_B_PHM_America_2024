@@ -13,6 +13,9 @@ from phm_america_2024.common.io_service_common import load_parquet
 log = get_logger(__name__)
 
 
+# step_4_4_model_evaluation -> Evaluación del mejor modelo
+
+
 def model_selection_criteria(
     model: Any,
     tech_cfg: dict[str, Any],
@@ -83,6 +86,14 @@ def model_selection_criteria(
         log.warning(
             f"Dropped {dropped_rows} rows containing NaN or Infinity from validation data."
         )
+
+    # ----------------------------------------------------------------
+    # X_val -> proviene de cargar el archivo "regression_internal_val.parquet"
+    # El flujo: El modelo ya se entrenó en el paso 4.2 usando el
+    # train_internal. Ahora, en el paso 4.4, carga el modelo guardado, carga el val_internal,
+    # y hace model.pred_dist(X_val) para ver qué la nota del modelo en datos que no
+    # usó para entrenar
+    # Es su examen final dentro del laboratorio.
 
     # Step 4: Extract features and target strictly using the YAML target variable
     X_val = val_data.drop(columns=[target_variable])

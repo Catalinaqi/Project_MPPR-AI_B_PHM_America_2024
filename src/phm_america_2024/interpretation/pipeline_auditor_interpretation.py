@@ -1,7 +1,4 @@
-"""
-MVP – Step 5.3 technique function for leakage detection (train/test overlap, scaler contamination).
-Consumes only its own technique configuration from the YAML step.
-"""
+# src/phm_america_2024/phase/pipeline_auditor_interpretation.py
 import json
 from pathlib import Path
 from typing import Any, Tuple
@@ -90,18 +87,26 @@ def leakage_detection(
                 }
             else:
                 test_median = numeric_test.median().values
-                test_iqr = (numeric_test.quantile(0.75) - numeric_test.quantile(0.25)).values
+                test_iqr = (
+                    numeric_test.quantile(0.75) - numeric_test.quantile(0.25)
+                ).values
 
                 scaler_center = scaler.center_
                 scaler_scale = scaler.scale_
 
                 # align lengths (ignore extra features that may be in scaler)
                 min_len = min(len(test_median), len(scaler_center), len(scaler_scale))
-                diff_center = np.abs(scaler_center[:min_len] - test_median[:min_len]).mean()
+                diff_center = np.abs(
+                    scaler_center[:min_len] - test_median[:min_len]
+                ).mean()
                 diff_scale = np.abs(scaler_scale[:min_len] - test_iqr[:min_len]).mean()
 
                 # heuristic: if the mean absolute difference is very small, scaler may have seen test data
-                tolerance = 0.01 * np.abs(test_median[:min_len]).max() if test_median[:min_len].max() != 0 else 0.01
+                tolerance = (
+                    0.01 * np.abs(test_median[:min_len]).max()
+                    if test_median[:min_len].max() != 0
+                    else 0.01
+                )
                 contaminated = diff_center < tolerance
 
                 results["scaler_contamination_check"] = {

@@ -1,7 +1,4 @@
-"""
-MVP – Step 5.4 technique function for final sign‑off certificate.
-Consumes only its own technique configuration from the YAML step.
-"""
+# src/phm_america_2024/phase/deployment_reporter_interpretation.py
 import json
 from datetime import datetime
 from pathlib import Path

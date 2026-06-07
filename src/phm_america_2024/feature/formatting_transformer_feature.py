@@ -1,3 +1,4 @@
+# src/phm_america_2024/phase/formatting_transformer_feature.py
 from __future__ import annotations
 
 import json
@@ -17,92 +18,134 @@ def data_split(
     params: dict[str, Any],
     ctx: Any,
     output_dir: Path,
-) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
-    """Partition the DataFrame into internal training and validation splits.
-
-    Uses ``train_test_split`` with ``test_size`` and ``random_state``
-    from the YAML configuration.  Persists a trace log with the split
-    indices and shapes.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Full transformed DataFrame (from step 3.3).
-    params : dict
-        YAML technique configuration:
-        ``test_size`` (float) – proportion for validation (default 0.2).
-        ``random_state`` (int) – random seed (default 42).
-    ctx : Any
-        RunContext (unused but retained for interface consistency).
-    output_dir : Path
-        Directory to write the split trace JSON
-        (``3.5.formatting.split_indices_trace.json``).
-
-    Returns
-    -------
-    tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]
-        - Training DataFrame.
-        - Validation DataFrame.
-        - Extra-artifact dict with keys ``"train_indices"`` and
-          ``"val_indices"`` (list of original index positions).
-    """
-    log.debug("[data_split] entry – shape=%s", df.shape)
-
-    test_size: float = params.get("test_size", 0.2)
-    random_state: int = params.get("random_state", 42)
-
-    # Step 1: perform train/val split (preserving index for traceability)
-    train_df, val_df = train_test_split(
-        df,
-        test_size=test_size,
-        random_state=random_state,
-        shuffle=True,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Partition the DataFrame into internal training, validation, and test splits."""
+    log.debug(
+        "[data_split] ENTRY - Iniciando proceso de partición. DataFrame original shape: %s",
+        df.shape,
     )
 
-    log.info(
-        "[data_split] split – train=%s, val=%s",
-        train_df.shape,
-        val_df.shape,
-    )
+    try:
+        # 1. Extracción de parámetros
+        test_size: float = params.get("test_size", 0.15)
 
-    # Step 2: collect index positions for traceability
+        # LOG WARNING: Te avisa si te olvidaste de poner val_size en el YAML
+        if "val_size" not in params:
+            val_size: float = test_size
+            log.warning(
+                "[data_split] 'val_size' no especificado en YAML. Asumiendo el mismo valor que test_size: %.2f",
+                val_size,
+            )
+        else:
+            val_size: float = params["val_size"]
+
+        random_state: int = params.get("random_state", 42)
+        log.info(
+            "[data_split] Parámetros cargados: test_size=%.2f, val_size=%.2f, random_state=%d",
+            test_size,
+            val_size,
+            random_state,
+        )
+
+        # LOG ERROR preventivo: Validación matemática
+        if test_size + val_size >= 1.0:
+            err_msg = f"Inconsistencia matemática: sum(test_size, val_size) = {test_size + val_size}. Debe ser menor a 1.0."
+            log.error("[data_split] %s", err_msg)
+            raise ValueError(err_msg)
+
+        # 2. PRIMER CORTE: Separar el Test Set del resto
+        log.debug("[data_split] Ejecutando Primer Corte: Extrayendo Test Set...")
+        train_val_df, test_df = train_test_split(
+            df,
+            test_size=test_size,
+            random_state=random_state,
+            shuffle=True,
+        )
+        log.info(
+            "[data_split] Primer Corte exitoso. Restante (Train+Val)=%s, Test=%s",
+            train_val_df.shape,
+            test_df.shape,
+        )
+
+        # 3. SEGUNDO CORTE: Separar Validation Set del Training restante
+        val_ratio_of_remaining = val_size / (1.0 - test_size)
+        log.debug(
+            "[data_split] Ejecutando Segundo Corte: Extrayendo Val Set (Proporción matemática ajustada: %.4f)...",
+            val_ratio_of_remaining,
+        )
+
+        train_df, val_df = train_test_split(
+            train_val_df,
+            test_size=val_ratio_of_remaining,
+            random_state=random_state,
+            shuffle=True,
+        )
+
+        log.info(
+            "[data_split] Partición finalizada con éxito -> Train: %s | Val: %s | Test: %s",
+            train_df.shape,
+            val_df.shape,
+            test_df.shape,
+        )
+
+    except Exception as e:
+        # LOG ERROR crítico: Captura cualquier falla de Scikit-Learn
+        log.error(
+            "[data_split] Falla crítica durante la división (train_test_split): %s",
+            str(e),
+            exc_info=True,
+        )
+        raise
+
+    # 4. Trazabilidad de Índices
+    log.debug(
+        "[data_split] Recolectando índices para archivo de auditoría (traceability)..."
+    )
     train_indices = train_df.index.tolist()
     val_indices = val_df.index.tolist()
+    test_indices = test_df.index.tolist()
 
-    # Step 3: persist trace log
     trace = {
-        "test_size": test_size,
+        "test_size_original": test_size,
+        "val_size_original": val_size,
         "random_state": random_state,
         "train_shape": list(train_df.shape),
         "val_shape": list(val_df.shape),
-        "train_indices_sample": train_indices[:5],  # first 5 for sanity
+        "test_shape": list(test_df.shape),
+        "train_indices_sample": train_indices[:5],
         "val_indices_sample": val_indices[:5],
+        "test_indices_sample": test_indices[:5],
     }
+
+    # 5. Persistencia del JSON
     output_path = output_dir / "3.5.formatting.split_indices_trace.json"
-    output_path.write_text(json.dumps(trace, indent=2, default=str), encoding="utf-8")
-    log.debug("[data_split] trace written to %s", output_path)
 
-    # Step 4: return DataFrames and extra artifacts (indices)
-    # extra = {
-    #     "train_indices": train_indices,
-    #     "val_indices": val_indices,
-    # }
-    # log.info("[data_split] completed")
-    # return train_df, val_df, extra
+    try:
+        log.debug("[data_split] Escribiendo archivo JSON de traza en: %s", output_path)
+        output_path.write_text(
+            json.dumps(trace, indent=2, default=str), encoding="utf-8"
+        )
+        log.info("[data_split] Archivo de traza guardado correctamente.")
+    except Exception as e:
+        # LOG ERROR de I/O (ej. disco lleno o sin permisos)
+        log.error(
+            "[data_split] Error al escribir el archivo de traza JSON en disco: %s",
+            str(e),
+        )
+        raise
 
-    # Empaquetamos todo en el diccionario extra
+    # 6. Empaquetado
     extra = {
         "trace": trace,
-        "val_df": val_df,  # <- El val_df viaja aquí dentro
-        "train_indices": train_df.index.tolist(),
-        "val_indices": val_df.index.tolist(),
+        "val_df": val_df,
+        "test_df": test_df,
+        "train_df": train_df,
     }
 
-    return train_df, {
-        "trace": trace,
-        "val_df": val_df,
-        "train_df": train_df,  # <-- Verifica que esto no sea None
-    }
+    log.debug(
+        "[data_split] EXIT - Retornando DataFrame de entrenamiento y diccionario extra."
+    )
+    return train_df, extra
 
 
 def dataset_formatting(

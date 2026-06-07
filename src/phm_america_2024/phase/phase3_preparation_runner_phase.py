@@ -1,3 +1,4 @@
+# src/phm_america_2024/phase/phase3_preparation_runner_phase.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -257,16 +258,30 @@ class Phase3PreparationRunner:
 
         # 1. Gestionar el DataFrame principal y artefactos específicos
         # Paso 3.5 tiene lógica especial porque genera DOS parquets (train y val)
+        # if self.step_key == StepsPhase.STEP_3_5.value:
+        #     # Validación: df debe existir para ser el train split
+        #     if df is not None:
+        #         context_data[StepOutputArtifact.engineered_train_split.value] = df
+        #
+        #     # Buscamos el val_df en los artefactos extra
+        #     if "val_df" in extra_artifacts:
+        #         context_data[StepOutputArtifact.engineered_val_split.value] = (
+        #             extra_artifacts["val_df"]
+        #         )
         if self.step_key == StepsPhase.STEP_3_5.value:
-            # Validación: df debe existir para ser el train split
             if df is not None:
                 context_data[StepOutputArtifact.engineered_train_split.value] = df
 
-            # Buscamos el val_df en los artefactos extra
             if "val_df" in extra_artifacts:
                 context_data[StepOutputArtifact.engineered_val_split.value] = (
                     extra_artifacts["val_df"]
                 )
+
+            # 👇 NUEVO: Capturar y guardar el dataset de test interno
+            if "test_df" in extra_artifacts:
+                # Si tienes un enum, úsalo: StepOutputArtifact.engineered_test_split.value
+                # Si no, usa el string directamente (o actualiza tu enum_registry_domain.py)
+                context_data["engineered_test_split"] = extra_artifacts["test_df"]
         else:
             # Para los demás pasos, buscamos el nombre del parquet en la config del YAML
             output_artifacts_cfg = self.step_cfg.get("output_artifacts", {})

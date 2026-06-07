@@ -1,7 +1,5 @@
-"""
-MVP – Step 5.2 technique functions for calibration audit and degradation benchmarking.
-Each function consumes only its own technique configuration.
-"""
+# src/phm_america_2024/phase/business_alignment_evaluator_interpretation.py
+from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Tuple
@@ -99,7 +97,9 @@ def performance_degradation_benchmarking(
     if baseline == "naive_mean":
         baseline_mean = np.mean(y_true)
         baseline_std = np.std(y_true)
-        baseline_nll = -np.mean(norm.logpdf(y_true, loc=baseline_mean, scale=baseline_std))
+        baseline_nll = -np.mean(
+            norm.logpdf(y_true, loc=baseline_mean, scale=baseline_std)
+        )
     else:
         baseline_nll = 0.0
 

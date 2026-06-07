@@ -13,11 +13,12 @@ from phm_america_2024.common.logging_adapter_common import get_logger
 log = get_logger(__name__)
 
 
+# step_4_1_algorithm_selection -> Setup de algoritmos
 def single_probabilistic_architecture(
-        df: pd.DataFrame,
-        tech_cfg: dict[str, Any],
-        ctx: Any,
-        output_dir: Path,
+    df: pd.DataFrame,
+    tech_cfg: dict[str, Any],
+    ctx: Any,
+    output_dir: Path,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Configure NGBoost probabilistic architecture from YAML and persist trace.
 
@@ -37,7 +38,10 @@ def single_probabilistic_architecture(
         output_filename: str = tech_cfg["output"]
         base_params: dict[str, Any] = params["Base"]
     except KeyError as e:
-        log.error("[single_probabilistic_architecture] YAML key missing in configuration: %s", e)
+        log.error(
+            "[single_probabilistic_architecture] YAML key missing in configuration: %s",
+            e,
+        )
         raise
 
     # Step 2: Build model configuration dict from YAML params

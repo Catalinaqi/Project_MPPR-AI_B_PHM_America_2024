@@ -17,12 +17,14 @@ from phm_america_2024.common.logging_adapter_common import get_logger
 
 log = get_logger(__name__)
 
+# step_4_2_model_training -> Entrenamiento con K-Fold
+
 
 def algorithm_selection(
-        df: pd.DataFrame,
-        tech_cfg: Dict[str, Any],
-        ctx: Any,
-        output_dir: Path,
+    df: pd.DataFrame,
+    tech_cfg: Dict[str, Any],
+    ctx: Any,
+    output_dir: Path,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Return an NGBRegressor configuration dict (no fitting) and log trace.
 
@@ -73,11 +75,11 @@ def algorithm_selection(
 
 
 def cross_validation(
-        df: pd.DataFrame,
-        tech_cfg: Dict[str, Any],
-        ctx: Any,
-        output_dir: Path,
-        algorithm_config: Optional[Dict[str, Any]] = None
+    df: pd.DataFrame,
+    tech_cfg: Dict[str, Any],
+    ctx: Any,
+    output_dir: Path,
+    algorithm_config: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Any, Dict[str, Any]]:
     """Execute GMM-grouped GroupKFold cross validation and train NGBoost per fold.
 
@@ -92,6 +94,21 @@ def cross_validation(
         Best trained model (lowest validation NLL) and extra artifacts.
     """
     log.debug("[cross_validation] entry – shape=%s", df.shape)
+
+    try:
+        # Extraemos el path de train desde la configuración global
+        train_data_name = ctx.config.phases["phase4_data_modeling"]["read_strategy"][
+            "input_source"
+        ]["train_data"]
+        phase3_dir = getattr(ctx, "phase3_dir", "Directorio_Desconocido")
+        full_train_path = Path(phase3_dir) / train_data_name
+
+        log.info("[cross_validation] DATASET ORIGEN (Train): %s", full_train_path)
+    except Exception as e:
+        log.warning(
+            "[cross_validation] No se pudo resolver la ruta del dataset en los logs: %s",
+            e,
+        )
 
     try:
         # Step 1: Extract parameters directly from YAML config (Zero hardcoding)
@@ -112,13 +129,13 @@ def cross_validation(
         log.error("[cross_validation] YAML key missing in configuration: %s", e)
         raise
 
-
-
     # Step 2: Validate mathematical boundaries
     if n_splits > n_clusters:
         log.warning(
             "[cross_validation] shift detected: n_splits (%d) > n_clusters (%d). Adjusting n_splits to %d.",
-            n_splits, n_clusters, n_clusters
+            n_splits,
+            n_clusters,
+            n_clusters,
         )
         n_splits = n_clusters
 
@@ -131,7 +148,10 @@ def cross_validation(
     dropped_rows: int = initial_rows - len(df)
 
     if dropped_rows > 0:
-        log.warning("[cross_validation] Dropped %d rows containing NaN or Infinity.", dropped_rows)
+        log.warning(
+            "[cross_validation] Dropped %d rows containing NaN or Infinity.",
+            dropped_rows,
+        )
 
     feature_cols: list[str] = [c for c in df.columns if c != target_col]
     X: np.ndarray = df[feature_cols].values
@@ -139,14 +159,16 @@ def cross_validation(
 
     # Step 5: CALL GaussianMixture() — instantiate GMM clusterer
     gmm = GaussianMixture(
-        n_components=n_clusters,
-        covariance_type=cov_type,
-        random_state=random_seed
+        n_components=n_clusters, covariance_type=cov_type, random_state=random_seed
     )
 
-    gmm_features_idx: list[int] = [feature_cols.index(f) for f in gmm_features if f in feature_cols]
+    gmm_features_idx: list[int] = [
+        feature_cols.index(f) for f in gmm_features if f in feature_cols
+    ]
     if len(gmm_features_idx) < len(gmm_features):
-        log.error("[cross_validation] numerical failure / missing features: %s", gmm_features)
+        log.error(
+            "[cross_validation] numerical failure / missing features: %s", gmm_features
+        )
         raise ValueError(f"Some GMM features not found in dataframe: {gmm_features}")
 
     X_gmm: np.ndarray = X[:, gmm_features_idx]
@@ -158,7 +180,9 @@ def cross_validation(
     gkf = GroupKFold(n_splits=n_splits)
 
     if not algorithm_config:
-        log.error("[cross_validation] algorithm_config missing. Step 4.1 must be executed prior.")
+        log.error(
+            "[cross_validation] algorithm_config missing. Step 4.1 must be executed prior."
+        )
         raise ValueError("algorithm_config is required but was None.")
 
     try:
@@ -170,16 +194,25 @@ def cross_validation(
         mini_batch: float = algorithm_config["minibatch_frac"]
         algo_seed: int = algorithm_config["random_state"]
     except KeyError as e:
-        log.error("[cross_validation] YAML key missing in injected algorithm_config: %s", e)
+        log.error(
+            "[cross_validation] YAML key missing in injected algorithm_config: %s", e
+        )
         raise
 
-    log.info("[cross_validation] NGBoost init: estimators=%d, lr=%s, depth=%d", n_est, lr, tree_depth)
+    log.info(
+        "[cross_validation] NGBoost init: estimators=%d, lr=%s, depth=%d",
+        n_est,
+        lr,
+        tree_depth,
+    )
 
     best_model: Any = None
     best_nll: float = float("inf")
     fold_results: list[Dict[str, Any]] = []
 
-    for fold_idx, (train_idx, val_idx) in enumerate(gkf.split(X, y, groups=cluster_labels)):
+    for fold_idx, (train_idx, val_idx) in enumerate(
+        gkf.split(X, y, groups=cluster_labels)
+    ):
         log.info("[cross_validation] Fold %d/%d", fold_idx + 1, n_splits)
 
         X_train, X_val = X[train_idx], X[val_idx]
@@ -187,9 +220,7 @@ def cross_validation(
 
         # Step 9: CALL DecisionTreeRegressor() — instantiate robust base learner
         base_learner = DecisionTreeRegressor(
-            max_depth=tree_depth,
-            min_samples_leaf=min_samples,
-            random_state=algo_seed
+            max_depth=tree_depth, min_samples_leaf=min_samples, random_state=algo_seed
         )
 
         # Step 10: CALL NGBRegressor() — instantiate probabilistic model
@@ -204,12 +235,16 @@ def cross_validation(
         )
 
         # Step 11: CALL fit() — train model fold
+        # internal_train: Se usa exclusivamente dentro de la función model.fit(X_train, y_train).
+        # Es el material de estudio del modelo
         model.fit(X_train, y_train)
 
         # Step 12: CALL pred_dist() — generate normal distribution parameters
         y_pred_dist = model.pred_dist(X_val)
 
         # Step 13: CALL logpdf() — evaluate negative log likelihood
+        # internal_val: Se usa inmediatamente después en model.pred_dist(X_val).
+        # Es el "examen de prueba" que le haces al modelo para calcular el RMSE y el NLL base.
         nll: float = -y_pred_dist.logpdf(y_val).mean()
 
         # Obtenemos el array de medias (las predicciones puntuales reales)
@@ -217,7 +252,7 @@ def cross_validation(
 
         # Calculamos RMSE usando numpy puramente para evitar problemas de tipos
         errors = pred_means - y_val
-        rmse: float = np.sqrt(np.mean(errors ** 2))
+        rmse: float = np.sqrt(np.mean(errors**2))
 
         fold_results.append({"fold": fold_idx, "nll": nll, "rmse": rmse})
 
@@ -225,7 +260,12 @@ def cross_validation(
             best_nll = nll
             best_model = model
 
-        log.info("[cross_validation] Fold %d results: NLL=%.4f RMSE=%.4f", fold_idx + 1, nll, rmse)
+        log.info(
+            "[cross_validation] Fold %d results: NLL=%.4f RMSE=%.4f",
+            fold_idx + 1,
+            nll,
+            rmse,
+        )
 
     trace_results: Dict[str, Any] = {
         "n_folds": n_splits,
@@ -238,7 +278,9 @@ def cross_validation(
     output_path = output_dir / output_filename
 
     # Step 14: CALL write_text() — serialize cross validation trace to disk
-    output_path.write_text(json.dumps(trace_results, indent=2, default=str), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(trace_results, indent=2, default=str), encoding="utf-8"
+    )
     log.info("[cross_validation] trace written to %s", output_path)
 
     extra: Dict[str, Any] = {"trained_model": best_model}

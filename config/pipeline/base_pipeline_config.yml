@@ -99,7 +99,7 @@ pipeline_base:
                 description: >
                   Full df_test loaded as-is (21,436 rows — no sampling needed).
                   Features only, no labels. Not used until Phase 5 final scoring.
-                consumed_by: [ "phase_5" ]
+                consumed_by: [ "phase_5","phase_3" ]
               sample_x_validation_parquet:
                 path: "2.1.data_acquisition-sample_x_validation.parquet"
                 description: >
