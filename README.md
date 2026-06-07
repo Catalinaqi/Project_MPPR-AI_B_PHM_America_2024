@@ -1,16 +1,27 @@
-# 🚀 PHM America 2024: Preventive Maintenance for Robotics & Intelligent Automation
+# PHM America 2024: Preventive Maintenance for Robotics & Intelligent Automation
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/)
-[![Poetry](https://img.shields.io/badge/Poetry-2.0+-cyan.svg)](https://python-poetry.org/)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
+<div align="center">
+
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Poetry](https://img.shields.io/badge/Poetry-60A5FA?style=for-the-badge&logo=poetry&logoColor=white)
+![DuckDB](https://img.shields.io/badge/DuckDB-FFF000?style=for-the-badge&logo=duckdb&logoColor=black)
+![Pandas](https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white)
+![PyArrow](https://img.shields.io/badge/PyArrow-DC3545?style=for-the-badge&logo=apache&logoColor=white)
+![Pydantic](https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white)
+![YAML](https://img.shields.io/badge/YAML-CB171E?style=for-the-badge&logo=yaml&logoColor=white)
+![Scikit-Learn](https://img.shields.io/badge/Scikit_Learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)
+![Matplotlib](https://img.shields.io/badge/Matplotlib-11557C?style=for-the-badge&logo=python&logoColor=white)
+![Ruff](https://img.shields.io/badge/Ruff-262626?style=for-the-badge&logo=python&logoColor=white)
+![MyPy](https://img.shields.io/badge/MyPy-2A6DB2?style=for-the-badge&logo=python&logoColor=white)
+
+</div>
+
 
 **Production-grade Machine Learning pipeline** designed to handle complex aero-thermodynamic data, transitioning from raw telemetric CSVs to probabilistic maintenance diagnostics.
 
 ---
 
-## 📋 **Table of Contents**
+## **Table of Contents**
 
 - [Overview & Journey](#-overview--journey)
 - [System Architecture](#-system-architecture)
@@ -23,7 +34,7 @@
 
 ---
 
-## 🎯 **Overview & Journey**
+## **Overview & Journey**
 
 ### **From Software Engineering to Data Science**
 This repository represents my professional transition from **Software Engineering** to **Data Science & Machine Learning**. 
@@ -36,7 +47,7 @@ Rather than building experimental models in isolated Jupyter notebooks, this pro
 
 ---
 
-## 🏗️ **System Architecture**
+## **System Architecture**
 
 The project implements a clean, modular architecture fully aligned with the **CRISP-DM** standard.
 
@@ -72,7 +83,7 @@ The project implements a clean, modular architecture fully aligned with the **CR
 
 ---
 
-## 🥞 **Layer Responsibilities**
+## **Layer Responsibilities**
 
 Each layer maintains a strict contract, enabling independent phase execution without forcing unnecessary re-runs.
 
@@ -102,7 +113,7 @@ Built on a modern, high-performance Python 3.10 stack managed by Poetry 2.0+.
 
 ---
 
-## 🔐 **Key Design Principles**
+## **Key Design Principles**
 
 1. **Non-Monolithic Execution**: Each phase checks the `RunContext` for existing artifacts. If present, it loads them. If missing, it raises a `RuntimeError` prompting the prerequisite phase.
 2. **Fail-Fast Configuration**: YAML → OmegaConf → Pydantic DTO. Any typo or missing field aborts at `init_run_facade_api()`, preventing expensive runtime crashes mid-training.
@@ -111,7 +122,7 @@ Built on a modern, high-performance Python 3.10 stack managed by Poetry 2.0+.
 
 ---
 
-## 🚀 **Quick Start**
+## **Quick Start**
 
 ### **Prerequisites**
 
@@ -147,7 +158,7 @@ poetry run deptry src/
 
 ---
 
-## 📁 **Project Structure**
+## **Project Structure**
 
 ```text
 Project_MPPR-ALB_PHM_America_2024/
@@ -169,7 +180,7 @@ Project_MPPR-ALB_PHM_America_2024/
 
 ---
 
-## 📦 **Reproducibility & Auditability**
+## **Reproducibility & Auditability**
 
 Every run produces a self-contained snapshot under `outputs/runs/<task>/<timestamp>/` containing:
 
@@ -179,7 +190,7 @@ Every run produces a self-contained snapshot under `outputs/runs/<task>/<timesta
 
 ---
 
-## 🗺️ **Roadmap**
+## **Roadmap**
 
 * [x] **Phase 1-2**: Architecture Setup, Data Ingestion & EDA.
 * [x] **Phase 3**: Data Preparation (Robust Scaling & Feature Engineering).
