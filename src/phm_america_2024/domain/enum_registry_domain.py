@@ -283,8 +283,15 @@ class StepOutputArtifact(str, Enum):
     best_regression_model_metadata = "best_regression_model_metadata"
 
     # ── Phase 5 – Evaluation & Interpretation ──
-    evaluation_summary_json = "evaluation_summary_json"  # step_5_2
-    deployment_sign_off = "deployment_sign_off"  # step_5_4
+    # step_5_1
+    fi_importance_plot = "fi_importance_plot"
+    fi_permutation_plot = "fi_permutation_plot"
+    # step_5_2
+    evaluation_summary_json = "evaluation_summary_json"
+    eval_calibration_plot = "eval_calibration_plot"
+    eval_degradation_plot = "eval_degradation_plot"
+    # step_5_4
+    deployment_sign_off = "deployment_sign_off"
 
 
 class StepsPhase(str, Enum):  # noqa: D101

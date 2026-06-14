@@ -3,11 +3,16 @@ from __future__ import annotations
 from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.pipeline.utils.context_facade_common import RunContext
 from phm_america_2024.domain.enum_registry_domain import StepsPhase
-from phm_america_2024.phase.phase2_understanding_runner_phase import Phase2DataUnderstandingRunner
-from phm_america_2024.phase.phase3_preparation_runner_phase import Phase3PreparationRunner
+from phm_america_2024.phase.phase2_understanding_runner_phase import (
+    Phase2DataUnderstandingRunner,
+)
+from phm_america_2024.phase.phase3_preparation_runner_phase import (
+    Phase3PreparationRunner,
+)
 from phm_america_2024.phase.phase4_modeling_runner_phase import Phase4ModelingRunner
 from phm_america_2024.phase.phase5_evaluation_and_interpretation_phase import (
-    Phase5EvaluationAndInterpretationRunner)
+    Phase5EvaluationAndInterpretationRunner,
+)
 
 log = get_logger(__name__)
 
@@ -16,7 +21,6 @@ _PHASE2_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("st
 _PHASE3_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_3_")}
 _PHASE4_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_4_")}
 _PHASE5_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_5_")}
-
 
 
 def run_regression_pipeline(ctx: RunContext, steps: list[str]) -> RunContext:
@@ -34,8 +38,12 @@ def run_regression_pipeline(ctx: RunContext, steps: list[str]) -> RunContext:
     for step_name in steps:
         try:
             # Step 1: check if step belongs to Phase 2 or Phase 3 or Phase 4
-            if (step_name in _PHASE2_STEPS or step_name in _PHASE3_STEPS  or step_name
-                    in _PHASE4_STEPS or step_name in _PHASE5_STEPS):
+            if (
+                step_name in _PHASE2_STEPS
+                or step_name in _PHASE3_STEPS
+                or step_name in _PHASE4_STEPS
+                or step_name in _PHASE5_STEPS
+            ):
                 ctx = _exec_step(ctx, step_name)
             else:
                 log.warning(
@@ -44,7 +52,9 @@ def run_regression_pipeline(ctx: RunContext, steps: list[str]) -> RunContext:
                 )
                 continue
 
-            log.info("[run_regression_pipeline] step '%s' completed successfully", step_name)
+            log.info(
+                "[run_regression_pipeline] step '%s' completed successfully", step_name
+            )
 
         except Exception as exc:
             log.exception(
@@ -99,7 +109,9 @@ def _exec_step(ctx: RunContext, step_key: str) -> RunContext:
         phase_cfg = ctx.config.phases[phase_config_key]
     except (KeyError, AttributeError) as err:
         log.error("[_exec_step] phase config '%s' not found: %s", phase_config_key, err)
-        raise ValueError(f"Phase configuration '{phase_config_key}' is missing") from err
+        raise ValueError(
+            f"Phase configuration '{phase_config_key}' is missing"
+        ) from err
 
     log.debug("[_exec_step] phase config keys: %s", list(phase_cfg.keys()))
 
@@ -115,7 +127,7 @@ def _exec_step(ctx: RunContext, step_key: str) -> RunContext:
     step_cfg_raw = phase_cfg["steps"][step_key]
     log.debug("[_exec_step] raw step config keys: %s", list(step_cfg_raw.keys()))
 
-    step_cfg = dict(step_cfg_raw)              # deep copy to avoid mutation
+    step_cfg = dict(step_cfg_raw)  # deep copy to avoid mutation
     step_cfg["read_strategy"] = global_read_strategy
     step_cfg["input_source"] = global_input_source
     log.debug("[_exec_step] injected phase-level context into step_cfg")

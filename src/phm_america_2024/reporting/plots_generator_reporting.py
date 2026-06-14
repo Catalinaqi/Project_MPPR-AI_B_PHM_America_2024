@@ -14,7 +14,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')  # Backend seguro para evitar problemas de GUI
+
+matplotlib.use("Agg")  # Backend seguro para evitar problemas de GUI
 import seaborn as sns
 
 
@@ -22,7 +23,6 @@ import seaborn as sns
 # SECTION 3 – Internal imports
 # ---------------------------------------------------------------------------
 from phm_america_2024.common.logging_adapter_common import get_logger
-from phm_america_2024.common.path_service_common import resolve_path
 
 # ---------------------------------------------------------------------------
 # SECTION 4 – Module-level logger
@@ -36,13 +36,16 @@ log = get_logger(__name__)
 # visual style across all modelling tracks.
 # =============================================================================
 
-def plot_gmm_analysis(report: dict[str, Any], *, title: str = "GMM Model Selection") -> plt.Figure:
+
+def plot_gmm_analysis(
+    report: dict[str, Any], *, title: str = "GMM Model Selection"
+) -> plt.Figure:
     """Return GMM BIC/AIC curves figure."""
     fig, ax = plt.subplots(figsize=(8, 5))
 
     curve = report["curve"]
-    ax.plot(curve["k"], curve["BIC"], label="BIC", marker='o')
-    ax.plot(curve["k"], curve["AIC"], label="AIC", marker='o')
+    ax.plot(curve["k"], curve["BIC"], label="BIC", marker="o")
+    ax.plot(curve["k"], curve["AIC"], label="AIC", marker="o")
 
     ax.set_title(f"{title} (Optimal k={report.get('optimal_k')})")
     ax.set_xlabel("Number of components (k)")
@@ -53,35 +56,33 @@ def plot_gmm_analysis(report: dict[str, Any], *, title: str = "GMM Model Selecti
     log.debug("[plots] plot_gmm_analysis optimal_k=%s", report.get("optimal_k"))
     return fig
 
+
 def plot_flight_regime_binning(
-        data: pd.Series,
-        *,
-        title: str,
-        bins: int,
-        plot_type: str = "hist"
+    data: pd.Series, *, title: str, bins: int, plot_type: str = "hist"
 ) -> plt.Figure:
     """Return histogram or KDE plot showing flight regime binning distribution."""
     fig, ax = plt.subplots(figsize=(10, 5))
 
     if plot_type == "hist":
-        ax.hist(data.dropna(), bins=bins, color='skyblue', edgecolor='black', alpha=0.7)
+        ax.hist(data.dropna(), bins=bins, color="skyblue", edgecolor="black", alpha=0.7)
     elif plot_type == "kde":
-        data.dropna().plot.kde(ax=ax, color='blue')
+        data.dropna().plot.kde(ax=ax, color="blue")
     else:
         log.warning("[plots] unknown plot_type='%s', defaulting to 'hist'", plot_type)
-        ax.hist(data.dropna(), bins=bins, color='skyblue', edgecolor='black', alpha=0.7)
+        ax.hist(data.dropna(), bins=bins, color="skyblue", edgecolor="black", alpha=0.7)
 
     ax.set_title(title)
     ax.set_xlabel("Value")
     ax.set_ylabel("Count")
-    ax.grid(True, linestyle='--', alpha=0.6)
+    ax.grid(True, linestyle="--", alpha=0.6)
 
     return fig
 
+
 # ?
 def plot_gmm_curve(
-        gmm_result: dict[str, Any],
-        output_path: Path,
+    gmm_result: dict[str, Any],
+    output_path: Path,
 ) -> None:
     """Generate and save a BIC/AIC curve PNG from GMM exploration results.
 
@@ -93,7 +94,8 @@ def plot_gmm_curve(
         Destination for the PNG file.
     """
     import matplotlib
-    matplotlib.use('Agg')
+
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     log.info("[plot_gmm_curve] generating PNG for path=%s", output_path)
@@ -109,30 +111,39 @@ def plot_gmm_curve(
 
     fig, ax = plt.subplots(figsize=(8, 5))
     if bic:
-        ax.plot(k_vals, bic, marker='o', label='BIC')
+        ax.plot(k_vals, bic, marker="o", label="BIC")
     if aic:
-        ax.plot(k_vals, aic, marker='s', label='AIC')
+        ax.plot(k_vals, aic, marker="s", label="AIC")
     ax.set_xlabel("Number of components (k)")
     ax.set_ylabel("Criterion value")
     ax.set_title("GMM BIC/AIC curve")
     ax.legend()
-    ax.grid(True, linestyle='--', alpha=0.6)
+    ax.grid(True, linestyle="--", alpha=0.6)
 
     # Mark optimal k if available
     optimal_k = gmm_result.get("optimal_k")
     if optimal_k and optimal_k in k_vals:
-        ax.axvline(x=optimal_k, color='red', linestyle=':', alpha=0.7, label=f"Optimal k={optimal_k}")
+        ax.axvline(
+            x=optimal_k,
+            color="red",
+            linestyle=":",
+            alpha=0.7,
+            label=f"Optimal k={optimal_k}",
+        )
         ax.legend()
 
     # Ensure parent directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(str(output_path), dpi=150, bbox_inches='tight')
+    fig.savefig(str(output_path), dpi=150, bbox_inches="tight")
     plt.close(fig)
 
     size_kb = output_path.stat().st_size / 1024
     log.info("[plot_gmm_curve] saved size_kb=%.2f path=%s", size_kb, output_path)
 
-def plot_feature_importance(importance_data: Dict[str, float], top_k: int) -> plt.Figure:
+
+def plot_feature_importance(
+    importance_data: Dict[str, float], top_k: int
+) -> plt.Figure:
     """Generate bar chart for model native feature importance."""
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -142,7 +153,7 @@ def plot_feature_importance(importance_data: Dict[str, float], top_k: int) -> pl
         palette="viridis",
         hue=list(importance_data.keys()),
         legend=False,
-        ax=ax
+        ax=ax,
     )
     ax.set_title(f"Top {top_k} Feature Importances (NGBoost Native)")
     ax.set_xlabel("Average Importance (Mu & Sigma Sub-trees)")
@@ -150,7 +161,10 @@ def plot_feature_importance(importance_data: Dict[str, float], top_k: int) -> pl
 
     return fig
 
-def plot_permutation_importance(perm_data: Dict[str, Any], scoring: str, top_k: int = 15) -> plt.Figure:
+
+def plot_permutation_importance(
+    perm_data: Dict[str, Any], scoring: str, top_k: int = 15
+) -> plt.Figure:
     """Generate bar chart with error bars for permutation importance."""
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -170,11 +184,11 @@ def plot_permutation_importance(perm_data: Dict[str, Any], scoring: str, top_k: 
         y_pos,
         sorted_means[:top_k_plot],
         xerr=sorted_stds[:top_k_plot],
-        align='center',
+        align="center",
         alpha=0.8,
-        color='steelblue',
-        ecolor='black',
-        capsize=3
+        color="steelblue",
+        ecolor="black",
+        capsize=3,
     )
     ax.set_yticks(y_pos)
     ax.set_yticklabels(sorted_features[:top_k_plot])
@@ -182,5 +196,79 @@ def plot_permutation_importance(perm_data: Dict[str, Any], scoring: str, top_k: 
     ax.set_title(f"Permutation Importance ({scoring}) - Top {top_k_plot}")
     ax.set_xlabel("Mean Importance Decrease")
     ax.set_ylabel("Features")
+
+    return fig
+
+
+def plot_calibration_curve(calibration_data: Dict[str, Any]) -> plt.Figure:
+    """Genera un Reliability Diagram dinámico basado en los intervalos calculados."""
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    expected = []
+    empirical = []
+
+    for key, info in calibration_data.items():
+        if key.startswith("interval_"):
+            expected.append(info["expected_coverage"])
+            empirical.append(info["empirical_coverage"])
+
+    # Ordenar por cobertura esperada para pintar la línea correctamente
+    sorted_idx = np.argsort(expected)
+    expected = np.array(expected)[sorted_idx]
+    empirical = np.array(empirical)[sorted_idx]
+
+    # Línea de calibración perfecta (bisectriz)
+    ax.plot([0, 1], [0, 1], "k--", alpha=0.5, label="Perfect Calibration")
+    ax.plot(
+        expected,
+        empirical,
+        marker="o",
+        linewidth=2,
+        color="darkorange",
+        label="Model Coverage",
+    )
+
+    ax.set_xlim([0, 1])
+    ax.set_ylim([0, 1])
+    ax.set_xlabel("Expected Confidence Level (1 - Alpha)")
+    ax.set_ylabel("Empirical Interval Coverage")
+    ax.set_title("Reliability Diagram - Prediction Interval Calibration")
+    ax.legend(loc="upper left")
+    ax.grid(True, linestyle="--", alpha=0.5)
+
+    return fig
+
+
+def plot_degradation_comparison(degradation_data: Dict[str, Any]) -> plt.Figure:
+    """Genera un gráfico de barras comparativo de rendimiento vs el Baseline."""
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    categories = ["NGBoost Regressor", "Naive Mean Baseline"]
+    scores = [
+        degradation_data.get("model_nll", 0.0),
+        degradation_data.get("baseline_nll", 0.0),
+    ]
+
+    colors = ["steelblue", "lightcoral"]
+    bars = ax.bar(
+        categories, scores, color=colors, width=0.4, edgecolor="black", alpha=0.8
+    )
+
+    ax.set_ylabel("Negative Log-Likelihood (NLL) - Lower is better")
+    ax.set_title("Performance Degradation Benchmarking Audit")
+    ax.grid(True, axis="y", linestyle="--", alpha=0.5)
+
+    # Añadir los valores numéricos encima de las barras
+    for bar in bars:
+        height = bar.get_height()
+        ax.annotate(
+            f"{height:.4f}",
+            xy=(bar.get_x() + bar.get_width() / 2, height),
+            xytext=(0, 3),  # 3 puntos de desfase vertical
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontweight="bold",
+        )
 
     return fig

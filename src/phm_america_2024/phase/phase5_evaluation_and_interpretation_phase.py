@@ -1,5 +1,4 @@
 # src/phm_america_2024/phase/phase5_evaluation_and_interpretation_phase.py
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,20 +10,28 @@ from phm_america_2024.registry.generator_registry_registry import write_output_a
 from phm_america_2024.domain.enum_registry_domain import StepsPhase, StepOutputArtifact
 
 # ── Technique implementations ──
+# step_5_1_interpretation
 from phm_america_2024.interpretation.cluster_interpreter_interpretation import (
     feature_importance,
     permutation_importance,
 )
+
+# step_5_2_probabilistic_evaluation
 from phm_america_2024.interpretation.business_alignment_evaluator_interpretation import (
     calibration_audit,
     performance_degradation_benchmarking,
 )
+
+# step_5_3_process_audit
 from phm_america_2024.interpretation.pipeline_auditor_interpretation import (
     leakage_detection,
 )
+
+# step_5_4_decision_making
 from phm_america_2024.interpretation.deployment_reporter_interpretation import (
     final_sign_off,
 )
+
 
 log = get_logger(__name__)
 
@@ -80,7 +87,7 @@ class Phase5EvaluationAndInterpretationRunner:
 
         if df_test is None:
             log.error(
-                "[Phase5Runner] run() abortado: _load_artifacts retornó None. Revisa los logs de carga."
+                "[Phase5Runner] run() cancelado: Falló la carga de artefactos. Verifique los directorios de fase y la configuración."
             )
             return self.ctx
 
@@ -147,11 +154,14 @@ class Phase5EvaluationAndInterpretationRunner:
             intervals = extra_artifacts.get("calibration_intervals")
             degradation = extra_artifacts.get("degradation_metrics")
             if intervals and degradation:
-                extra_artifacts["evaluation_summary"] = {
+                # CAMBIO: Usar la clave exacta registrada en el StepOutputArtifact 'evaluation_summary_json'
+                extra_artifacts["evaluation_summary_json"] = {
                     "calibration_intervals": intervals,
                     "degradation": degradation,
                 }
-                log.info("[Phase5Runner] evaluation_summary consolidado con éxito.")
+                log.info(
+                    "[Phase5Runner] evaluation_summary_json consolidado con éxito."
+                )
             else:
                 log.warning(
                     "[Phase5Runner] No se pudo consolidar evaluation_summary. Faltan intervals o degradation."
@@ -489,6 +499,71 @@ class Phase5EvaluationAndInterpretationRunner:
         log.debug("[_load_artifacts] EXIT")
         return getattr(self.ctx, "df_test", None)
 
+    # def _persist_artifacts(
+    #     self,
+    #     extra_artifacts: Dict[str, Any],
+    # ) -> None:
+    #     """Persiste los artefactos dinámicamente según la configuración YAML."""
+    #     log.debug("[_persist_artifacts] ENTRY - step='%s'", self.step_key)
+    #
+    #     context_data: Dict[str, Any] = {}
+    #
+    #     output_artifacts_cfg = self.step_cfg.get("output_artifacts", {})
+    #     log.debug(
+    #         "[_persist_artifacts] Artefactos esperados por YAML: %s",
+    #         list(output_artifacts_cfg.keys()),
+    #     )
+    #
+    #     # Mapeo especial
+    #     if "evaluation_summary" in extra_artifacts:
+    #         context_data[StepOutputArtifact.evaluation_summary_json.value] = (
+    #             extra_artifacts["evaluation_summary"]
+    #         )
+    #         log.debug("[_persist_artifacts] Mapeado evaluation_summary.")
+    #
+    #     if "deployment_sign_off" in extra_artifacts:
+    #         context_data[StepOutputArtifact.deployment_sign_off.value] = (
+    #             extra_artifacts["deployment_sign_off"]
+    #         )
+    #         log.debug("[_persist_artifacts] Mapeado deployment_sign_off.")
+    #
+    #     # Match exacto con YAML
+    #     for artifact_key in output_artifacts_cfg.keys():
+    #         if artifact_key in extra_artifacts and artifact_key not in context_data:
+    #             context_data[artifact_key] = extra_artifacts[artifact_key]
+    #             log.debug(
+    #                 "[_persist_artifacts] Artefacto YAML '%s' acoplado para registro.",
+    #                 artifact_key,
+    #             )
+    #
+    #     # Residuales
+    #     for k, v in extra_artifacts.items():
+    #         if k not in context_data and k not in [
+    #             "evaluation_summary",
+    #             "deployment_sign_off",
+    #         ]:
+    #             context_data[k] = v
+    #
+    #     if context_data:
+    #         log.info(
+    #             "[_persist_artifacts] Enviando %d artefactos al Registry para escritura...",
+    #             len(context_data),
+    #         )
+    #         write_output_artifacts(
+    #             self.ctx, self.step_key, self.step_cfg, self.base_dir, **context_data
+    #         )
+    #         log.info(
+    #             "[_persist_artifacts] Artefactos persistidos exitosamente: %s",
+    #             list(context_data.keys()),
+    #         )
+    #     else:
+    #         log.warning(
+    #             "[_persist_artifacts] No hay artefactos en context_data para persistir en '%s'.",
+    #             self.step_key,
+    #         )
+    #
+    #     log.debug("[_persist_artifacts] EXIT")
+
     def _persist_artifacts(
         self,
         extra_artifacts: Dict[str, Any],
@@ -504,36 +579,39 @@ class Phase5EvaluationAndInterpretationRunner:
             list(output_artifacts_cfg.keys()),
         )
 
-        # Mapeo especial
-        if "evaluation_summary" in extra_artifacts:
-            context_data[StepOutputArtifact.evaluation_summary_json.value] = (
-                extra_artifacts["evaluation_summary"]
-            )
-            log.debug("[_persist_artifacts] Mapeado evaluation_summary.")
-
-        if "deployment_sign_off" in extra_artifacts:
-            context_data[StepOutputArtifact.deployment_sign_off.value] = (
-                extra_artifacts["deployment_sign_off"]
-            )
-            log.debug("[_persist_artifacts] Mapeado deployment_sign_off.")
-
-        # Match exacto con YAML
+        # 1. MATCH DINÁMICO UNIVERSAL (El corazón de la arquitectura)
+        # Revisa todo lo que pide el YAML y si la técnica lo generó, lo acopla.
+        # Esto funciona para 5.1 (plots de importancia), 5.2 (calibración), 5.4 (sign_off), etc.
         for artifact_key in output_artifacts_cfg.keys():
-            if artifact_key in extra_artifacts and artifact_key not in context_data:
+            if artifact_key in extra_artifacts:
                 context_data[artifact_key] = extra_artifacts[artifact_key]
                 log.debug(
                     "[_persist_artifacts] Artefacto YAML '%s' acoplado para registro.",
                     artifact_key,
                 )
 
-        # Residuales
+        # 2. MAPEO LEGACY DE SEGURIDAD
+        # Por si en el método run() todavía armas el diccionario usando la clave vieja "evaluation_summary"
+        # en lugar de "evaluation_summary_json" que es la que usa el YAML.
+        if (
+            "evaluation_summary" in extra_artifacts
+            and StepOutputArtifact.evaluation_summary_json.value not in context_data
+        ):
+            context_data[StepOutputArtifact.evaluation_summary_json.value] = (
+                extra_artifacts["evaluation_summary"]
+            )
+            log.debug(
+                "[_persist_artifacts] Mapeo legacy aplicado para evaluation_summary_json."
+            )
+
+        # 3. ARTEFACTOS RESIDUALES
+        # Copia cualquier otro dato devuelto por la técnica que NO esté en el YAML
+        # (por ejemplo, métricas internas, diccionarios crudos "calibration_intervals", etc.)
         for k, v in extra_artifacts.items():
-            if k not in context_data and k not in [
-                "evaluation_summary",
-                "deployment_sign_off",
-            ]:
+            if k not in context_data and k != "evaluation_summary":
                 context_data[k] = v
 
+        # 4. ENVÍO AL REGISTRY CENTRALIZADO
         if context_data:
             log.info(
                 "[_persist_artifacts] Enviando %d artefactos al Registry para escritura...",

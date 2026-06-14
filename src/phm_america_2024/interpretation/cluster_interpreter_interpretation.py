@@ -16,6 +16,8 @@ from phm_america_2024.reporting.plots_generator_reporting import (
 
 log = get_logger(__name__)
 
+# step_5_1_interpretation
+
 
 def feature_importance_old(
     df: pd.DataFrame,
@@ -221,7 +223,10 @@ def permutation_importance(
     log.debug("[permutation_importance] EXIT")
 
     # RETORNO PURO DE OBJETOS EN MEMORIA
-    return df, {"permutation_data": perm_data, "permutation_plot": fig}
+    return df, {
+        "permutation_data": perm_data,
+        "fi_permutation_plot": fig,
+    }
 
 
 def feature_importance(
@@ -347,5 +352,5 @@ def feature_importance(
     # RETORNO PURO DE OBJETOS EN MEMORIA
     return df, {
         "feature_importance_data": importance_data,
-        "feature_importance_plot": fig,
+        "fi_importance_plot": fig,
     }

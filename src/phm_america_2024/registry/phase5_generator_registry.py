@@ -1,7 +1,3 @@
-"""
-Phase 5 generator registry: registers artifact persistence handlers only.
-Step dispatch functions are defined directly in the runner class.
-"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,10 +14,40 @@ log = get_logger(__name__)
 
 
 # =============================================================================
-# PERSISTENCIA JSON
+# PERSISTENCIA GRÁFICA (Fase 5.1 e Interpretación)
 # =============================================================================
 
-@register_artifact(StepsPhase.STEP_5_2.value, StepOutputArtifact.evaluation_summary_json.value)
+
+@register_artifact(
+    StepsPhase.STEP_5_1.value, StepOutputArtifact.fi_importance_plot.value
+)
+def _save_fi_importance_plot(ctx: Any, artifact_path: str, **context_data: Any) -> None:
+    fig = context_data.get(StepOutputArtifact.fi_importance_plot.value)
+    if fig:
+        full_path = resolve_path(ctx.phase5_dir / artifact_path)
+        save_figure(fig, out_path=full_path, dpi=300)
+
+
+@register_artifact(
+    StepsPhase.STEP_5_1.value, StepOutputArtifact.fi_permutation_plot.value
+)
+def _save_fi_permutation_plot(
+    ctx: Any, artifact_path: str, **context_data: Any
+) -> None:
+    fig = context_data.get(StepOutputArtifact.fi_permutation_plot.value)
+    if fig:
+        full_path = resolve_path(ctx.phase5_dir / artifact_path)
+        save_figure(fig, out_path=full_path, dpi=300)
+
+
+# =============================================================================
+# PERSISTENCIA GRÁFICA and JSON (Fase 5.2 - Probabilistic Evaluation)
+# =============================================================================
+
+
+@register_artifact(
+    StepsPhase.STEP_5_2.value, StepOutputArtifact.evaluation_summary_json.value
+)
 def _save_evaluation_summary(ctx: Any, artifact_path: str, **context_data: Any) -> None:
     """Persist the final regression metrics summary JSON."""
     summary = context_data.get(StepOutputArtifact.evaluation_summary_json.value)
@@ -34,8 +60,41 @@ def _save_evaluation_summary(ctx: Any, artifact_path: str, **context_data: Any) 
     log.info("[_save_evaluation_summary] saved evaluation summary to %s", artifact_path)
 
 
-@register_artifact(StepsPhase.STEP_5_4.value, StepOutputArtifact.deployment_sign_off.value)
-def _save_deployment_sign_off(ctx: Any, artifact_path: str, **context_data: Any) -> None:
+@register_artifact(
+    StepsPhase.STEP_5_2.value, StepOutputArtifact.eval_calibration_plot.value
+)
+def _save_eval_calibration_plot(
+    ctx: Any, artifact_path: str, **context_data: Any
+) -> None:
+    fig = context_data.get(StepOutputArtifact.eval_calibration_plot.value)
+    if fig:
+        full_path = resolve_path(ctx.phase5_dir / artifact_path)
+        save_figure(fig, out_path=full_path, dpi=300)
+
+
+@register_artifact(
+    StepsPhase.STEP_5_2.value, StepOutputArtifact.eval_degradation_plot.value
+)
+def _save_eval_degradation_plot(
+    ctx: Any, artifact_path: str, **context_data: Any
+) -> None:
+    fig = context_data.get(StepOutputArtifact.eval_degradation_plot.value)
+    if fig:
+        full_path = resolve_path(ctx.phase5_dir / artifact_path)
+        save_figure(fig, out_path=full_path, dpi=300)
+
+
+# =============================================================================
+# PERSISTENCIA JSON (Fase 5.4)
+# =============================================================================
+
+
+@register_artifact(
+    StepsPhase.STEP_5_4.value, StepOutputArtifact.deployment_sign_off.value
+)
+def _save_deployment_sign_off(
+    ctx: Any, artifact_path: str, **context_data: Any
+) -> None:
     """Persist the deployment sign-off certificate JSON."""
     cert = context_data.get(StepOutputArtifact.deployment_sign_off.value)
     if cert is None:
@@ -44,40 +103,6 @@ def _save_deployment_sign_off(ctx: Any, artifact_path: str, **context_data: Any)
     full_path: Path = resolve_path(ctx.phase5_dir / artifact_path)
     full_path.parent.mkdir(parents=True, exist_ok=True)
     save_json(cert, str(full_path))
-    log.info("[_save_deployment_sign_off] saved sign-off certificate to %s", artifact_path)
-
-# =============================================================================
-# PERSISTENCIA GRÁFICA (Fase 5.1 e Interpretación)
-# =============================================================================
-
-@register_artifact(StepsPhase.STEP_5_1.value, "fi_importance_plot")
-def _save_fi_importance_plot(ctx: Any, artifact_path: str, **context_data: Any) -> None:
-    fig = context_data.get("fi_importance_plot")
-    if fig:
-        full_path = resolve_path(ctx.phase5_dir / artifact_path)
-        save_figure(fig, out_path=full_path, dpi=300)
-
-@register_artifact(StepsPhase.STEP_5_1.value, "fi_permutation_plot")
-def _save_fi_permutation_plot(ctx: Any, artifact_path: str, **context_data: Any) -> None:
-    fig = context_data.get("fi_permutation_plot")
-    if fig:
-        full_path = resolve_path(ctx.phase5_dir / artifact_path)
-        save_figure(fig, out_path=full_path, dpi=300)
-
-# =============================================================================
-# PERSISTENCIA GRÁFICA (Fase 5.2 - Probabilistic Evaluation)
-# =============================================================================
-
-@register_artifact(StepsPhase.STEP_5_2.value, "eval_calibration_plot")
-def _save_eval_calibration_plot(ctx: Any, artifact_path: str, **context_data: Any) -> None:
-    fig = context_data.get("eval_calibration_plot")
-    if fig:
-        full_path = resolve_path(ctx.phase5_dir / artifact_path)
-        save_figure(fig, out_path=full_path, dpi=300)
-
-@register_artifact(StepsPhase.STEP_5_2.value, "eval_degradation_plot")
-def _save_eval_degradation_plot(ctx: Any, artifact_path: str, **context_data: Any) -> None:
-    fig = context_data.get("eval_degradation_plot")
-    if fig:
-        full_path = resolve_path(ctx.phase5_dir / artifact_path)
-        save_figure(fig, out_path=full_path, dpi=300)
+    log.info(
+        "[_save_deployment_sign_off] saved sign-off certificate to %s", artifact_path
+    )

@@ -340,8 +340,8 @@ regression_pipeline_config:
               path: "5.1.interpretation.plots.permutation_importance.png"
               description: "Feature importance via target permutation."
               consumed_by: [ "report_generator" ]
-
-        step_5_2_probabilistic_evaluation:
+        # step_5_2_probabilistic_evaluation
+        step_5_2_business_evaluation:
           enabled: true
           description: "Audit true target hit counts inside prediction boundaries on hidden test motors."
           methods:

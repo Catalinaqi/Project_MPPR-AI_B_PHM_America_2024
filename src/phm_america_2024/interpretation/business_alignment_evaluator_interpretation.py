@@ -1,6 +1,5 @@
 # src/phm_america_2024/phase/business_alignment_evaluator_interpretation.py
 from __future__ import annotations
-import json
 from pathlib import Path
 from typing import Any, Tuple
 
@@ -9,8 +8,16 @@ import pandas as pd
 from scipy.stats import norm
 
 from phm_america_2024.common.logging_adapter_common import get_logger
+from phm_america_2024.common.io_service_common import save_json
+
+from phm_america_2024.reporting.plots_generator_reporting import (
+    plot_calibration_curve,
+    plot_degradation_comparison,
+)
 
 log = get_logger(__name__)
+
+# step_5_2_probabilistic_evaluation
 
 
 def calibration_audit(
@@ -53,13 +60,25 @@ def calibration_audit(
             "upper_percentile": 1 - alpha / 2,
         }
 
+    # out_path = output_dir / output_file
+    # out_path.parent.mkdir(parents=True, exist_ok=True)
+    # out_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    # log.info("Calibration audit written to %s", out_path)
+    #
+    # log.debug("[calibration_audit] completed")
+    # return df, {"calibration_intervals": results}
+    # REFACTORIZACIÓN COMPLETA DE PERSISTENCIA Y RETORNO:
     out_path = output_dir / output_file
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
-    log.info("Calibration audit written to %s", out_path)
+    save_json(
+        results, out_path
+    )  # <--- Cambiado por el save_json común que arreglamos antes
+
+    # Generamos de manera dinámica la figura usando los resultados planos
+    fig = plot_calibration_curve(results)
 
     log.debug("[calibration_audit] completed")
-    return df, {"calibration_intervals": results}
+    # Retornamos los datos y adjuntamos la figura con la llave exacta de tu YAML
+    return df, {"calibration_intervals": results, "eval_calibration_plot": fig}
 
 
 def performance_degradation_benchmarking(
@@ -103,18 +122,48 @@ def performance_degradation_benchmarking(
     else:
         baseline_nll = 0.0
 
+    # degradation = {
+    #     "model_nll": float(model_nll),
+    #     "baseline_nll": float(baseline_nll),
+    #     "nll_difference": float(model_nll - baseline_nll),
+    #     "expect_degradation": expect_degradation,
+    #     "degradation_observed": model_nll > baseline_nll,
+    # }
+    #
+    # out_path = output_dir / output_file
+    # out_path.parent.mkdir(parents=True, exist_ok=True)
+    # out_path.write_text(json.dumps(degradation, indent=2), encoding="utf-8")
+    # log.info("Degradation benchmark written to %s", out_path)
+    #
+    # log.debug("[performance_degradation_benchmarking] completed")
+    # return df, {"degradation_metrics": degradation}
+
     degradation = {
         "model_nll": float(model_nll),
         "baseline_nll": float(baseline_nll),
         "nll_difference": float(model_nll - baseline_nll),
-        "expect_degradation": expect_degradation,
-        "degradation_observed": model_nll > baseline_nll,
+        "expect_degradation": bool(
+            expect_degradation
+        ),  # Aseguramos booleano puro de Python
+        "degradation_observed": bool(model_nll > baseline_nll),  # ¡CORRECCIÓN AQUÍ!
     }
 
+    # out_path = output_dir / output_file
+    # out_path.parent.mkdir(parents=True, exist_ok=True)
+    # out_path.write_text(json.dumps(degradation, indent=2), encoding="utf-8")
+    # log.info("Degradation benchmark written to %s", out_path)
+    #
+    # log.debug("[performance_degradation_benchmarking] completed")
+    # return df, {"degradation_metrics": degradation}
+
+    # REFACTORIZACIÓN COMPLETA AQUÍ:
+    # Reemplazamos las líneas de out_path.parent.mkdir y out_path.write_text por:
     out_path = output_dir / output_file
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(degradation, indent=2), encoding="utf-8")
-    log.info("Degradation benchmark written to %s", out_path)
+    save_json(degradation, out_path)
+
+    # Generamos de manera dinámica la figura usando el diccionario plano
+    fig = plot_degradation_comparison(degradation)
 
     log.debug("[performance_degradation_benchmarking] completed")
-    return df, {"degradation_metrics": degradation}
+    # Retornamos los datos y adjuntamos la figura con la llave exacta de tu YAML
+    return df, {"degradation_metrics": degradation, "eval_degradation_plot": fig}
