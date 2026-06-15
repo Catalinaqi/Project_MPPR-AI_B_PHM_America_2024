@@ -1,0 +1,145 @@
+# ==============================================================================
+# config/rules/ranges_quality_rules_config.yml
+# ==============================================================================
+#
+# 1. Criteri Tecnici e Intervalli Consentiti
+# Abbiamo regolato le soglie per riflettere la realtà operativa rilevata nel dataset,
+# consentendo stati come Ground Idle e pressioni atmosferiche estreme.
+#
+# ------------------------------------------------------------------------------
+# GRUPPO 1: Campo e Significato Fisico (Inglese / Italiano)
+# ------------------------------------------------------------------------------
+# | Campo        | Significato Fisico (Inglese / Italiano)                     |
+# ------------------------------------------------------------------------------
+# | oat          | Outside Air Temperature / Temperatura Aria Esterna (Celsius)|
+# | ias          | Indicated Airspeed / Velocità Indicata (Nodi)               |
+# | pa           | Pressure Altitude / Altitudine di Pressione (Piedi)         |
+# | mgt          | Measured Gas Temp / Temperatura del Gas Misurata (°C)       |
+# | ng           | Gas Generator Speed / Velocità del Generatore di Gas (%)    |
+# | np           | Power Turbine Speed / Velocità della Turbina di Potenza (%) |
+# | trq_measured | - / Coppia Reale Misurata (%)                               |
+# | trq_margin   | - / Margine di Coppia (%)                                   |
+# ------------------------------------------------------------------------------
+#
+# ------------------------------------------------------------------------------
+# GRUPPO 2: Campo e Intervallo Consentito / Previsto
+# ------------------------------------------------------------------------------
+# | Campo        | Intervallo Consentito / Previsto                            |
+# ------------------------------------------------------------------------------
+# | oat          | -50.0 a 60.0                                                |
+# | ias          | 0.0 a 250.0                                                 |
+# | pa           | -1000.0 a 20000.0                                           |
+# | mgt          | 200.0 a 1000.0                                              |
+# | ng           | 60.0 a 110.0                                                |
+# | np           | 80.0 a 115.0                                                |
+# | trq_measured | 0.0 a 125.0                                                 |
+# | trq_margin   | -100.0 a 100.0                                              |
+# ------------------------------------------------------------------------------
+#
+# ------------------------------------------------------------------------------
+# GRUPPO 3: Campo e Giustificazione Tecnica
+# ------------------------------------------------------------------------------
+# | Campo        | Giustificazione Tecnica                                     |
+# ------------------------------------------------------------------------------
+# | oat          | Limiti climatici estremi per operazione sicura.             |
+# | ias          | 0.0 rappresenta stato di hover o in pista; è un dato valido |
+# |              | e critico.                                                  |
+# | pa           | Altitudini negative sono fisicamente possibili a causa di   |
+# |              | alta pressione o depressioni geografiche.                   |
+# | mgt          | Soglia termica; valori < 200°C implicano motore spento o    |
+# |              | sensore morto.                                              |
+# | ng           | Il nucleo non può girare al di sotto di questo regime in    |
+# |              | operazione; 0 indica guasto totale.                         |
+# | np           | Include Ground Idle e transitori di accensione;             |
+# |              | l'intervallo >= 80% è operativamente valido.                |
+# | trq_measured | Valori negativi non hanno senso fisico; implicano frattura   |
+# |              | dell'albero o errore del sensore.                           |
+# | trq_margin   | Variabile obiettivo. Deviazioni estreme denotano guasti     |
+# |              | critici di telemetria.                                      |
+# ------------------------------------------------------------------------------
+#
+# ==============================================================================
+# 1. Criteri Tecnici e Intervalli Consentiti (Limiti Generali di Operazione Sicura)
+technical_ranges:
+  oat:
+    min: -50.0
+    max: 60.0
+    description: "Outside Air Temperature (Celsius). Limiti climatici estremi per un'operazione sicura."
+    short_description: "Limiti climatici sicuri."
+  ias:
+    min: 0.0
+    max: 250.0
+    description: "Indicated Airspeed (Nodi). 0.0 rappresenta uno stato di hovering o su pista; è un dato valido e critico."
+    short_description: "Velocità indicata, include hovering."
+  pa:
+    min: -1000.0
+    max: 20000.0
+    description: "Pressure Altitude (Piedi). Le altitudini negative sono fisicamente possibili a causa di alta pressione o depressioni geografiche."
+    short_description: "Altitudine (incluse depressioni)."
+  mgt:
+    min: 200.0
+    max: 1000.0
+    description: "Measured Gas Temp (°C). Soglia termica; valori < 200°C indicano motore spento o sensore guasto."
+    short_description: "Soglia termica del gas."
+  ng:
+    min: 60.0
+    max: 110.0
+    description: "Gas Generator Speed (%). Il nucleo non può girare al di sotto di questo valore durante l'operazione; 0 indica un guasto totale."
+    short_description: "Velocità minima del generatore di gas."
+  np:
+    min: 80.0
+    max: 115.0
+    description: "Power Turbine Speed (%). Include Ground Idle e transitori di accensione; l'intervallo >= 80% è operativamente valido."
+    short_description: "Velocità turbina, include Ground Idle."
+  trq_measured:
+    min: 0.0
+    max: 125.0
+    description: "Coppia Reale Misurata (%). I valori negativi non hanno senso fisico; implicano la frattura dell'albero o un errore del sensore."
+    short_description: "Coppia misurata (valori >= 0)."
+  trq_margin:
+    min: -100.0
+    max: 100.0
+    description: "Margine di Coppia (%). Variabile target. Deviazioni estreme indicano guasti critici della telemetria."
+    short_description: "Margine di coppia (Target)."
+
+# 2. Definizione della Pipeline di Controllo Qualità
+quality_pipeline:
+  # A. Anomalie del Sensore (Dati Critici da Scartare)
+  anomalies_to_discard:
+    ng:
+      threshold: 60.0
+      condition: "less_than"
+      description: "ng < 60.0: Indica un guasto del sensore, poiché il nucleo non può girare al di sotto di questo regime quando è acceso."
+      short_description: "Guasto sensore nucleo (< 60%)."
+    trq_measured:
+      threshold: 0.0
+      condition: "less_than"
+      description: "trq_measured < 0.0: Fisicamente impossibile; se c'è coppia negativa, il sensore o l'albero sono fratturati."
+      short_description: "Coppia negativa (Fisicamente impossibile)."
+    mgt:
+      threshold: 200.0
+      condition: "less_than"
+      dependency:
+        variable: "ias"
+        condition: "greater_than"
+        threshold: 0.0
+      description: "mgt < 200.0: Soglia di 'motore freddo'. Se si verifica durante il volo (ias > 0), il sensore è guasto."
+      short_description: "Guasto sensore termico in volo."
+
+  # B. Contesto Operativo (Dati Critici da Mantenere)
+  context_to_retain:
+    pa:
+      min: -1000.0
+      max: 0.0
+      description: "Altitudine di Pressione (pa) tra -1000 e 0: Validazione di condizioni atmosferiche reali (alta pressione) o depressioni geografiche, non errori dell'altimetro."
+      short_description: "Condizioni di alta pressione reali."
+    np:
+      min: 80.0
+      max: 90.0
+      description: "Rotor RPM (np) tra 80 e 90: Classificato come Ground Idle (minimo a terra). È uno stato transitorio legittimo per l'addestramento."
+      short_description: "Stato transitorio di Ground Idle."
+    ias:
+      value: 0.0
+      condition: "equal"
+      description: "Velocità (ias) = 0.0: Identifica la manovra di hovering (volo stazionario). Eliminare questo dato significherebbe perdere la fase di volo più critica dell'elicottero."
+      short_description: "Manovra di hovering confermata."

@@ -64,6 +64,7 @@ pipeline_base:
           x_validation_path: "${x_validation_path}" # X_validation.csv —  21,436 rows, 8 feature cols, no labels
 
         read_strategy:
+          #dataset train
           sample_method: "stratified" # random / stratified
           stratify_column: "faulty"   # confirmed lowercase, BIGINT
           join_key: "id"              # confirmed BIGINT, present in all splits
@@ -72,6 +73,8 @@ pipeline_base:
           add_source_column: true
           combine_before_sampling: false
           dtype_optimization: true
+          # dataset test/validation
+          mode_test_validation: "full"
 
         steps:
           step_2_1_data_acquisition:

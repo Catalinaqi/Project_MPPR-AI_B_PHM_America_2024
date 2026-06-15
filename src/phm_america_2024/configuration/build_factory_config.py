@@ -26,15 +26,16 @@ class BuiltConfig:
 
 
 class ConfigBuilder:
-
     @staticmethod
     def build_pipeline_config(
-            config_pipeline: str,
-            dataset_key: str,
-            notebook_vars: Optional[Dict[str, Any]] = None
+        config_pipeline: str,
+        dataset_key: str,
+        notebook_vars: Optional[Dict[str, Any]] = None,
     ) -> BuiltConfig:
 
-        log.info(f"Building pipeline config: problem_type_pipeline={config_pipeline}, dataset={dataset_key}")
+        log.info(
+            f"Building pipeline config: problem_type_pipeline={config_pipeline}, dataset={dataset_key}"
+        )
 
         notebook_vars = notebook_vars or {}
 
@@ -77,9 +78,7 @@ class ConfigBuilder:
 
     @staticmethod
     def _inject_runtime_vars(
-            pipeline_cfg: DictConfig,
-            dataset_cfg: DictConfig,
-            notebook_vars: Dict[str, Any]
+        pipeline_cfg: DictConfig, dataset_cfg: DictConfig, notebook_vars: Dict[str, Any]
     ) -> None:
 
         log.debug("Injecting runtime variables")
@@ -97,7 +96,9 @@ class ConfigBuilder:
 
         if not train_x_path and not train_y_path:
             log.error("No dataset paths found in dataset config")
-            raise ValueError("Dataset config must have at least one path (train or test)")
+            raise ValueError(
+                "Dataset config must have at least one path (train or test)"
+            )
 
         # Inject into phase2 if it exists
         if "phase2_data_understanding" in pipeline_cfg.phases:
@@ -111,8 +112,10 @@ class ConfigBuilder:
             phase2.dataset_input.x_test_path = test_x_path
             phase2.dataset_input.x_validation_path = validation_x_path
 
-            log.debug(f"Injected paths: train_x_path={train_x_path}, train_y_path={train_y_path}, test_x_path={test_x_path},"
-                      f"validation_x_path={validation_x_path}")
+            log.debug(
+                f"Injected paths: train_x_path={train_x_path}, train_y_path={train_y_path}, test_x_path={test_x_path},"
+                f"validation_x_path={validation_x_path}"
+            )
 
         # Inject notebook variables
         if notebook_vars.get("target_col"):
@@ -134,14 +137,15 @@ class ConfigBuilder:
 
     @staticmethod
     def _apply_dataset_defaults(
-            pipeline_cfg: DictConfig,
-            dataset_cfg: DictConfig
+        pipeline_cfg: DictConfig, dataset_cfg: DictConfig
     ) -> None:
 
         log.debug("Applying dataset defaults to phase2")
 
         if "phase2_data_understanding" not in pipeline_cfg.phases:
-            log.warning("phase2_data_understanding not found, skipping dataset defaults")
+            log.warning(
+                "phase2_data_understanding not found, skipping dataset defaults"
+            )
             return
 
         phase2 = pipeline_cfg.phases.phase2_data_understanding
@@ -293,23 +297,27 @@ class ConfigBuilder:
         log.info(f"Getting active profile config: {active_profile}")
 
         if active_profile not in config.profiles:
-            log.warning(f"Active profile '{active_profile}' not found, using first available")
+            log.warning(
+                f"Active profile '{active_profile}' not found, using first available"
+            )
             available = list(config.profiles.keys())
             if not available:
                 raise ValueError("No profiles defined in config")
             active_profile = available[0]
 
         profile_cfg = config.profiles[active_profile]
-        log.debug(f"Active profile: {active_profile}, sample_rows={profile_cfg.sample_rows}")
+        log.debug(
+            f"Active profile: {active_profile}, sample_rows={profile_cfg.sample_rows}"
+        )
 
         return profile_cfg
 
     @staticmethod
     def _inject_artifact_names(
-            pipeline_cfg: DictConfig,
-            profile: DictConfig,
-            active_profile: str,
-            sample_method: str,
+        pipeline_cfg: DictConfig,
+        profile: DictConfig,
+        active_profile: str,
+        sample_method: str,
     ) -> None:
         """
         Build deterministic artifact filenames encoding profile parameters
@@ -331,12 +339,30 @@ class ConfigBuilder:
             )
             return
 
-        suffix = f"{active_profile}_{profile.sample_rows}_{sample_method}"
+        # suffix = f"{active_profile}_{profile.sample_rows}_{sample_method}"
+        # f"{active_profile}_{profile.sample_rows}_{profile.sample}_{sample_method}"
+        suffix_train = f"{active_profile}_{profile.sample_rows}_{sample_method}"
+
+        # 2. Suffisso per Test e Validation: estrae la modalità reale 'full' senza scrivere numeri fissi nel codice
+        # Cerchiamo se nel blocco globale c'è una configurazione specifica, altrimenti usiamo 'full' come fallback nativo
+        read_mode_eval = (
+            pipeline_cfg.phases.phase2_data_understanding.read_strategy.get(
+                "mode_test_validation", "full"
+            )
+        )
+        suffix_test_validation = f"{active_profile}_{read_mode_eval}"
+
         artifacts = phase2.steps.step_2_1_data_acquisition.output_artifacts
 
-        artifacts.sample_x_y_train_parquet = f"2.1.data_acquisition.{suffix}_train.parquet"
-        artifacts.sample_x_test_parquet  = f"2.1.data_acquisition.{suffix}_test.parquet"
-        artifacts.sample_x_validation_parquet = f"2.1.data_acquisition.{suffix}_validation.parquet"
+        artifacts.sample_x_y_train_parquet = (
+            f"2.1.data_acquisition.{suffix_train}_x_y_train.parquet"
+        )
+        artifacts.sample_x_test_parquet = (
+            f"2.1.data_acquisition.{suffix_test_validation}_x_test.parquet"
+        )
+        artifacts.sample_x_validation_parquet = (
+            f"2.1.data_acquisition.{suffix_test_validation}_x_validation.parquet"
+        )
 
         log.info(
             "[_inject_artifact_names] train=%s test=%s validation=%s",
@@ -345,12 +371,12 @@ class ConfigBuilder:
             artifacts.sample_x_validation_parquet,
         )
 
+
 def build_config(
-        pipeline_name: str,
-        dataset_key: str,
-        notebook_vars: Optional[Dict[str, Any]] = None
+    pipeline_name: str, dataset_key: str, notebook_vars: Optional[Dict[str, Any]] = None
 ) -> BuiltConfig:
 
     log.info(f"build_config: pipeline={pipeline_name}, dataset={dataset_key}")
-    return ConfigBuilder.build_pipeline_config(pipeline_name, dataset_key, notebook_vars)
-
+    return ConfigBuilder.build_pipeline_config(
+        pipeline_name, dataset_key, notebook_vars
+    )

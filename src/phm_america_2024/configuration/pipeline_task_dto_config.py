@@ -18,6 +18,7 @@ ensure traceability.
 # DATASET CONFIG SCHEMAS
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 class CSVParams(BaseModel):
     sep: str = ","
     encoding: str = "utf-8"
@@ -47,6 +48,7 @@ class DatasetConfig(BaseModel):
 # ═════════════════════════════════════════════════════════════════════════════
 # PIPELINE CONFIG SCHEMAS
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 class RuntimeConfig(BaseModel):
     random_seed: int = 7
@@ -83,11 +85,10 @@ class TechniqueConfig(BaseModel):
     description: Optional[str] = None
     params: Dict[str, Any] = Field(default_factory=dict)
 
-    #output: Optional[str] = None
+    # output: Optional[str] = None
 
     # ──── MODIFICA ESTA LÍNEA ────
     output: Optional[Union[Dict[str, str], str]] = None
-
 
     @field_validator("params", mode="before")
     @classmethod
@@ -126,13 +127,13 @@ class ReadStrategyConfig(BaseModel):
     combine_before_sampling: Optional[bool] = None
     dtype_optimization: Optional[bool] = None
     mode: Optional[str] = None
-    #input_source: Optional[str] = None
-    #input_source: Union[str, dict[str, Any]]
+    # input_source: Optional[str] = None
+    # input_source: Union[str, dict[str, Any]]
     # ──── MODIFICA QUESTA LÍNEA (Aggiungi |= None = None) ────
     input_source: str | dict[str, Any] | None = None
     sample_rows: Optional[int] = None
-    input_source_sample: Optional[str] = None       # ← aggiunto
-
+    input_source_sample: Optional[str] = None  # ← aggiunto
+    mode_test_validation: Optional[str] = None
 
 
 class DatasetInputConfig(BaseModel):
@@ -219,8 +220,8 @@ class PipelineConfig(BaseModel):
 # FACTORY METHODS
 # ═════════════════════════════════════════════════════════════════════════════
 
-class DTOFactory:
 
+class DTOFactory:
     @staticmethod
     def create_dataset_config(data: Dict[str, Any]) -> DatasetConfig:
         log.debug("Starting dataset config DTO creation")

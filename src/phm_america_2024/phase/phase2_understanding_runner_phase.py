@@ -270,6 +270,7 @@ class Phase2DataUnderstandingRunner:
             )
         else:
             output_path: Path = resolve_path(self.base_dir / output_key)
+            log.info("[_execute_technique] output_path: ", output_path)
             if self._should_skip(output_path):
                 log.info(
                     "[_execute_technique] '%s' artifact exists – skipping computation",
@@ -280,11 +281,21 @@ class Phase2DataUnderstandingRunner:
         try:
             # Ejecutar la función matemática/ingesta
             result = func(df, tech_cfg, self.ctx, self.base_dir)
-            log.info("[_execute_technique] '%s' completed successfully", technique_name)
+            log.info("[_execute_technique] '%s' completed successfully", result)
 
             # CASO A: Es el Paso 2.1 (Retorna una tupla: df_train, diccionario_de_parquets)
             if isinstance(result, tuple) and len(result) == 2:
                 df_out, artifacts_dict = result
+                log.info(
+                    "[_execute_technique] '%s' completed successfully. Train shape: %s, Total artifacts: %d",
+                    technique_name,
+                    df_out.shape,
+                    len(artifacts_dict),
+                )
+                log.debug(
+                    "[_execute_technique] Artifacts keys in payload: %s",
+                    list(artifacts_dict.keys()),
+                )
                 return df_out, artifacts_dict
 
             # CASO B: Es una técnica de Profiling (Retorna un JSON/diccionario o dibuja un PNG)
