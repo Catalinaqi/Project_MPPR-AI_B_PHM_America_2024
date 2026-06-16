@@ -55,7 +55,7 @@ outputs/
 # ============================================
 #  DOCUMENTATION
 # ============================================
-docs/
+docs/ES/
 .continuerc.yml
 .continue_manu/
 
