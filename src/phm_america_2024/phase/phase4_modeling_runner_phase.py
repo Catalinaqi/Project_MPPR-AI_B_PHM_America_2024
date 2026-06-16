@@ -14,8 +14,20 @@ from phm_america_2024.domain.enum_registry_domain import StepsPhase, StepOutputA
 from phm_america_2024.model.algorithm_selector_model import (
     single_probabilistic_architecture,
 )
-from phm_america_2024.model.regression_trainer_model import cross_validation
-from phm_america_2024.model.regression_evaluator_model import model_selection_criteria
+from phm_america_2024.model.regression_trainer_model import (
+    cross_validation as cross_validation_regression,
+)
+from phm_america_2024.model.classification_trainer_model import (
+    cross_validation as cross_validation_classification,
+)
+from phm_america_2024.model.regression_evaluator_model import (
+    model_selection_criteria as model_selection_criteria_regression,
+)
+from phm_america_2024.model.classification_evaluator_model import (
+    model_selection_criteria as model_selection_criteria_classification,
+)
+
+#
 
 log = get_logger(__name__)
 
@@ -24,9 +36,12 @@ class Phase4ModelingRunner:
     """Execute all techniques for a single CRISP-DM modeling step."""
 
     _TECHNIQUE_DISPATCH: Dict[str, Any] = {
+        # "single_calibrated_architecture": single_calibrated_architecture,
         "single_probabilistic_architecture": single_probabilistic_architecture,
-        "cross_validation": cross_validation,
-        "model_selection_criteria": model_selection_criteria,
+        "cross_validation_regression": cross_validation_regression,
+        "cross_validation_classification": cross_validation_classification,
+        "model_selection_criteria_regression": model_selection_criteria_regression,
+        "model_selection_criteria_classification": model_selection_criteria_classification,
     }
 
     def __init__(
@@ -47,6 +62,13 @@ class Phase4ModelingRunner:
         self.ctx: RunContext = ctx
         self.step_key: str = step_key
         self.step_cfg: Dict[str, Any] = step_cfg
+
+        self._TECHNIQUE_DISPATCH["model_selection_criteria"] = self._TECHNIQUE_DISPATCH[
+            "model_selection_criteria_" + ctx.config.metadata.pipeline_key.task
+        ]
+        self._TECHNIQUE_DISPATCH["cross_validation"] = self._TECHNIQUE_DISPATCH[
+            "cross_validation_" + ctx.config.metadata.pipeline_key.task
+        ]
 
         # Step 1: CALL getattr() — retrieve phase4 directory from context
         self.base_dir: Path = getattr(ctx, "phase4_dir", None)
@@ -333,16 +355,16 @@ class Phase4ModelingRunner:
             try:
                 phase_cfg = self.ctx.config.phases["phase4_data_modeling"]
                 step_4_2_cfg = phase_cfg["steps"]["step_4_2_model_training"]
-                model_path_str: str = step_4_2_cfg["output_artifacts"][
-                    "trained_ngboost_model"
-                ]["path"]
+                model_path_str: str = step_4_2_cfg["output_artifacts"]["trained_model"][
+                    "path"
+                ]
             except (KeyError, AttributeError) as e:
                 log.error(
                     "[_load_input_dataframe] Error dynamically resolving model path: %s",
                     e,
                 )
                 raise ValueError(
-                    "Could not extract trained_ngboost_model path from configuration."
+                    "Could not extract trained_model path from configuration."
                 )
 
             log.debug(
@@ -453,7 +475,7 @@ class Phase4ModelingRunner:
         if self.step_key == StepsPhase.STEP_4_2.value:
             # Step 1: CALL get() — extract trained model from artifacts
             trained_model = extra_artifacts.get("trained_model")
-            context_data[StepOutputArtifact.trained_ngboost_model.value] = trained_model
+            context_data[StepOutputArtifact.trained_model.value] = trained_model
             log.debug(
                 "[_persist_artifacts] trained_model present: %s",
                 trained_model is not None,

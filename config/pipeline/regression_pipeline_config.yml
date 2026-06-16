@@ -71,6 +71,9 @@ regression_pipeline_config:
                     remove_constant: true
                     remove_duplicate: true
                   output: "3.1.selection.filter_trace_log.json"
+          # luca
+          input_artifact:
+            path: "2.1.data_acquisition.dev_7000_stratified_train.parquet"
           output_artifacts:
             selected_regression_train_parquet:
               path: "3.1.selection.selected_regression_train.parquet"
@@ -99,6 +102,10 @@ regression_pipeline_config:
                   params:
                     keep: "first"
                   output: "3.2.cleaning.duplicates_trace.json"
+          # luca
+          input_artifact:
+            path: "3.1.selection.selected_regression_train.parquet"
+            description: "Intermediate regression matrix containing only selected operational columns."
           output_artifacts:
             cleaned_regression_train_parquet:
               path: "3.2.cleaning.cleaned_regression_train.parquet"
@@ -141,6 +148,10 @@ regression_pipeline_config:
                     fit_on_train_only: true
                     features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_margin","trq_measured" ]
                   output: "3.3.transformation.scaler_fit_trace.json"
+          # luca
+          input_artifact:
+            path: "3.2.cleaning.cleaned_regression_train.parquet"
+            description: "Intermediate regression matrix deduplicated and outlier-clipped."
           output_artifacts:
             transformed_regression_train_parquet:
               path: "3.3.transformation.transformed_regression_train.parquet"
@@ -174,6 +185,10 @@ regression_pipeline_config:
                     type_casting: "float64" # Target continuo para NGBoost
                     to_numpy: true
                   output: "3.5.formatting.arrays_manifest.json"
+          # luca
+          input_artifact:
+            path: "3.3.transformation.transformed_regression_train.parquet"
+            description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
           output_artifacts:
             engineered_train_split:
               path: "3.5.formatting.regression_internal_train.parquet"
@@ -271,7 +286,8 @@ regression_pipeline_config:
                       log_centroids_verification: true
                   output: "4.2.training.cv_fold_execution_trace.json"
           output_artifacts:
-            trained_ngboost_model:
+            # trained_ngboost_model:
+            trained_model:
               path: "4.2.training.ngboost_regressor.pkl"
               description: "Fitted NGBoost parameters structure ready for variance forecasting inference."
               consumed_by: [ "step_4_4_model_evaluation", "phase5_evaluation_and_interpretation" ]

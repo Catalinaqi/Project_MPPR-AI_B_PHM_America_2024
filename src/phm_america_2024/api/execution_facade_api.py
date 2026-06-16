@@ -16,7 +16,7 @@ from phm_america_2024.domain.enum_registry_domain import StepsPhase,ProblemType
 from phm_america_2024.data.download_extractor_data import download_phm_2024_dataset
 
 from phm_america_2024.pipeline.regression_runner_pipeline import run_regression_pipeline
-#from phm_america_2024.pipeline.classification_runner_pipeline import run_classification_pipeline
+from phm_america_2024.pipeline.classification_runner_pipeline import run_classification_pipeline
 
 
 # =============================================================================
@@ -155,8 +155,7 @@ def _dispatch_pipeline(ctx: RunContext, steps: list[str]) -> RunContext:
     log.debug("[_dispatch_pipeline] task=%s steps=%s", ctx.task, steps)
 
     if ctx.task == ProblemType.CLASSIFICATION.value:
-        #ctx = run_classification_pipeline(ctx, steps=steps)
-        ctx
+        ctx = run_classification_pipeline(ctx, steps=steps)
     elif ctx.task == ProblemType.REGRESSION.value:
         ctx = run_regression_pipeline(ctx, steps=steps)
     else:

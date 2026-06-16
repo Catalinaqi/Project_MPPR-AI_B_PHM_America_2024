@@ -123,7 +123,7 @@ class Phase3PreparationRunner:
     # Input loading
     # ──────────────────────────────────────────────────────────────────────────
 
-    def _load_input_dataframe(self) -> Any:
+    def _load_input_dataframe_old(self) -> Any:
         """Carga el DataFrame de entrada de manera dinámica usando linaje de archivos y búsqueda histórica."""
         log.debug("[_load_input_dataframe] entry step='%s'", self.step_key)
 
@@ -145,6 +145,75 @@ class Phase3PreparationRunner:
                 raise ValueError(
                     f"No lineage mapping defined for step: {self.step_key}"
                 )
+
+        # INTENTO 1: Buscar en la corrida actual (ej. si corres todo el pipeline de corrido)
+        if search_dir and search_dir.exists():
+            matches = list(search_dir.glob(pattern))
+            if matches:
+                log.info(
+                    "[_load_input_dataframe] Lineage resolved in current run. Loading: %s",
+                    matches[0].name,
+                )
+                return load_parquet(str(matches[0]))
+
+        # INTENTO 2: Motor de búsqueda histórica (Fallback para cuando aíslas pasos como el 3.1)
+        log.warning(
+            "[_load_input_dataframe] Artifact not in active run. Scanning history for '%s'...",
+            pattern,
+        )
+
+        runs_root = self.base_dir.parent.parent
+
+        if runs_root.exists() and runs_root.is_dir():
+            import os
+
+            # Ordenar las carpetas de corridas por fecha (las más recientes primero)
+            past_runs = sorted(
+                [d for d in runs_root.iterdir() if d.is_dir()],
+                key=os.path.getmtime,
+                reverse=True,
+            )
+
+            for run_dir in past_runs:
+                historical_phase_dir = run_dir / target_phase_folder
+                if historical_phase_dir.exists():
+                    historical_matches = list(historical_phase_dir.glob(pattern))
+                    if historical_matches:
+                        log.info(
+                            "✅ [Historical Fallback] Found precursor data at: %s",
+                            historical_matches[0],
+                        )
+                        return load_parquet(str(historical_matches[0]))
+
+        # Si el motor histórico también falla
+        log.error(
+            "[_load_input_dataframe] Missing upstream data. Searched history for '%s'",
+            pattern,
+        )
+        raise FileNotFoundError(
+            f"Dependency failed. Could not find precursor data for step {self.step_key}"
+        )
+
+
+    def _load_input_dataframe(self) -> Any:
+        """Carga el DataFrame de entrada de manera dinámica usando linaje de archivos y búsqueda histórica."""
+        log.debug("[_load_input_dataframe] entry step='%s'", self.step_key)
+
+        # 1. Definir qué buscar y dónde debería estar
+        pattern = self.step_cfg['input_artifact']['path']
+
+        if self.step_key == StepsPhase.STEP_3_1.value:
+            print(f"dioporto {pattern}")
+            search_dir = self.ctx.phase2_dir
+            target_phase_folder = "phase2_data_understanding"
+        else:
+            search_dir = self.base_dir
+            target_phase_folder = "phase3_data_preparation"
+
+        if not pattern:
+            raise ValueError(
+                f"No lineage mapping defined for step: {self.step_key}"
+            )
 
         # INTENTO 1: Buscar en la corrida actual (ej. si corres todo el pipeline de corrido)
         if search_dir and search_dir.exists():

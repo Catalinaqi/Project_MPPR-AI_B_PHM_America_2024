@@ -1,172 +1,133 @@
 # src/phm_america_2024/pipeline/clustering_runner_pipeline.py
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Optional
-
-import pandas as pd
-
-
-from phm_america_2024.configuration.build_factory_config import build_config, BuiltConfig
-from phm_america_2024.domain.enum_registry_domain import PhaseDir
-from phm_america_2024.pipeline.utils.context_facade_common import RunContext, create_run_context
 from phm_america_2024.common.logging_adapter_common import get_logger
-# from phm_america_2024.phase.phase2_understanding_runner_phase import (
-#     run_data_description,
-#     run_data_quality_verification,
-#     run_exploratory_analysis,
-#     run_initial_data_collection,
-# )
+from phm_america_2024.pipeline.utils.context_facade_common import RunContext
+from phm_america_2024.domain.enum_registry_domain import StepsPhase
+from phm_america_2024.phase.phase2_understanding_runner_phase import Phase2DataUnderstandingRunner
+from phm_america_2024.phase.phase3_preparation_runner_phase import Phase3PreparationRunner
+from phm_america_2024.phase.phase4_modeling_runner_phase import Phase4ModelingRunner
+from phm_america_2024.phase.phase5_evaluation_and_interpretation_phase import (
+    Phase5EvaluationAndInterpretationRunner)
 
 log = get_logger(__name__)
 
+# Build prefix sets from StepsPhase enum
+_PHASE2_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_2_")}
+_PHASE3_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_3_")}
+_PHASE4_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_4_")}
+_PHASE5_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_5_")}
 
-@dataclass
-class ClassificationRunContext(RunContext):
-    """Mutable state for clustering pipeline run."""
-    cluster_labels: Optional[pd.Series] = field(default=None, repr=False)
 
 
-def create_clustering_context(
-        *,
-        pipeline_name: str,
-        dataset_key: str,
-        notebook_vars: Optional[dict[str, Any]] = None,
-) -> ClassificationRunContext:
-    """Build ClassificationRunContext ready for Phase 2."""
-    log.info("[create_clustering_context] start dataset_key=%s", dataset_key)
+def run_classification_pipeline(ctx: RunContext, steps: list[str]) -> RunContext:
+    """Execute one or more CRISP‑DM steps for the classification task.
 
-    # Step 1: Build pipeline config via build_config()
-    built: BuiltConfig = build_config(
-        pipeline_name=pipeline_name,
-        dataset_key=dataset_key,
-        notebook_vars=notebook_vars,
-    )
+    Args:
+        ctx: Run context from init.
+        steps: Step names to execute (e.g. ``["step_2_1_data_acquisition"]``).
 
-    # Step 2: Create run context via factory helper
-    ctx_generic = create_run_context(
-        config=built.config,
-        dataset_key=dataset_key,
-    )
+    Returns:
+        Updated context after step execution.
+    """
+    log.debug("[run_classification_pipeline] entry steps=%s", steps)
 
-    # Step 3: Create clustering-specific context, copying all fields from generic
-    ctx = ClassificationRunContext(
-        config=ctx_generic.config,
-        run_dir=ctx_generic.run_dir,
-        run_id=ctx_generic.run_id,
-        dataset_key=ctx_generic.dataset_key,
-        df_train=ctx_generic.df_train,
-        df_test=ctx_generic.df_test,
-        artifacts=ctx_generic.artifacts,
-        phase_results=ctx_generic.phase_results,
-        errors=ctx_generic.errors,
-    )
+    for step_name in steps:
+        try:
+            # Step 1: check if step belongs to Phase 2 or Phase 3 or Phase 4
+            if (step_name in _PHASE2_STEPS or step_name in _PHASE3_STEPS  or step_name
+                    in _PHASE4_STEPS or step_name in _PHASE5_STEPS):
+                ctx = _exec_step(ctx, step_name)
+            else:
+                log.warning(
+                    "[run_classification_pipeline] step '%s' not recognised – skipped",
+                    step_name,
+                )
+                continue
 
-    log.info("[create_clustering_context] done run_id=%s", ctx.run_id)
+            log.info("[run_classification_pipeline] step '%s' completed successfully", step_name)
+
+        except Exception as exc:
+            log.exception(
+                "[run_classification_pipeline] step '%s' FAILED – error: %s",
+                step_name,
+                exc,
+            )
+            raise
+
+    log.info("[run_classification_pipeline] all requested steps completed: %s", steps)
+    log.debug("[run_classification_pipeline] exit")
     return ctx
 
 
-def run_clustering_pipeline(ctx: ClassificationRunContext) -> ClassificationRunContext:
-    """Execute full CRISP-DM clustering pipeline."""
-    log.info("[run_clustering_pipeline] START run_id=%s task=%s", ctx.run_id, ctx.task)
+def _exec_step(ctx: RunContext, step_key: str) -> RunContext:
+    """Extract step config, inject phase-level dependencies, and delegate execution.
 
-    # Phase 2 - Data Understanding
-    log.info("[run_clustering_pipeline] >>> PHASE 2")
-    ctx = run_phase2_1(ctx)
-    # ctx = run_clustering_pipeline_phase2_2(ctx)
-    # ctx = run_clustering_pipeline_phase2_3(ctx)
-    # ctx = run_clustering_pipeline_phase2_4(ctx)
+    Step 1: Determine phase config key and runner class from step prefix.
+    Step 2: Retrieve phase config from context.
+    Step 3: Extract global read strategy and input source.
+    Step 4: Deep-copy step config and inject global dependencies.
+    Step 5: Instantiate runner and call runner.run().
 
-    # Phase 3 - Data Preparation
-    # log.info("[run_clustering_pipeline] >>> PHASE 3")
-    # ctx = run_clustering_pipeline_phase3_1(ctx)
-    # ctx = run_clustering_pipeline_phase3_2(ctx)
-    # ctx = run_clustering_pipeline_phase3_3(ctx)
-    # ctx = run_clustering_pipeline_phase3_5(ctx)
-    #
-    # # Phase 4 - Modeling
-    # log.info("[run_clustering_pipeline] >>> PHASE 4")
-    # ctx = run_clustering_pipeline_phase4_1(ctx)
-    # ctx = run_clustering_pipeline_phase4_2(ctx)
-    # ctx = run_clustering_pipeline_phase4_3(ctx)
-    # ctx = run_clustering_pipeline_phase4_4(ctx)
-    #
-    # # Phase 5 - Evaluation
-    # log.info("[run_clustering_pipeline] >>> PHASE 5")
-    # ctx = run_clustering_pipeline_phase5_1(ctx)
-    # ctx = run_clustering_pipeline_phase5_2(ctx)
-    # ctx = run_clustering_pipeline_phase5_3(ctx)
-    # ctx = run_clustering_pipeline_phase5_4(ctx)
+    Args:
+        ctx: Run context.
+        step_key: Full step identifier (e.g. ``"step_3_1_data_selection"``).
 
-    log.info("[run_clustering_pipeline] END run_id=%s artifacts=%d", ctx.run_id, len(ctx.artifacts))
+    Returns:
+        Updated context after runner execution.
+    """
+    log.debug("[_exec_step] entry step_key='%s'", step_key)
+
+
+    # ── Step 1: identify phase config key and runner class ─────────────────
+    if step_key.startswith("step_2_"):
+        phase_config_key: str = "phase2_data_understanding"
+        runner_cls = Phase2DataUnderstandingRunner
+    elif step_key.startswith("step_3_"):
+        phase_config_key = "phase3_data_preparation"
+        runner_cls = Phase3PreparationRunner
+    elif step_key.startswith("step_4_"):
+        phase_config_key = "phase4_data_modeling"
+        runner_cls = Phase4ModelingRunner
+    elif step_key.startswith("step_5_"):
+        phase_config_key = "phase5_evaluation_and_interpretation"
+        runner_cls = Phase5EvaluationAndInterpretationRunner
+    else:
+        log.error("[_exec_step] unknown phase for step_key='%s'", step_key)
+        raise ValueError(f"Unknown phase for step: {step_key}")
+
+    # ── Step 2: retrieve phase configuration ────────────────────────────────
+    try:
+        phase_cfg = ctx.config.phases[phase_config_key]
+    except (KeyError, AttributeError) as err:
+        log.error("[_exec_step] phase config '%s' not found: %s", phase_config_key, err)
+        raise ValueError(f"Phase configuration '{phase_config_key}' is missing") from err
+
+    log.debug("[_exec_step] phase config keys: %s", list(phase_cfg.keys()))
+
+    # ── Step 3: extract global read strategy (avoid hardcoding structure) ────
+    try:
+        global_read_strategy = phase_cfg["read_strategy"]
+        global_input_source = phase_cfg.get("read_strategy", {}).get("input_source", {})
+    except KeyError as err:
+        log.error("[_exec_step] missing global configuration: %s", err)
+        raise ValueError(f"Phase config missing required section: {err}") from err
+
+    # ── Step 4: prepare step config and inject global dependencies ──────────
+    step_cfg_raw = phase_cfg["steps"][step_key]
+    log.debug("[_exec_step] raw step config keys: %s", list(step_cfg_raw.keys()))
+
+    step_cfg = dict(step_cfg_raw)              # deep copy to avoid mutation
+    step_cfg["read_strategy"] = global_read_strategy
+    step_cfg["input_source"] = global_input_source
+    log.debug("[_exec_step] injected phase-level context into step_cfg")
+
+    # ── Step 5: instantiate runner and execute ──────────────────────────────
+    runner = runner_cls(ctx, step_key, step_cfg)
+    log.debug("[_exec_step] runner created – calling runner.run()")
+    ctx = runner.run()
+    log.debug("[_exec_step] runner.run() returned")
+
+    log.info("[_exec_step] step '%s' executed", step_key)
     return ctx
-
-
-# =============================================================================
-# PHASE 2 ORCHESTRATORS
-# =============================================================================
-
-
-def run_clustering_pipeline_phase2_1(ctx: ClassificationRunContext) -> ClassificationRunContext:
-    """Phase 2.1 - Load train/test CSVs separately."""
-    if ctx.df_train is not None:
-        log.warning("[2.1] df_train already set shape=%s - skipping", ctx.df_train.shape)
-        return ctx
-
-    log.info("[2.1] start run_id=%s", ctx.run_id)
-    ctx = run_phase2_1(ctx)
-    log.info(
-        "[2.1] done train=%s test=%s",
-        ctx.df_train.shape if ctx.df_train is not None else None,
-        ctx.df_test.shape if ctx.df_test is not None else None,
-    )
-    return ctx
-
-#
-# def run_clustering_pipeline_phase2_2(ctx: ClassificationRunContext) -> ClassificationRunContext:
-#     """Phase 2.2 - Data profiling and description."""
-#     if ctx.df_train is None:
-#         raise RuntimeError("[2.2] no data loaded - run Phase 2.1 first")
-#
-#     log.info("[2.2] start run_id=%s", ctx.run_id)
-#     ctx = run_data_description(ctx)
-#     log.info("[2.2] done")
-#     return ctx
-#
-#
-# def run_clustering_pipeline_phase2_3(ctx: ClassificationRunContext) -> ClassificationRunContext:
-#     """Phase 2.3 - Quality verification and drift detection."""
-#     if ctx.df_train is None:
-#         raise RuntimeError("[2.3] no data loaded - run Phase 2.1 first")
-#
-#     log.info("[2.3] start run_id=%s", ctx.run_id)
-#     ctx = run_data_quality_verification(ctx)
-#     drift_detected = ctx.phase_results.get(StepsPhase.STEP_2_3.value, {}).get("drift_analyzed", False)
-#     log.info("[2.3] done drift_detected=%s", drift_detected)
-#     return ctx
-#
-#
-# def run_clustering_pipeline_phase2_4(ctx: ClassificationRunContext) -> ClassificationRunContext:
-#     """Phase 2.4 - Exploratory Data Analysis."""
-#     if ctx.df_train is None:
-#         raise RuntimeError("[2.4] no data loaded - run Phase 2.1 first")
-#
-#     log.info("[2.4] start run_id=%s", ctx.run_id)
-#     ctx = run_exploratory_analysis(ctx)
-#     log.info("[2.4] done")
-#     return ctx
-#
-
-# =============================================================================
-# PHASE 3 ORCHESTRATORS (STUBS)
-# =============================================================================
-
-# =============================================================================
-# PHASE 4 ORCHESTRATORS (STUBS)
-# =============================================================================
-
-
-# =============================================================================
-# PHASE 5 ORCHESTRATORS (STUBS)
-# =============================================================================
 

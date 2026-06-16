@@ -270,7 +270,7 @@ class Phase2DataUnderstandingRunner:
             )
         else:
             output_path: Path = resolve_path(self.base_dir / output_key)
-            log.info("[_execute_technique] output_path: ", output_path)
+            log.info("[_execute_technique] output_path: '%s' ", output_path)
             if self._should_skip(output_path):
                 log.info(
                     "[_execute_technique] '%s' artifact exists – skipping computation",

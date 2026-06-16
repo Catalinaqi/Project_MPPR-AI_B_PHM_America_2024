@@ -273,16 +273,37 @@ class StepOutputArtifact(str, Enum):
     engineered_train_split = "engineered_train_split"
     engineered_val_split = "engineered_val_split"
     engineered_test_split = "engineered_test_split"
+    # ──────────────────────────────────────────────────────────────────────────
+    # Phase 3 – Data Preparation (from classification_pipeline_config.yml)
+    # ──────────────────────────────────────────────────────────────────────────
+    # Step 3.1 – Data Selection
+    selected_classification_train_parquet = "selected_classification_train_parquet"
+    # Step 3.2 – Data Cleaning
+    cleaned_classification_train_parquet = "cleaned_classification_train_parquet"
+    # Step 3.3 – Data Transformation
+    transformed_classification_train_parquet = (
+        "transformed_classification_train_parquet"
+    )
+    fitted_scaler_classification_artifact = "fitted_scaler_classification_artifact"
 
     # ──────────────────────────────────────────────────────────────────────────
     # Phase 4 – Modeling (from regression_pipeline_config.yml)
     # ──────────────────────────────────────────────────────────────────────────
     # Step 4.2 – Model Training
     trained_ngboost_model = "trained_ngboost_model"
+
     # Step 4.4 – Model Evaluation
     best_regression_model_metadata = "best_regression_model_metadata"
 
-    # ── Phase 5 – Evaluation & Interpretation ──
+    # ──────────────────────────────────────────────────────────────────────────
+    # Phase 4 – Modeling (from classification_pipeline_config.yml)
+    # ──────────────────────────────────────────────────────────────────────────
+    trained_model = "trained_model"
+    best_classification_model_metadata = "best_classification_model_metadata"
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Phase 5 – Evaluation & Interpretation (from regression_pipeline_config.yml)──
+    # ──────────────────────────────────────────────────────────────────────────
     # step_5_1
     fi_importance_plot = "fi_importance_plot"
     fi_permutation_plot = "fi_permutation_plot"

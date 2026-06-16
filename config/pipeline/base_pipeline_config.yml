@@ -36,7 +36,7 @@ pipeline_base:
       enabled: true
       description: "Fast iteration — stratified sample for development"
       mode: "sample"
-      sample_rows: 7000
+      sample_rows: 1000
       stratify_column: "faulty"   # confirmed lowercase
     prod:
       enabled: false

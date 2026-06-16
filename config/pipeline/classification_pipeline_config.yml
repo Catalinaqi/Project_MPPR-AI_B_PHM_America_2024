@@ -49,7 +49,7 @@ classification_pipeline_config:
       read_strategy:
         mode: "full_flight_records" # Modo de archivo único para asegurar aislamiento
         input_source:
-          train_parquet: "2.1.data_acquisition.prod_300000_stratified_train.parquet"
+          train_parquet: "2.1.data_acquisition.dev_1000_stratified_train.parquet"
 
       steps:
         # ────────────────────────────────────────────────────────────────────────
@@ -65,8 +65,8 @@ classification_pipeline_config:
                 dataset_definition:
                   enabled: true
                   params:
-                    include: ["oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured"]
-                    patterns_to_drop: ["id", "uuid", "log", "engine_id"]
+                    include: ["oat", "mgt", "pa", "ias", "np", "ng", "trq_margin", "trq_measured", "faulty"]
+                    patterns_to_drop: ["id"]
                   output: "3.1.selection.definition_trace_log.json"
                 feature_selection:
                   enabled: true
@@ -74,6 +74,8 @@ classification_pipeline_config:
                     remove_constant: true
                     remove_duplicate: true
                   output: "3.1.selection.filter_trace_log.json"
+          input_artifact:
+            path: "2.1.data_acquisition.dev_1000_stratified_x_y_train.parquet"
           # NUEVO EN OPCIÓN B: Persiste la matriz reducida a disco
           output_artifacts:
             selected_classification_train_parquet:
@@ -97,6 +99,9 @@ classification_pipeline_config:
                     keep: "first"
                   output: "3.2.cleaning.duplicates_trace.json"
           # NUEVO EN OPCIÓN B: Consume el parquet de 3.1, lo sanea y crea un nuevo checkpoint
+          input_artifact:
+              path: "3.1.selection.selected_classification_train.parquet"
+              description: "Intermediate classification matrix containing only selected operational columns."
           output_artifacts:
             cleaned_classification_train_parquet:
               path: "3.2.cleaning.cleaned_classification_train.parquet"
@@ -118,7 +123,7 @@ classification_pipeline_config:
                   params:
                     method: "RobustScaler"
                     fit_on_train_only: true
-                    features: ["oat", "mgt", "pa", "ias", "np", "ng", "Torque Measured"]
+                    features: ["oat", "mgt", "pa", "ias", "np", "ng", "trq_measured", "trq_margin"]
                   output: "3.3.transformation.scaler_fit_trace.json"
                 feature_engineering:
                   enabled: true
@@ -132,9 +137,12 @@ classification_pipeline_config:
                     interactions:
                       enabled: true
                       degree: 2
-                      features: ["mgt", "ng", "Torque Measured", "np"]
+                      features: ["mgt", "ng", "trq_measured", "np"]
                   output: "3.3.transformation.engineering_formulas_log.json"
           # NUEVO EN OPCIÓN B: Consume el parquet de 3.2. Guarda la data transformada y el scaler
+          input_artifact:
+              path: "3.2.cleaning.cleaned_classification_train.parquet"
+              description: "Intermediate classification matrix deduplicated."
           output_artifacts:
             transformed_classification_train_parquet:
               path: "3.3.transformation.transformed_classification_train.parquet"
@@ -170,6 +178,9 @@ classification_pipeline_config:
                     to_numpy: true
                   output: "3.5.formatting.arrays_manifest.json"
           # Consume el parquet de 3.3 y genera los conjuntos finales para las fases siguientes
+          input_artifact:
+              path: "3.3.transformation.transformed_classification_train.parquet"
+              description: "Intermediate classification matrix with scaling applied and engineered features."
           output_artifacts:
             engineered_train_split:
               path: "3.5.formatting.classification_internal_train.parquet"
@@ -226,7 +237,8 @@ classification_pipeline_config:
                 cross_validation:
                   enabled: true
                   params:
-                    strategy: "GroupKFold"
+                    strategy: "StratifiedKFold"
+                    target_variable: "faulty"
                     n_splits: 5
                     grouping_mechanism:
                       type: "GMM_Clusterer"
@@ -242,7 +254,7 @@ classification_pipeline_config:
                     fit_on_validation_splits: true
                   output: "4.2.training.isotonic_fit_trace.json"
           output_artifacts:
-            trained_lightgbm_base:
+            trained_model:
               path: "4.2.training.lightgbm_raw_classifier.pkl"
               description: "Serialized raw LightGBM tree structure."
               consumed_by: ["phase5_evaluation_and_interpretation"]
@@ -284,8 +296,8 @@ classification_pipeline_config:
           model_base: "4.2.training.lightgbm_raw_classifier.pkl"
           calibrator: "4.2.training.isotonic_calibrator.pkl"
           scaler: "3.3.transformation.robust_scaler.pkl"
-          challenge_test_data: "2.1.data_acquisition.prod_300000_stratified_test.parquet"
-          challenge_val_data: "2.1.data_acquisition.prod_300000_stratified_validation.parquet"
+          challenge_test_data: "2.1.data_acquisition.dev_1000_stratified_test.parquet"
+          challenge_val_data: "2.1.data_acquisition.dev_1000_stratified_validation.parquet"
 
       steps:
         step_5_1_interpretation:
