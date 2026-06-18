@@ -284,7 +284,7 @@ class StepOutputArtifact(str, Enum):
     transformed_classification_train_parquet = (
         "transformed_classification_train_parquet"
     )
-    fitted_scaler_classification_artifact = "fitted_scaler_classification_artifact"
+    fitted_scaler_bin = "fitted_scaler_bin"
 
     # ──────────────────────────────────────────────────────────────────────────
     # Phase 4 – Modeling (from regression_pipeline_config.yml)

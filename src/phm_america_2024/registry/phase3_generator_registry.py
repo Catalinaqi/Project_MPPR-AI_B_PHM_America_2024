@@ -16,10 +16,10 @@ from phm_america_2024.registry.generator_registry_registry import _ARTIFACT_GENE
 log = get_logger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Step 3.1 – Data Selection artifacts (parquet + traces as JSON)
+# step_3_1_data_selection -> regression
 # ──────────────────────────────────────────────────────────────────────────────
 
-# regrezione
+
 @register_artifact(
     StepsPhase.STEP_3_1.value,
     StepOutputArtifact.selected_regression_train_parquet.value,
@@ -58,7 +58,13 @@ def _save_selected_regression_train(
     log.info(
         "[_save_selected_regression_train] Saved rows=%d to %s", len(df), full_path
     )
-# clasificazione
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# step_3_1_data_selection -> classification
+# ──────────────────────────────────────────────────────────────────────────────
+
+
 @register_artifact(
     StepsPhase.STEP_3_1.value,
     StepOutputArtifact.selected_classification_train_parquet.value,
@@ -67,7 +73,9 @@ def _save_selected_classification_train(
     ctx: Any, artifact_path: Any, **context_data: Any
 ) -> None:
     """Persist the selection-result DataFrame as parquet."""
-    df = context_data.get(StepOutputArtifact.selected_classification_train_parquet.value)
+    df = context_data.get(
+        StepOutputArtifact.selected_classification_train_parquet.value
+    )
     if df is None or (hasattr(df, "empty") and df.empty):
         log.warning("[_save_selected_classification_train] No dataframe to persist")
         return
@@ -100,10 +108,10 @@ def _save_selected_classification_train(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Step 3.2 – Data Cleaning artifacts (parquet)
+# step_3_2_data_cleaning -> regression
 # ──────────────────────────────────────────────────────────────────────────────
 
-# regressione
+
 @register_artifact(
     StepsPhase.STEP_3_2.value, StepOutputArtifact.cleaned_regression_train_parquet.value
 )
@@ -127,9 +135,16 @@ def _save_cleaned_regression_train(
     log.info(
         "[_save_cleaned_regression_train] Saved rows=%d to %s", len(df), artifact_path
     )
-# clasificazione
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# step_3_2_data_cleaning -> classification
+# ──────────────────────────────────────────────────────────────────────────────
+
+
 @register_artifact(
-    StepsPhase.STEP_3_2.value, StepOutputArtifact.cleaned_classification_train_parquet.value
+    StepsPhase.STEP_3_2.value,
+    StepOutputArtifact.cleaned_classification_train_parquet.value,
 )
 def _save_cleaned_classification_train(
     ctx: Any, artifact_path: str, **context_data: Any
@@ -149,14 +164,15 @@ def _save_cleaned_classification_train(
     # save_parquet(df, str(full_path))
     save_parquet(df, str(full_path), compression="snappy")
     log.info(
-        "[_save_cleaned_classification_train] Saved rows=%d to %s", len(df), artifact_path
+        "[_save_cleaned_classification_train] Saved rows=%d to %s",
+        len(df),
+        artifact_path,
     )
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Step 3.3 – Data Transformation artifacts (parquet + pickle scaler)
-# ──────────────────────────────────────────────────────────────────────────────
 
-# regressione
+# ──────────────────────────────────────────────────────────────────────────────
+# step_3_3_data_transformation -> regression
+# ──────────────────────────────────────────────────────────────────────────────
 @register_artifact(
     StepsPhase.STEP_3_3.value,
     StepOutputArtifact.transformed_regression_train_parquet.value,
@@ -195,20 +211,29 @@ def _save_fitted_scaler(ctx: Any, artifact_path: str, **context_data: Any) -> No
         StepOutputArtifact.fitted_scaler_regression_artifact.value
     )
     if scaler_data is None:
-        log.warning("[_save_fitted_scaler] No scaler object found in context_data")
+        log.warning(
+            "[_save_fitted_scaler_regression] No scaler object found in context_data"
+        )
         return
 
     scaler = scaler_data.get("scaler")  # The dict produced by feature_scaling
     if scaler is None:
-        log.warning("[_save_fitted_scaler] 'scaler' key missing in artifact data")
+        log.warning(
+            "[_save_fitted_scaler_regression] 'scaler' key missing in artifact data"
+        )
         return
 
     full_path: Path = resolve_path(ctx.phase3_dir / artifact_path)
     full_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(scaler, str(full_path))
-    log.info("[_save_fitted_scaler] Saved scaler to %s", artifact_path)
+    log.info("[_save_fitted_scaler_regression] Saved scaler to %s", artifact_path)
 
-# clasificazione
+
+# ──────────────────────────────────────────────────────────────────────────────
+# step_3_3_data_transformation -> classification
+# ──────────────────────────────────────────────────────────────────────────────
+
+
 @register_artifact(
     StepsPhase.STEP_3_3.value,
     StepOutputArtifact.transformed_classification_train_parquet.value,
@@ -217,7 +242,9 @@ def _save_transformed_classification_train(
     ctx: Any, artifact_path: str, **context_data: Any
 ) -> None:
     """Persist the transformed DataFrame (scaled + engineered) as parquet."""
-    df = context_data.get(StepOutputArtifact.transformed_classification_train_parquet.value)
+    df = context_data.get(
+        StepOutputArtifact.transformed_classification_train_parquet.value
+    )
     if df is None or (hasattr(df, "empty") and df.empty):
         log.warning("[_save_transformed_classification_train] No dataframe to persist")
         return
@@ -234,31 +261,36 @@ def _save_transformed_classification_train(
 
 @register_artifact(
     StepsPhase.STEP_3_3.value,
-    StepOutputArtifact.fitted_scaler_classification_artifact.value,
+    StepOutputArtifact.fitted_scaler_bin.value,
 )
-def _save_fitted_scaler(ctx: Any, artifact_path: str, **context_data: Any) -> None:
+def _save_fitted_scaler_classification(
+    ctx: Any, artifact_path: str, **context_data: Any
+) -> None:
     """Persist the fitted RobustScaler object as a pickle file.
 
     The scaler object is expected in ``context_data`` under the key
     ``fitted_scaler_classification_artifact``, which should be a dict
     with key ``"scaler"`` mapping to the ``RobustScaler`` instance.
     """
-    scaler_data = context_data.get(
-        StepOutputArtifact.fitted_scaler_classification_artifact.value
-    )
+    scaler_data = context_data.get(StepOutputArtifact.fitted_scaler_bin.value)
     if scaler_data is None:
-        log.warning("[_save_fitted_scaler] No scaler object found in context_data")
+        log.warning(
+            "[_save_fitted_scaler_classification] No scaler object found in context_data"
+        )
         return
 
     scaler = scaler_data.get("scaler")  # The dict produced by feature_scaling
     if scaler is None:
-        log.warning("[_save_fitted_scaler] 'scaler' key missing in artifact data")
+        log.warning(
+            "[_save_fitted_scaler_classification] 'scaler' key missing in artifact data"
+        )
         return
 
     full_path: Path = resolve_path(ctx.phase3_dir / artifact_path)
     full_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(scaler, str(full_path))
-    log.info("[_save_fitted_scaler] Saved scaler to %s", artifact_path)
+    log.info("[_save_fitted_scaler_classification] Saved scaler to %s", artifact_path)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Step 3.5 – Data Formatting artifacts (two parquets: train + val)
