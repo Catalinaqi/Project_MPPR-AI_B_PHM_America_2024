@@ -6,9 +6,9 @@ dataset_schema:
   # Total:         785,497 rows
   # ─────────────────────────────────────────────────────────────────────────
   dataset_sizes:
-    train:      742625
-    validation: 21436
-    test:       21436
+    train:      742625 # settecento quaranta due mila seicento venti cinque
+    validation: 21436 # ventuno mila quattro cento trenta sei
+    test:       21436 # ventuno mila quattro cento trenta sei
     total:      785497
     train_pct:  94.54
     val_pct:    2.73
