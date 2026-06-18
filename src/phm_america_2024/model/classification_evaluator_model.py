@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import brier_score_loss, roc_auc_score
 
 from phm_america_2024.common.logging_adapter_common import get_logger
 from phm_america_2024.common.io_service_common import load_parquet
@@ -13,7 +14,7 @@ from phm_america_2024.common.io_service_common import load_parquet
 log = get_logger(__name__)
 
 
-# step_4_4_model_evaluation -> Evaluación del mejor modelo
+# step_4_4_model_evaluation -> Evaluación del mejor modelo (clasificación calibrada)
 
 
 def model_selection_criteria(
@@ -22,18 +23,18 @@ def model_selection_criteria(
     ctx: Any,
     output_dir: Path,
 ) -> tuple[Any, dict[str, Any]]:
-    """Evaluate best model on validation data and compute NLL + RMSE.
+    """Evaluate best classifier on validation data and compute Brier Score + ROC AUC.
 
     Args:
-        model: Trained NGBoost model from the previous step.
+        model: Trained LightGBM model from the previous step.
         tech_cfg: Dictionary containing technique configurations strictly from YAML.
         ctx: RunContext containing execution context.
         output_dir: Path to the pipeline step output directory.
 
     Returns:
-        Tuple with the unchanged model and a metadata dictionary.
+        Tuple with the unchanged model and a metadata dictionary containing metrics.
     """
-    log.debug("ENTER model_selection_criteria")
+    log.debug("ENTER model_selection_criteria (classification)")
 
     # Step 1: Extract parameters strictly from YAML (Zero hardcoding)
     try:
@@ -57,19 +58,15 @@ def model_selection_criteria(
         log.error(f"Missing required parameter in YAML configuration: {e}")
         raise ValueError(f"YAML configuration error: missing {e}")
 
-    log.info("Computing real evaluation metrics (NLL and RMSE)")
+    log.info("Computing classification metrics: Brier Score and ROC AUC")
 
-    # Step 2: CALL load_parquet() — dynamically load validation split
-    # Step 2: Resolve path correctly using phase3_dir
-    # Obtenemos el directorio donde la Fase 3 guardó los archivos
+    # Step 2: Load validation data
     phase3_dir = getattr(ctx, "phase3_dir", None)
     if not phase3_dir:
         log.error("phase3_dir not found in context. Cannot resolve validation path.")
         raise ValueError("phase3_dir missing in RunContext")
 
-    # Construimos la ruta absoluta uniendo el directorio + el nombre del archivo
     full_val_path = Path(phase3_dir) / val_data_path
-
     if not full_val_path.exists():
         log.error(f"Validation data not found at {full_val_path}")
         raise FileNotFoundError(f"Validation file missing: {full_val_path}")
@@ -77,40 +74,48 @@ def model_selection_criteria(
     val_data: pd.DataFrame = load_parquet(str(full_val_path))
     log.info(f"Loaded validation data from {full_val_path}")
 
-    # Step 3: CALL replace() and dropna() — Remove Infinity and NaN values before predicting
+    # Step 3: Sanitize data
     initial_len = len(val_data)
     val_data = val_data.replace([np.inf, -np.inf], np.nan).dropna()
     dropped_rows = initial_len - len(val_data)
-
     if dropped_rows > 0:
         log.warning(
-            f"Dropped {dropped_rows} rows containing NaN or Infinity from validation data."
+            f"Dropped {dropped_rows} rows containing NaN/Inf from validation data."
         )
 
-    # ----------------------------------------------------------------
-    # X_val -> proviene de cargar el archivo "regression_internal_val.parquet"
-    # El flujo: El modelo ya se entrenó en el paso 4.2 usando el
-    # train_internal. Ahora, en el paso 4.4, carga el modelo guardado, carga el val_internal,
-    # y hace model.pred_dist(X_val) para ver qué la nota del modelo en datos que no
-    # usó para entrenar
-    # Es su examen final dentro del laboratorio.
-
-    # Step 4: Extract features and target strictly using the YAML target variable
+    # Step 4: Extract features and target
     X_val = val_data.drop(columns=[target_variable])
     y_val = val_data[target_variable]
 
-    # Step 5: CALL pred_dist() — predict distributions and calculate metrics
-    score = model.score(X_val, y_val)
+    # Step 5: Predict probabilities for the positive class
+    y_proba = model.predict_proba(X_val)[:, 1]
 
-    # Step 6: Format metrics and trace dictionaries (Model excluded to avoid JSON crash)
+    # Step 6: Compute metrics
+    brier = float(brier_score_loss(y_val, y_proba))
+    roc_auc = float(roc_auc_score(y_val, y_proba))
+
+    log.info(f"Metrics computed: Brier={brier:.6f}, ROC AUC={roc_auc:.6f}")
+
+    # Step 7: Build metrics dict
     metrics = {
-        "score": score,
+        "brier_score": brier,
+        "roc_auc": roc_auc,
         "selected_by": primary_metric,
     }
 
+    # Step 8: Write trace JSON
+    trace = {
+        "primary_metric": primary_metric,
+        "tie_breaker": tie_breaker,
+        "metrics": metrics,
+    }
+    trace_json = json.dumps(trace, indent=2, default=str)
+    output_path = output_dir / output_filename
+    output_path.write_text(trace_json)
+    log.info(f"Trace written to {output_path}")
 
-    # Extra returned metadata for the DAG registry
+    # Step 9: Return metadata for DAG registry
     extra = {"best_model_metadata": metrics}
 
-    log.debug("EXIT model_selection_criteria")
+    log.debug("EXIT model_selection_criteria (classification)")
     return model, extra
