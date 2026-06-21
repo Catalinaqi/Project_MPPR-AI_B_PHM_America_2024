@@ -290,7 +290,7 @@ class StepOutputArtifact(str, Enum):
     # Phase 4 – Modeling (from regression_pipeline_config.yml)
     # ──────────────────────────────────────────────────────────────────────────
     # Step 4.2 – Model Training
-    trained_ngboost_model = "trained_ngboost_model"
+    trained_ngboost_model = "trained_model"
     # Step 4.4 – Model Evaluation
     best_regression_model_metadata = "best_regression_model_metadata"
 
@@ -301,7 +301,7 @@ class StepOutputArtifact(str, Enum):
     trained_model = "trained_model"
     fitted_isotonic_calibrator = "fitted_isotonic_calibrator"  # <-- NUEVO
     # Step 4.4 – Model Evaluation
-    best_classification_model_metadata = "best_classification_model_metadata"
+    best_classification_model_metadata = "best_classification_metadata"
 
     # ──────────────────────────────────────────────────────────────────────────
     # Phase 5 – Evaluation & Interpretation (from regression_pipeline_config.yml)──

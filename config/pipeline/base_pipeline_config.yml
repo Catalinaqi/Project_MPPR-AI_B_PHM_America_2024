@@ -33,19 +33,19 @@ pipeline_base:
 
   profiles:
     dev:
-      enabled: true
+      enabled: false
       description: "Fast iteration — stratified sample for development"
       mode: "sample"
       sample_rows: 1000
       stratify_column: "faulty"   # confirmed lowercase
     prod:
-      enabled: false
+      enabled: true
       description: >
         Full-scale execution. Train has 742,625 rows (94.54% of total).
         Sample capped at 300,000 to keep memory manageable on CPU while
         preserving statistical representativeness.
       mode: "sample"
-      sample_rows: 300000
+      sample_rows: 30000 # 300 000 -> 30 000
       stratify_column: "faulty"   # confirmed lowercase
 
   common_phases_config:

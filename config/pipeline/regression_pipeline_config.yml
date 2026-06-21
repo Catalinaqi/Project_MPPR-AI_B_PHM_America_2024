@@ -62,7 +62,8 @@ regression_pipeline_config:
                   enabled: true
                   params:
                     mode: "full_flight_records"
-                    include: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_margin","trq_measured" ]
+                    include: [ "oat", "mgt", "pa", "ias", "np", "ng","trq_measured",
+                               "trq_margin","faulty" ]
                     patterns_to_drop: [ "id"]
                   output: "3.1.selection.definition_trace_log.json"
                 feature_selection:
@@ -71,9 +72,9 @@ regression_pipeline_config:
                     remove_constant: true
                     remove_duplicate: true
                   output: "3.1.selection.filter_trace_log.json"
-          # luca
+
           input_artifact:
-            path: "2.1.data_acquisition.dev_7000_stratified_train.parquet"
+            path: "2.1.data_acquisition.prod_30000_stratified_x_y_train.parquet"
           output_artifacts:
             selected_regression_train_parquet:
               path: "3.1.selection.selected_regression_train.parquet"
@@ -89,20 +90,21 @@ regression_pipeline_config:
             data_cleaning:
               enabled: true
               techniques:
-                outlier_handling:
-                  enabled: true
-                  params:
-                    target_clipping: true
-                    target_variable: "trq_margin"
-                    lower_percentile: 0.01
-                    upper_percentile: 0.99
-                  output: "3.2.cleaning.clipping_audit_log.json"
+               # control extra para trq_margin
+#                outlier_handling:
+#                  enabled: true
+#                  params:
+#                    target_clipping: true
+#                    target_variable: "trq_margin"
+#                    lower_percentile: 0.01
+#                    upper_percentile: 0.99
+#                  output: "3.2.cleaning.clipping_audit_log.json"
                 duplicate_handling:
                   enabled: true
                   params:
                     keep: "first"
                   output: "3.2.cleaning.duplicates_trace.json"
-          # luca
+
           input_artifact:
             path: "3.1.selection.selected_regression_train.parquet"
             description: "Intermediate regression matrix containing only selected operational columns."
@@ -146,19 +148,19 @@ regression_pipeline_config:
                   params:
                     method: "RobustScaler"
                     fit_on_train_only: true
-                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_margin","trq_measured" ]
+                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured","trq_margin" ]
                   output: "3.3.transformation.scaler_fit_trace.json"
-          # luca
+
           input_artifact:
             path: "3.2.cleaning.cleaned_regression_train.parquet"
             description: "Intermediate regression matrix deduplicated and outlier-clipped."
           output_artifacts:
             transformed_regression_train_parquet:
-              path: "3.3.transformation.transformed_regression_train.parquet"
+              path: "3.3.transformation.transformed_regression_train.parquet" # -> el plato cocinado
               description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
               consumed_by: [ "step_3_5_data_formatting" ]
             fitted_scaler_regression_artifact:
-              path: "3.3.transformation.robust_scaler_regression.pkl"
+              path: "3.3.transformation.robust_scaler_regression.pkl" # -> la receta
               description: "Fitted state parameters of the training-isolated RobustScaler model for regression."
               consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
         # ────────────────────────────────────────────────────────────────────────
@@ -177,6 +179,8 @@ regression_pipeline_config:
                     test_size: 0.15    # 15% reservado para tu "test_internal" (Fase 5)
                     val_size: 0.15     # 15% reservado para tu "val_internal" (Fase 4)
                     random_state: 42   # Semilla de reproducibilidad (quedará 70% para Train)
+                    stratify: false
+                    target_col: "trq_margin"
                   output: "3.5.formatting.split_indices_trace.json"
                 dataset_formatting:
                   enabled: true
@@ -185,7 +189,7 @@ regression_pipeline_config:
                     type_casting: "float64" # Target continuo para NGBoost
                     to_numpy: true
                   output: "3.5.formatting.arrays_manifest.json"
-          # luca
+
           input_artifact:
             path: "3.3.transformation.transformed_regression_train.parquet"
             description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
@@ -200,7 +204,7 @@ regression_pipeline_config:
               consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
             engineered_test_split:
               path: "3.5.formatting.regression_internal_test.parquet"
-              description: "Finalized internal validation split for NGBoost early stopping/CV."
+              description: "Finalized internal test split."
               consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
 #            engineered_test_challenge_parquet:
@@ -237,7 +241,7 @@ regression_pipeline_config:
         input_source:
           train_data: "3.5.formatting.regression_internal_train.parquet"
           val_data: "3.5.formatting.regression_internal_val.parquet" # -> ¿Qué tan bueno es el modelo?"
-          scaler: "3.3.transformation.robust_scaler_regression.pkl"
+          #scaler: "3.3.transformation.robust_scaler_regression.pkl"
 
       steps:
         step_4_1_algorithm_selection:
@@ -252,15 +256,15 @@ regression_pipeline_config:
                   params:
                     library: "ngboost"
                     estimator: "NGBRegressor"
-                    Dist: "Normal"
-                    Score: "LogScore"
-                    n_estimators: 2        # <--- Modificado (antes 400)
-                    learning_rate: 0.1     # <--- Puede ser más alto para pruebas
-                    minibatch_frac: 0.1    # <--- Toma solo 10% de la data en cada árbol
+                    Dist: "Normal" # Predice Media y Varianza (Incertidumbre)
+                    Score: "LogScore" # Optimiza para que la incertidumbre sea realista
+                    n_estimators: 400        # <--- Buen balance entre aprendizaje y velocidad
+                    learning_rate: 0.03     # <--- Tasa de aprendizaje estándar
+                    minibatch_frac: 0.1    # <--- CLAVE: Toma solo el 10% de los datos por árbol. ¡Súper rápido!
                     Base:
                       type: "DecisionTreeRegressor"
-                      max_depth: 2         # <--- Modificado (antes 4)
-                      min_samples_leaf: 10  # 20
+                      max_depth: 4         # <--- Árboles poco profundos, previene memorización
+                      min_samples_leaf: 30  # 20
                     random_state: 42
                   output: "4.1.modeling.algo_setup_trace.json"
 
@@ -281,10 +285,12 @@ regression_pipeline_config:
                     grouping_mechanism:
                       type: "GMM_Clusterer"
                       features: [ "oat", "mgt", "ias" ]
-                      n_clusters: 4
+                      n_clusters: 5
                       covariance_type: "full"
                       log_centroids_verification: true
                   output: "4.2.training.cv_fold_execution_trace.json"
+          #input_artifact:
+           #path: "3.5.formatting.regression_internal_train.parquet"
           output_artifacts:
             # trained_ngboost_model:
             trained_model:
@@ -305,6 +311,9 @@ regression_pipeline_config:
                     primary_metric: "neg_log_likelihood"
                     tie_breaker: "rmse"
                   output: "4.4.evaluation.ranking_trace.json"
+          #input_artifact:
+           #ngboost_pkl: "4.2.training.ngboost_regressor.pkl"
+           #internal_val_parquet: "3.5.formatting.regression_internal_val.parquet"
           output_artifacts:
             best_regression_model_metadata:
               path: "4.4.evaluation.final_best_model_meta.json"
@@ -421,3 +430,60 @@ regression_pipeline_config:
               path: "5.4.decision.final_sign_off_certificate.json"
               description: "Cryptographic or structured approval marker for production release."
               consumed_by: [ "deployment" ]
+
+    phase6_deployment:
+      enabled: true
+      objective: "Eseguire l'inferenza unificata sui test set interni e pacchettizzare i consegnabili per la valutazione accademica."
+
+      read_strategy:
+        mode: "academic_evaluation"
+        input_source:
+          # --- Modelli pre-addestrati ---
+          classification_model: "4.2.training.lightgbm_raw_classifier.pkl"
+          regression_model: "4.2.training.ngboost_regressor.pkl"
+          classification_calibrator: "4.2.training.isotonic_calibrator.pkl"
+
+          # --- Dataset di Test e Train Interni (Generati nella Fase 3.5) ---
+          # Nota: cascade_inference userà solo i test set, zip_delivery userà tutto.
+          classification_test_data: "3.5.formatting.classification_internal_test.parquet"
+          regression_test_data: "3.5.formatting.regression_internal_test.parquet"
+          classification_train_data: "3.5.formatting.classification_internal_train.parquet"
+          regression_train_data: "3.5.formatting.regression_internal_train.parquet"
+
+      steps:
+        step_6_1_academic_scoring:
+          enabled: true
+          description: "Eseguire i modelli solo sulle partizioni di Test interno per ottenere le predizioni finali."
+          methods:
+            batch_scoring:
+              enabled: true
+              techniques:
+                cascade_inference:
+                  enabled: true # Al mismo nivel que params
+                  params:
+                    execution_order: ["classification", "regression"]
+                    filter_threshold: 0.5
+                    save_predictions: true
+                    datasets_to_score:
+                      - "classification_test_data"
+                      - "regression_test_data"
+                  output: "6.1.final_academic_predictions.parquet"
+
+        step_6_2_package_deliverables:
+          enabled: true
+          description: "Copiare il codice, i modelli e i dataset utilizzati (Train e Test) in un file ZIP per il professore."
+          methods:
+            package_delivery:
+              enabled: true
+              techniques:
+                zip_delivery:
+                  enabled: true # Al mismo nivel que params
+                  params:
+                    include_code: true
+                    files_to_include:
+                      - "3.5.formatting.classification_internal_train.parquet"
+                      - "3.5.formatting.classification_internal_test.parquet"
+                      - "3.5.formatting.regression_internal_train.parquet"
+                      - "3.5.formatting.regression_internal_test.parquet"
+                      - "6.1.final_academic_predictions.parquet"
+                  output: "Consegna_PHM_America_2024.zip"

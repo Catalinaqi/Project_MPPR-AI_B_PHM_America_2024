@@ -40,11 +40,19 @@ def data_split(
             val_size: float = params["val_size"]
 
         random_state: int = params.get("random_state", 42)
+
+        # --- NUEVO: Extraer parámetros de estratificación ---
+        use_stratify: bool = params.get("stratify", False)
+        target_col: str = params.get(
+            "target_col", "faulty"
+        )  # Por defecto faulty para clasificación
+
         log.info(
             "[data_split] Parámetros cargados: test_size=%.2f, val_size=%.2f, random_state=%d",
             test_size,
             val_size,
             random_state,
+            use_stratify,
         )
 
         # LOG ERROR preventivo: Validación matemática
@@ -53,6 +61,11 @@ def data_split(
             log.error("[data_split] %s", err_msg)
             raise ValueError(err_msg)
 
+        # Configurar la data de estratificación para el PRIMER corte
+        stratify_data_1 = (
+            df[target_col] if use_stratify and target_col in df.columns else None
+        )
+
         # 2. PRIMER CORTE: Separar el Test Set del resto
         log.debug("[data_split] Ejecutando Primer Corte: Extrayendo Test Set...")
         train_val_df, test_df = train_test_split(
@@ -60,6 +73,7 @@ def data_split(
             test_size=test_size,
             random_state=random_state,
             shuffle=True,
+            stratify=stratify_data_1,  # <--- SE APLICA AQUÍ
         )
         log.info(
             "[data_split] Primer Corte exitoso. Restante (Train+Val)=%s, Test=%s",
@@ -69,6 +83,14 @@ def data_split(
 
         # 3. SEGUNDO CORTE: Separar Validation Set del Training restante
         val_ratio_of_remaining = val_size / (1.0 - test_size)
+
+        # Configurar la data de estratificación para el SEGUNDO corte
+        stratify_data_2 = (
+            train_val_df[target_col]
+            if use_stratify and target_col in train_val_df.columns
+            else None
+        )
+
         log.debug(
             "[data_split] Ejecutando Segundo Corte: Extrayendo Val Set (Proporción matemática ajustada: %.4f)...",
             val_ratio_of_remaining,
@@ -79,6 +101,7 @@ def data_split(
             test_size=val_ratio_of_remaining,
             random_state=random_state,
             shuffle=True,
+            stratify=stratify_data_2,  # <--- SE APLICA AQUÍ
         )
 
         log.info(

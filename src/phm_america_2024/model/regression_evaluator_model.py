@@ -33,7 +33,7 @@ def model_selection_criteria(
     Returns:
         Tuple with the unchanged model and a metadata dictionary.
     """
-    log.debug("ENTER model_selection_criteria")
+    log.debug("[model_selection_criteria] Start - ENTER model_selection_criteria")
 
     # Step 1: Extract parameters strictly from YAML (Zero hardcoding)
     try:
@@ -49,33 +49,48 @@ def model_selection_criteria(
             "target_variable"
         ]
 
-        # Extraemos la ruta de validación de la read_strategy global
+        log.info(
+            "[model_selection_criteria] name for target_variable is: %s",
+            target_variable,
+        )
+
+        # Extraemos la ruta de validación de la read_strategy global -> 3.5.formatting.regression_internal_val.parquet
         val_data_path: str = ctx.config.phases["phase4_data_modeling"]["read_strategy"][
             "input_source"
         ]["val_data"]
+
+        log.debug("[model_selection_criteria] val_data_path is: %s", val_data_path)
     except KeyError as e:
         log.error(f"Missing required parameter in YAML configuration: {e}")
         raise ValueError(f"YAML configuration error: missing {e}")
 
-    log.info("Computing real evaluation metrics (NLL and RMSE)")
+    log.info(
+        "[model_selection_criteria] Computing real evaluation metrics (NLL and RMSE)"
+    )
 
     # Step 2: CALL load_parquet() — dynamically load validation split
     # Step 2: Resolve path correctly using phase3_dir
     # Obtenemos el directorio donde la Fase 3 guardó los archivos
     phase3_dir = getattr(ctx, "phase3_dir", None)
     if not phase3_dir:
-        log.error("phase3_dir not found in context. Cannot resolve validation path.")
+        log.error(
+            "[model_selection_criteria] phase3_dir not found in context. Cannot resolve validation path."
+        )
         raise ValueError("phase3_dir missing in RunContext")
 
     # Construimos la ruta absoluta uniendo el directorio + el nombre del archivo
     full_val_path = Path(phase3_dir) / val_data_path
 
+    log.debug("[model_selection_criteria] full_val_path is: %s", full_val_path)
+
     if not full_val_path.exists():
-        log.error(f"Validation data not found at {full_val_path}")
+        log.error(
+            f"[model_selection_criteria] Validation data not found at {full_val_path}"
+        )
         raise FileNotFoundError(f"Validation file missing: {full_val_path}")
 
     val_data: pd.DataFrame = load_parquet(str(full_val_path))
-    log.info(f"Loaded validation data from {full_val_path}")
+    log.info(f"[model_selection_criteria] Loaded validation data from {full_val_path}")
 
     # Step 3: CALL replace() and dropna() — Remove Infinity and NaN values before predicting
     initial_len = len(val_data)
@@ -84,7 +99,8 @@ def model_selection_criteria(
 
     if dropped_rows > 0:
         log.warning(
-            f"Dropped {dropped_rows} rows containing NaN or Infinity from validation data."
+            f"[model_selection_criteria] Dropped {dropped_rows} rows containing NaN "
+            f"or Infinity from validation data."
         )
 
     # ----------------------------------------------------------------
@@ -99,6 +115,21 @@ def model_selection_criteria(
     X_val = val_data.drop(columns=[target_variable])
     y_val = val_data[target_variable]
 
+    # --------------------------
+    # AÑADIR: log de la ruta del modelo (si está disponible)
+    model_path = getattr(ctx, "model_path", None)
+    if model_path:
+        log.info("[model_selection_criteria] Model loaded from: %s", model_path)
+    else:
+        log.warning("[model_selection_criteria] No model_path in context")
+    # --------------------------
+    log.info(
+        "[model_selection_criteria] Model type: %s, parameters: %s",
+        type(model).__name__,
+        model.get_params(),
+    )
+    # --------------------------
+
     # Step 5: CALL pred_dist() — predict distributions and calculate metrics
     dist = model.pred_dist(X_val)
 
@@ -110,7 +141,8 @@ def model_selection_criteria(
     rmse_score: float = float(np.sqrt(((y_pred_mean - y_val) ** 2).mean()))
 
     log.info(
-        f"Metrics computed successfully: NLL={nll_score:.4f}, RMSE={rmse_score:.4f}"
+        f"[model_selection_criteria] Metrics computed successfully: NLL"
+        f"={nll_score:.4f}, RMSE={rmse_score:.4f}"
     )
 
     # Step 6: Format metrics and trace dictionaries (Model excluded to avoid JSON crash)
@@ -131,11 +163,13 @@ def model_selection_criteria(
     output_path = output_dir / output_filename
     output_path.write_text(trace_json)
 
-    log.info("Model selection criteria evaluated successfully")
-    log.debug(f"Trace saved to {output_path}")
+    log.info(
+        "[model_selection_criteria] Model selection criteria evaluated successfully"
+    )
+    log.debug(f"[model_selection_criteria] Trace saved to {output_path}")
 
     # Extra returned metadata for the DAG registry
     extra = {"best_model_metadata": metrics}
 
-    log.debug("EXIT model_selection_criteria")
+    log.debug("[model_selection_criteria] End - EXIT model_selection_criteria")
     return model, extra

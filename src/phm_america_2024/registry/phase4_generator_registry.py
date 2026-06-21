@@ -15,7 +15,7 @@ log = get_logger(__name__)
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# Registro para step_4_2 – Regresión (NGBoost)
+# Registro para step_4_2 – step_4_2_model_training (NGBoost)
 # ────────────────────────────────────────────────────────────────────────────
 
 
@@ -34,6 +34,11 @@ def _save_trained_ngboost_model(
     full_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, str(full_path))
     log.info("[_save_trained_ngboost_model] saved model to %s", artifact_path)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Registro para step_4_4 – step_4_4_model_evaluation (NGBoost)
+# ────────────────────────────────────────────────────────────────────────────
 
 
 @register_artifact(

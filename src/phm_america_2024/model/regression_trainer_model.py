@@ -75,7 +75,7 @@ def algorithm_selection(
 
 
 def cross_validation(
-    df: pd.DataFrame,
+    df: pd.DataFrame,  # -> *_internal_train.parquet
     tech_cfg: Dict[str, Any],
     ctx: Any,
     output_dir: Path,
@@ -93,6 +93,7 @@ def cross_validation(
     Returns:
         Best trained model (lowest validation NLL) and extra artifacts.
     """
+
     log.debug("[cross_validation] entry – shape=%s", df.shape)
 
     try:
@@ -100,10 +101,13 @@ def cross_validation(
         train_data_name = ctx.config.phases["phase4_data_modeling"]["read_strategy"][
             "input_source"
         ]["train_data"]
+
+        log.info("[cross_validation] train_data_name: %s", train_data_name)
+
         phase3_dir = getattr(ctx, "phase3_dir", "Directorio_Desconocido")
         full_train_path = Path(phase3_dir) / train_data_name
-
         log.info("[cross_validation] DATASET ORIGEN (Train): %s", full_train_path)
+
     except Exception as e:
         log.warning(
             "[cross_validation] No se pudo resolver la ruta del dataset en los logs: %s",
@@ -112,18 +116,23 @@ def cross_validation(
 
     try:
         # Step 1: Extract parameters directly from YAML config (Zero hardcoding)
+        # ----- params-------------
         params: Dict[str, Any] = tech_cfg["params"]
-        n_splits: int = params["n_splits"]
+        # ----- params start------------
+        random_seed: int = params["random_seed"]
         strategy: str = params["strategy"]
         if strategy != "GroupKFold":
             log.error("[cross_validation] unsupported strategy: %s", strategy)
             raise ValueError(f"Unsupported strategy: {strategy}")
+        target_col: str = params["target_variable"]
+        n_splits: int = params["n_splits"]
         grouping: Dict[str, Any] = params["grouping_mechanism"]
+
         gmm_features: list[str] = grouping["features"]
         n_clusters: int = grouping["n_clusters"]
         cov_type: str = grouping["covariance_type"]
-        random_seed: int = params["random_seed"]
-        target_col: str = params["target_variable"]
+        # ----- params end-------------
+
         output_filename: str = tech_cfg["output"]
     except KeyError as e:
         log.error("[cross_validation] YAML key missing in configuration: %s", e)

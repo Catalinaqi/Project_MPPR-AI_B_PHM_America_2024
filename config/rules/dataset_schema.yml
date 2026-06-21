@@ -17,13 +17,23 @@ dataset_schema:
   # ── GRUPPO 1: METADATI DEI CAMPI (Significato Fisico Inglese / Italiano) ─
   fields_metadata:
     id:           {en: "Identifier",                         it: "Identificativo Record"}
+    #----------------feature: representan las condiciones externas o entorno termino/aerodinamico
+    #-- variables de entorno
+    #------------GMM agrupa los datos por el entorno -> y fuerza al modelo ML aprender
+    #                                                   como reaccionan las variables de rendimiento
+    # representan el entorno y el régimen de vuelo -> variables atmosféricas + velocidad térmica
     oat:          {en: "Outside Air Temperature (Celsius)",  it: "Temperatura Aria Esterna (Celsius)"}
-    ias:          {en: "Indicated Airspeed (Nodi)",          it: "Velocità Indicata (Nodi)"}
-    pa:           {en: "Pressure Altitude (Piedi)",         it: "Altitudine di Pressione (Piedi)"}
     mgt:          {en: "Measured Gas Temp (°C)",             it: "Temperatura del Gas Misurata (°C)"}
+    ias:          {en: "Indicated Airspeed (Nodi)",          it: "Velocità Indicata (Nodi)"}
+    #----------------feature: representan la dinamica interna y el rendimiento mecanico
+    #-- variables de rendimiento
+    #------------GMM agrupa los datos por el entorno -> y fuerza al modelo ML aprender
+    #                                                   como reaccionan las variables de rendimiento
+    pa:           {en: "Pressure Altitude (Piedi)",          it: "Altitudine di Pressione (Piedi)"}
     ng:           {en: "Gas Generator Speed (%)",            it: "Velocità del Generatore di Gas (%)"}
     np:           {en: "Power Turbine Speed (%)",            it: "Velocità della Turbina di Potenza (%)"}
     trq_measured: {en: "Measured Torque (%)",                it: "Coppia Reale Misurata (%)"}
+    #----------------target
     faulty:       {en: "Faulty Indicator (0=Nominal, 1=Fail)",it: "Indicatore di Guasto (0=Nominale, 1=Guasto)"}
     trq_margin:   {en: "Torque Margin (%)",                  it: "Margine di Coppia (%)"}
 

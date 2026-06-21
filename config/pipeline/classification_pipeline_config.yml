@@ -65,7 +65,8 @@ classification_pipeline_config:
                 dataset_definition:
                   enabled: true
                   params:
-                    include: ["oat", "mgt", "pa", "ias", "np", "ng", "trq_margin", "trq_measured", "faulty"]
+                    include: ["oat", "mgt", "pa", "ias", "np", "ng", "trq_measured",
+                              "faulty","trq_margin"]
                     patterns_to_drop: ["id"]
                   output: "3.1.selection.definition_trace_log.json"
                 feature_selection:
@@ -75,7 +76,7 @@ classification_pipeline_config:
                     remove_duplicate: true
                   output: "3.1.selection.filter_trace_log.json"
           input_artifact:
-            path: "2.1.data_acquisition.dev_1000_stratified_x_y_train.parquet"
+            path: "2.1.data_acquisition.prod_30000_stratified_x_y_train.parquet"
           # NUEVO EN OPCIÓN B: Persiste la matriz reducida a disco
           output_artifacts:
             selected_classification_train_parquet:
@@ -118,13 +119,6 @@ classification_pipeline_config:
             data_transformation:
               enabled: true
               techniques:
-                feature_scaling:
-                  enabled: true
-                  params:
-                    method: "RobustScaler"
-                    fit_on_train_only: true
-                    features: ["oat", "mgt", "pa", "ias", "np", "ng", "trq_measured", "trq_margin"]
-                  output: "3.3.transformation.scaler_fit_trace.json"
                 feature_engineering:
                   enabled: true
                   params:
@@ -137,8 +131,15 @@ classification_pipeline_config:
                     interactions:
                       enabled: true
                       degree: 2
-                      features: ["mgt", "ng", "trq_measured", "np"]
+                      features: "all "#["mgt", "ng", "trq_measured", "np"]
                   output: "3.3.transformation.engineering_formulas_log.json"
+                feature_scaling:
+                  enabled: true
+                  params:
+                    method: "RobustScaler"
+                    fit_on_train_only: true
+                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured", "faulty" ]
+                  output: "3.3.transformation.scaler_fit_trace.json"
           # NUEVO EN OPCIÓN B: Consume el parquet de 3.2. Guarda la data transformada y el scaler
           input_artifact:
               path: "3.2.cleaning.cleaned_classification_train.parquet"
@@ -166,9 +167,12 @@ classification_pipeline_config:
                 data_split: # REACTIVADO: Necesitamos un set interno para validar la calibración de Fase 4
                   enabled: true
                   params:
-                    test_size: 0.2
+                    test_size: 0.15    # 15% reservado para tu "test_internal" (Fase 5)
+                    val_size: 0.15     # 15% reservado para tu "val_internal" (Fase 4)
+                    #test_size: 0.2
                     random_state: 42
                     stratify: true
+                    target_col: "faulty"
                   output: "3.5.formatting.split_indices_trace.json"
                 dataset_formatting:
                   enabled: true
@@ -190,6 +194,10 @@ classification_pipeline_config:
               path: "3.5.formatting.classification_internal_val.parquet"
               description: "Finalized internal validation split for isotonic calibration."
               consumed_by: ["step_4_2_model_training", "step_4_4_model_evaluation"]
+            engineered_test_split:
+              path: "3.5.formatting.classification_internal_test.parquet"
+              description: "Finalized internal test split."
+              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
     # ----------------------------------------------------------------------------
     # STAGE 4 — MODELING
@@ -221,7 +229,7 @@ classification_pipeline_config:
                     boosting_type: "gbdt"
                     scale_pos_weight: 1.48
                     learning_rate: 0.05
-                    n_estimators: 350
+                    n_estimators: 300
                     max_depth: 6
                     num_leaves: 31
                     random_state: 42
@@ -243,7 +251,7 @@ classification_pipeline_config:
                     grouping_mechanism:
                       type: "GMM_Clusterer"
                       features: ["oat", "mgt", "ias"]
-                      n_clusters: 4
+                      n_clusters: 5
                       covariance_type: "full"
                       log_centroids_verification: true
                   output: "4.2.training.cv_fold_execution_trace.json"

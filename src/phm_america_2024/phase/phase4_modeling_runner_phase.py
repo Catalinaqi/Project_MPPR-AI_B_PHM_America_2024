@@ -110,6 +110,7 @@ class Phase4ModelingRunner:
         )
         if algorithm_config_cache is not None:
             log.debug("[Phase4ModelingRunner] algorithm_config found in context cache")
+            log.debug("algorithm_config keys: %s", list(algorithm_config_cache.keys()))
         else:
             log.debug("[Phase4ModelingRunner] algorithm_config not in cache")
 
@@ -362,6 +363,18 @@ class Phase4ModelingRunner:
                 model_path_str: str = step_4_2_cfg["output_artifacts"]["trained_model"][
                     "path"
                 ]
+                log.debug(
+                    "[_load_input_dataframe] model_data path from config: %s",
+                    model_path_str,
+                )
+                # Step 6: CALL resolve_path() — normalize model path object
+                path_model: Path = resolve_path(self.ctx.phase4_dir / model_path_str)
+                # Step 7: CALL load_pickle_joblib() — deserialize model object
+                model: Any = load_pickle_joblib(str(path_model))
+                # guardar la ruta en el contexto para trazabilidad
+                self.ctx.model_path = str(path_model)
+                log.info("[_load_input_dataframe] model loaded from: %s", path_model)
+                df = model
             except (KeyError, AttributeError) as e:
                 log.error(
                     "[_load_input_dataframe] Error dynamically resolving model path: %s",
@@ -376,13 +389,12 @@ class Phase4ModelingRunner:
                 model_path_str,
             )
 
-            # Step 6: CALL resolve_path() — normalize model path object
-            path_model: Path = resolve_path(self.ctx.phase4_dir / model_path_str)
-
-            # Step 7: CALL load_pickle_joblib() — deserialize model object
-            model: Any = load_pickle_joblib(str(path_model))
-            log.info("[_load_input_dataframe] model loaded from: %s", path_model)
-            df = model
+            # # Step 6: CALL resolve_path() — normalize model path object
+            # path_model: Path = resolve_path(self.ctx.phase4_dir / model_path_str)
+            # # Step 7: CALL load_pickle_joblib() — deserialize model object
+            # model: Any = load_pickle_joblib(str(path_model))
+            # log.info("[_load_input_dataframe] model loaded from: %s", path_model)
+            # df = model
 
         else:
             log.error("[_load_input_dataframe] unknown step_key: %s", step_val)
@@ -411,7 +423,14 @@ class Phase4ModelingRunner:
         Returns:
             Tuple containing updated data and artifact dictionary.
         """
+
         log.debug("[_execute_technique] entry technique='%s'", technique_name)
+
+        try:
+            alg_str = json.dumps(algorithm_config, default=str)
+        except Exception:
+            alg_str = repr(algorithm_config)
+        log.debug("[_execute_technique] algorithm_config: %s", alg_str)
 
         # Step 1: CALL get() — resolve target technique function
         func = self._TECHNIQUE_DISPATCH.get(technique_name)
@@ -435,6 +454,16 @@ class Phase4ModelingRunner:
             log.info("[_execute_technique] '%s' completed", technique_name)
             log.debug("[_execute_technique] exit")
             return model, extra
+
+        elif technique_name in [
+            "single_probabilistic_architecture",
+            "single_calibrated_architecture",
+        ]:
+            # Las técnicas del Paso 4.1 crean el config, NO lo reciben como argumento
+            df_new, extra = func(df, tech_cfg, self.ctx, output_dir)
+            log.info("[_execute_technique] '%s' completed", technique_name)
+            log.debug("[_execute_technique] exit")
+            return df_new, extra
 
         elif technique_name == "cross_validation":
             log.debug(

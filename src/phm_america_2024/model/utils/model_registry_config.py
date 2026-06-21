@@ -1,10 +1,15 @@
+# src/phm_america_2024/model/utils/model_registry_config.py
 from __future__ import annotations
 from typing import Type, Dict, Callable, Any, Optional
 import importlib
 
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
-from sklearn.ensemble import (RandomForestClassifier, GradientBoostingClassifier,
-                              RandomForestRegressor,GradientBoostingRegressor)
+from sklearn.ensemble import (
+    RandomForestClassifier,
+    GradientBoostingClassifier,
+    RandomForestRegressor,
+    GradientBoostingRegressor,
+)
 from sklearn.linear_model import LogisticRegression, LinearRegression, Ridge, Lasso
 from sklearn.svm import SVC, SVR
 from xgboost import XGBClassifier, XGBRegressor
@@ -15,7 +20,6 @@ log = get_logger(__name__)
 
 
 class ModelRegistry:
-
     _CLUSTERING_MODELS: Dict[str, Type] = {
         "kmeans": KMeans,
         "dbscan": DBSCAN,
@@ -54,13 +58,11 @@ class ModelRegistry:
     }
 
     @classmethod
-    def get_model_class(
-            cls,
-            problem_type: str,
-            model_name: str
-    ) -> Type:
+    def get_model_class(cls, problem_type: str, model_name: str) -> Type:
 
-        log.debug(f"Getting model class: problem_type={problem_type}, model_name={model_name}")
+        log.debug(
+            f"Getting model class: problem_type={problem_type}, model_name={model_name}"
+        )
 
         # Normalize inputs
         problem_type = problem_type.lower()
@@ -82,7 +84,9 @@ class ModelRegistry:
         # Get model class
         if model_name not in registry:
             available = list(registry.keys())
-            log.error(f"Model '{model_name}' not found for {problem_type}. Available: {available}")
+            log.error(
+                f"Model '{model_name}' not found for {problem_type}. Available: {available}"
+            )
             raise KeyError(f"Model '{model_name}' not found. Available: {available}")
 
         model_class = registry[model_name]
@@ -112,10 +116,7 @@ class ModelRegistry:
 
     @classmethod
     def register_model(
-            cls,
-            problem_type: str,
-            model_name: str,
-            model_class: Type
+        cls, problem_type: str, model_name: str, model_class: Type
     ) -> None:
 
         log.info(f"Registering custom model: {model_name} for {problem_type}")
@@ -139,11 +140,9 @@ class ModelRegistry:
 
 
 class TechniqueRegistry:
-
     @staticmethod
     def get_technique_function(
-            technique_name: str,
-            module_path: Optional[str] = None
+        technique_name: str, module_path: Optional[str] = None
     ) -> Callable:
 
         log.debug(f"Getting technique function: {technique_name}")
@@ -160,10 +159,14 @@ class TechniqueRegistry:
 
             if not hasattr(module, function_name):
                 log.error(f"Function '{function_name}' not found in {module_path}")
-                raise AttributeError(f"Function '{function_name}' not found in {module_path}")
+                raise AttributeError(
+                    f"Function '{function_name}' not found in {module_path}"
+                )
 
             func = getattr(module, function_name)
-            log.info(f"Retrieved technique function: {function_name} from {module_path}")
+            log.info(
+                f"Retrieved technique function: {function_name} from {module_path}"
+            )
             return func
 
         except ImportError as e:
@@ -171,11 +174,7 @@ class TechniqueRegistry:
             raise
 
     @staticmethod
-    def execute_technique(
-            technique_name: str,
-            module_path: str,
-            **kwargs: Any
-    ) -> Any:
+    def execute_technique(technique_name: str, module_path: str, **kwargs: Any) -> Any:
 
         log.info(f"Executing technique: {technique_name}")
 
@@ -198,5 +197,7 @@ def get_available_models(problem_type: str) -> list[str]:
     return ModelRegistry.get_available_models(problem_type)
 
 
-def register_custom_model(problem_type: str, model_name: str, model_class: Type) -> None:
+def register_custom_model(
+    problem_type: str, model_name: str, model_class: Type
+) -> None:
     ModelRegistry.register_model(problem_type, model_name, model_class)

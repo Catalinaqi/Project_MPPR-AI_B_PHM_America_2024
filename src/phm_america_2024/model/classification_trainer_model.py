@@ -1,3 +1,4 @@
+# src/phm_america_2024/model/classification_trainer_model.py
 from __future__ import annotations
 
 import json
@@ -80,8 +81,11 @@ def cross_validation(
         )
 
     feature_cols: list[str] = [c for c in df.columns if c != target_col]
-    X: np.ndarray = df[feature_cols].values
-    y: np.ndarray = df[target_col].values
+    # X: np.ndarray = df[feature_cols].values
+    # y: np.ndarray = df[target_col].values
+
+    X = df[feature_cols]  # Mantenemos el DataFrame
+    y = df[target_col].values
 
     # ── 4. GMM clustering ──
     gmm = GaussianMixture(
@@ -90,7 +94,8 @@ def cross_validation(
     gmm_idx = [feature_cols.index(f) for f in gmm_features if f in feature_cols]
     if len(gmm_idx) < len(gmm_features):
         raise ValueError(f"GMM features no encontradas: {gmm_features}")
-    X_gmm = X[:, gmm_idx]
+    # X_gmm = X[:, gmm_idx]
+    X_gmm = X.iloc[:, gmm_idx]
     cluster_labels: np.ndarray = gmm.fit_predict(X_gmm)
 
     # ── 5. GroupKFold ──
@@ -127,7 +132,8 @@ def cross_validation(
         gkf.split(X, y, groups=cluster_labels)
     ):
         log.info("[classification cross_validation] Fold %d/%d", fold_idx + 1, n_splits)
-        X_train, X_val = X[train_idx], X[val_idx]
+        # X_train, X_val = X[train_idx], X[val_idx]
+        X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
 
         model = lgb.LGBMClassifier(**lgb_params)
@@ -214,8 +220,13 @@ def post_processing_calibration(
         return model, extra
 
     # Extraer features y target del validation set
+    # feature_cols = [c for c in df_val.columns if c != "faulty"]
+    # X_val = df_val[feature_cols].values
+    # y_val = df_val["faulty"].values
+
+    # Extraer features y target del validation set
     feature_cols = [c for c in df_val.columns if c != "faulty"]
-    X_val = df_val[feature_cols].values
+    X_val = df_val[feature_cols]  # <-- ELIMINAR el .values aquí
     y_val = df_val["faulty"].values
 
     # Obtener predicciones crudas del modelo
