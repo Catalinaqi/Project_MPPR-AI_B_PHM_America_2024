@@ -1,4 +1,4 @@
-# src/phm_america_2024/configuration/enum_registry_config.py
+# src/phm_america_2024/domain/enum_registry_domain.py
 from __future__ import annotations
 
 """
@@ -223,6 +223,7 @@ class Phase(str, Enum):
     PHASE3 = "phase3_data_preparation"
     PHASE4 = "phase4_data_modeling"
     PHASE5 = "phase5_evaluation_and_interpretation"
+    PHASE6 = "phase6_deployment"
 
     def __str__(self) -> str:
         return self.value
@@ -334,6 +335,8 @@ class StepsPhase(str, Enum):  # noqa: D101
     STEP_5_2 = "step_5_2_business_evaluation"
     STEP_5_3 = "step_5_3_process_audit"
     STEP_5_4 = "step_5_4_decision_making"
+    STEP_6_1 = "step_6_1_academic_scoring"
+    STEP_6_2 = "step_6_2_package_deliverables"
 
     def __str__(self) -> str:
         return self.value

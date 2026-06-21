@@ -2,21 +2,32 @@
 from __future__ import annotations
 
 # 1-> Imports: Standard-library
-#----------------------------------------------
+# ----------------------------------------------
 from typing import Any, Optional
 
 # 2-> Imports: Internal imports
-#----------------------------------------------
-from phm_america_2024.common.logging_adapter_common import get_logger, config_run_logging
-from phm_america_2024.pipeline.utils.context_facade_common import RunContext, create_run_context, \
-    make_run_id
+# ----------------------------------------------
+from phm_america_2024.common.logging_adapter_common import (
+    get_logger,
+    config_run_logging,
+)
+from phm_america_2024.pipeline.utils.context_facade_common import (
+    RunContext,
+    create_run_context,
+    make_run_id,
+)
 from phm_america_2024.common.path_service_common import find_project_root
-from phm_america_2024.configuration.build_factory_config import build_config, BuiltConfig
-from phm_america_2024.domain.enum_registry_domain import StepsPhase,ProblemType
+from phm_america_2024.configuration.build_factory_config import (
+    build_config,
+    BuiltConfig,
+)
+from phm_america_2024.domain.enum_registry_domain import StepsPhase, ProblemType
 from phm_america_2024.data.download_extractor_data import download_phm_2024_dataset
 
 from phm_america_2024.pipeline.regression_runner_pipeline import run_regression_pipeline
-from phm_america_2024.pipeline.classification_runner_pipeline import run_classification_pipeline
+from phm_america_2024.pipeline.classification_runner_pipeline import (
+    run_classification_pipeline,
+)
 
 
 # =============================================================================
@@ -103,7 +114,10 @@ def init_run_facade_api(
         dataset_key=dataset_key,
         notebook_vars=notebook_vars,
     )
-    log.debug("[init_run_facade_api] built config task=%s", built.pipeline_config.common_base_config.problem_type)
+    log.debug(
+        "[init_run_facade_api] built config task=%s",
+        built.pipeline_config.common_base_config.problem_type,
+    )
 
     # Step 4: CALL create_run_context() — create run context into ctx: RunContext (class)
     ctx = create_run_context(
@@ -123,15 +137,19 @@ def init_run_facade_api(
         log_level=log_level,
     )
 
-    log.info("[init_run_facade_api] done run_id=%s run_dir=%s log=%s",
-             ctx.run_id, ctx.run_dir, log_file)
+    log.info(
+        "[init_run_facade_api] done run_id=%s run_dir=%s log=%s",
+        ctx.run_id,
+        ctx.run_dir,
+        log_file,
+    )
     return ctx
-
 
 
 # -----------------------------------------------------------------
 # Phase 2 – Data Understanding : per‑step execution
 # -----------------------------------------------------------------
+
 
 def _dispatch_pipeline(ctx: RunContext, steps: list[str]) -> RunContext:
     """Execute one or more steps via the correct pipeline runner.
@@ -182,6 +200,7 @@ def _dispatch_step(ctx: RunContext, step_enum: StepsPhase) -> RunContext:
 # Public step runners — one per CRISP‑DM sub‑step (Phase 2)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def run_2_1_data_acquisition(ctx: RunContext) -> RunContext:
     """Run Step 2.1 – Data Acquisition (load & merge).
 
@@ -193,8 +212,10 @@ def run_2_1_data_acquisition(ctx: RunContext) -> RunContext:
     ctx = _dispatch_step(ctx, StepsPhase.STEP_2_1)
     log.debug("[run_2_1_data_acquisition] after dispatch")
 
-    if hasattr(ctx, 'df_train') and ctx.df_train is not None:
-        log.info("[run_2_1_data_acquisition] done df_train_shape=%s", ctx.df_train.shape)
+    if hasattr(ctx, "df_train") and ctx.df_train is not None:
+        log.info(
+            "[run_2_1_data_acquisition] done df_train_shape=%s", ctx.df_train.shape
+        )
     else:
         log.warning("[run_2_1_data_acquisition] done df_train not available")
 
@@ -220,7 +241,11 @@ def run_2_3_data_quality_verification(ctx: RunContext) -> RunContext:
     Step 1: CALL _dispatch_step(ctx, StepsPhase.STEP_2_3).
     Step 2: Return updated context.
     """
-    log.info("[run_2_3_data_quality_verification] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    log.info(
+        "[run_2_3_data_quality_verification] start task=%s run_id=%s",
+        ctx.task,
+        ctx.run_id,
+    )
     ctx = _dispatch_step(ctx, StepsPhase.STEP_2_3)
     log.debug("[run_2_3_data_quality_verification] completed")
     log.info("[run_2_3_data_quality_verification] done")
@@ -239,9 +264,11 @@ def run_2_4_data_exploration(ctx: RunContext) -> RunContext:
     log.info("[run_2_4_data_exploration] done")
     return ctx
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Public step runners — one per CRISP‑DM sub‑step (Phase 3 – Data Preparation)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def run_3_1_data_selection(ctx: RunContext) -> RunContext:
     """Run Step 3.1 – Data Selection (filter columns & drop constants).
@@ -254,8 +281,10 @@ def run_3_1_data_selection(ctx: RunContext) -> RunContext:
     ctx = _dispatch_step(ctx, StepsPhase.STEP_3_1)
     log.debug("[run_3_1_data_selection] after dispatch")
 
-    if hasattr(ctx, 'df_selected') and ctx.df_selected is not None:
-        log.info("[run_3_1_data_selection] done df_selected_shape=%s", ctx.df_selected.shape)
+    if hasattr(ctx, "df_selected") and ctx.df_selected is not None:
+        log.info(
+            "[run_3_1_data_selection] done df_selected_shape=%s", ctx.df_selected.shape
+        )
     else:
         log.warning("[run_3_1_data_selection] done df_selected not available")
 
@@ -273,8 +302,10 @@ def run_3_2_data_cleaning(ctx: RunContext) -> RunContext:
     ctx = _dispatch_step(ctx, StepsPhase.STEP_3_2)
     log.debug("[run_3_2_data_cleaning] after dispatch")
 
-    if hasattr(ctx, 'df_cleaned') and ctx.df_cleaned is not None:
-        log.info("[run_3_2_data_cleaning] done df_cleaned_shape=%s", ctx.df_cleaned.shape)
+    if hasattr(ctx, "df_cleaned") and ctx.df_cleaned is not None:
+        log.info(
+            "[run_3_2_data_cleaning] done df_cleaned_shape=%s", ctx.df_cleaned.shape
+        )
     else:
         log.warning("[run_3_2_data_cleaning] done df_cleaned not available")
 
@@ -288,12 +319,17 @@ def run_3_3_data_transformation(ctx: RunContext) -> RunContext:
     Step 2: Log shape and scaler info if available.
     Step 3: Return updated context.
     """
-    log.info("[run_3_3_data_transformation] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    log.info(
+        "[run_3_3_data_transformation] start task=%s run_id=%s", ctx.task, ctx.run_id
+    )
     ctx = _dispatch_step(ctx, StepsPhase.STEP_3_3)
     log.debug("[run_3_3_data_transformation] after dispatch")
 
-    if hasattr(ctx, 'df_transformed') and ctx.df_transformed is not None:
-        log.info("[run_3_3_data_transformation] done df_transformed_shape=%s", ctx.df_transformed.shape)
+    if hasattr(ctx, "df_transformed") and ctx.df_transformed is not None:
+        log.info(
+            "[run_3_3_data_transformation] done df_transformed_shape=%s",
+            ctx.df_transformed.shape,
+        )
     else:
         log.warning("[run_3_3_data_transformation] done df_transformed not available")
 
@@ -311,21 +347,27 @@ def run_3_5_data_formatting(ctx: RunContext) -> RunContext:
     ctx = _dispatch_step(ctx, StepsPhase.STEP_3_5)
     log.debug("[run_3_5_data_formatting] after dispatch")
 
-    if hasattr(ctx, 'df_train_split') and ctx.df_train_split is not None:
-        log.info("[run_3_5_data_formatting] done train_shape=%s val_shape=%s",
-                 ctx.df_train_split.shape,
-                 ctx.df_val_split.shape if hasattr(ctx, 'df_val_split') else "N/A")
+    if hasattr(ctx, "df_train_split") and ctx.df_train_split is not None:
+        log.info(
+            "[run_3_5_data_formatting] done train_shape=%s val_shape=%s",
+            ctx.df_train_split.shape,
+            ctx.df_val_split.shape if hasattr(ctx, "df_val_split") else "N/A",
+        )
     else:
         log.warning("[run_3_5_data_formatting] done df_train_split not available")
 
     return ctx
 
+
 def run_4_1_algorithm_selection(ctx: RunContext) -> RunContext:
-    log.info("[run_4_1_algorithm_selection] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    log.info(
+        "[run_4_1_algorithm_selection] start task=%s run_id=%s", ctx.task, ctx.run_id
+    )
     ctx = _dispatch_step(ctx, StepsPhase.STEP_4_1)
     log.debug("[run_4_1_algorithm_selection] completed")
     log.info("[run_4_1_algorithm_selection] done")
     return ctx
+
 
 def run_4_2_model_training(ctx: RunContext) -> RunContext:
     log.info("[run_4_2_model_training] start task=%s run_id=%s", ctx.task, ctx.run_id)
@@ -334,6 +376,7 @@ def run_4_2_model_training(ctx: RunContext) -> RunContext:
     log.info("[run_4_2_model_training] done")
     return ctx
 
+
 def run_4_4_model_evaluation(ctx: RunContext) -> RunContext:
     log.info("[run_4_4_model_evaluation] start task=%s run_id=%s", ctx.task, ctx.run_id)
     ctx = _dispatch_step(ctx, StepsPhase.STEP_4_4)
@@ -341,7 +384,9 @@ def run_4_4_model_evaluation(ctx: RunContext) -> RunContext:
     log.info("[run_4_4_model_evaluation] done")
     return ctx
 
+
 # (aggiungere dopo run_4_4_model_evaluation)
+
 
 def run_5_1_interpretation(ctx: RunContext) -> RunContext:
     log.info("[run_5_1_interpretation] start task=%s run_id=%s", ctx.task, ctx.run_id)
@@ -351,7 +396,11 @@ def run_5_1_interpretation(ctx: RunContext) -> RunContext:
 
 
 def run_5_2_probabilistic_evaluation(ctx: RunContext) -> RunContext:
-    log.info("[run_5_2_probabilistic_evaluation] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    log.info(
+        "[run_5_2_probabilistic_evaluation] start task=%s run_id=%s",
+        ctx.task,
+        ctx.run_id,
+    )
     ctx = _dispatch_step(ctx, StepsPhase.STEP_5_2)
     log.info("[run_5_2_probabilistic_evaluation] done")
     return ctx
@@ -368,4 +417,20 @@ def run_5_4_decision_making(ctx: RunContext) -> RunContext:
     log.info("[run_5_4_decision_making] start task=%s run_id=%s", ctx.task, ctx.run_id)
     ctx = _dispatch_step(ctx, StepsPhase.STEP_5_4)
     log.info("[run_5_4_decision_making] done")
+    return ctx
+
+
+def run_6_1_academic_scoring(ctx: RunContext) -> RunContext:
+    log.info("[run_6_1_academic_scoring] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_6_1)
+    log.info("[run_6_1_academic_scoring] done")
+    return ctx
+
+
+def run_6_2_package_deliverables(ctx: RunContext) -> RunContext:
+    log.info(
+        "[run_6_2_package_deliverables] start task=%s run_id=%s", ctx.task, ctx.run_id
+    )
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_6_2)
+    log.info("[run_6_2_package_deliverables] done")
     return ctx

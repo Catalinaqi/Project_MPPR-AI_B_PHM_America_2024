@@ -22,25 +22,27 @@ from phm_america_2024.api.execution_facade_api import (
     run_5_1_interpretation,
     run_5_2_probabilistic_evaluation,
     run_5_3_process_audit,
-    run_5_4_decision_making
-
+    run_5_4_decision_making,
+    run_6_1_academic_scoring,  # <-- NUEVO
+    run_6_2_package_deliverables,  # <-- NUEVO
 )
 from phm_america_2024.common.logging_adapter_common import get_logger
 
 # ── INVERSION OF CONTROL: CENTRALIZED ARTIFACT REGISTRY ─────────────────────
 # By importing these modules, Python runs their internal @register_artifact
 # decorators to dynamically populate the runtime generator dictionary.
-from phm_america_2024.registry import phase2_generator_registry
-from phm_america_2024.registry import phase3_generator_registry
-from phm_america_2024.registry import phase4_generator_registry
-from phm_america_2024.registry import phase5_generator_registry
+# (en la sección de imports de registries, añadir)
+# from phm_america_2024.registry import phase6_generator_registry  # <-- NUEVO
 
-from phm_america_2024.registry.generator_registry_registry import get_registered_generators
+from phm_america_2024.registry.generator_registry_registry import (
+    get_registered_generators,
+)
 
 # Connect with the centralized configuration infrastructure repository
 from phm_america_2024.configuration.yml_repository_config import YmlRepository
 
 log = get_logger(__name__)
+
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments.
@@ -73,8 +75,26 @@ def _parse_args() -> argparse.Namespace:
         "--steps",
         nargs="*",
         default=["2.1"],
-        choices=["2.1", "2.2", "2.3", "2.4", "3.1", "3.2", "3.3", "3.5", "4.1",
-                 "4.2", "4.4", "4.5","5.1","5.2","5.3","5.4"],
+        choices=[
+            "2.1",
+            "2.2",
+            "2.3",
+            "2.4",
+            "3.1",
+            "3.2",
+            "3.3",
+            "3.5",
+            "4.1",
+            "4.2",
+            "4.4",
+            "4.5",
+            "5.1",
+            "5.2",
+            "5.3",
+            "5.4",
+            "6.1",
+            "6.2",
+        ],
         help="Phase steps to execute (e.g. '2.1' '2.2'). Default: '2.1'",
     )
     return parser.parse_args()
@@ -103,11 +123,30 @@ def _execute_pipeline_steps(ctx: Any, steps: list[str]) -> Any:
         "5.2": ("Probabilistic Evaluation", run_5_2_probabilistic_evaluation),
         "5.3": ("Process Audit", run_5_3_process_audit),
         "5.4": ("Decision Making", run_5_4_decision_making),
+        "6.1": ("Academic Scoring", run_6_1_academic_scoring),
+        "6.2": ("Package Deliverables", run_6_2_package_deliverables),
     }
 
     # Strict operational sequence order for the pipeline execution loop
-    execution_sequence = ["2.1", "2.2", "2.3", "2.4", "3.1", "3.2", "3.3", "3.5",
-                          "4.1", "4.2", "4.4","5.1", "5.2", "5.3", "5.4",]
+    execution_sequence = [
+        "2.1",
+        "2.2",
+        "2.3",
+        "2.4",
+        "3.1",
+        "3.2",
+        "3.3",
+        "3.5",
+        "4.1",
+        "4.2",
+        "4.4",
+        "5.1",
+        "5.2",
+        "5.3",
+        "5.4",
+        "6.1",
+        "6.2",
+    ]
 
     for step_key in execution_sequence:
         if step_key in steps:
@@ -150,10 +189,12 @@ def main() -> int:
         ctx = init_run_facade_api(
             pipeline_name=args.pipeline,
             dataset_key=args.dataset,
-            resume_run_id=args.resume_run
+            resume_run_id=args.resume_run,
         )
         # 🔄 POSICIÓN CORRECTA: Ahora que los logs están activos, el mensaje se registrará perfectamente
-        log.info("DEBUG: Registered generators: %s", list(get_registered_generators().keys()))
+        log.info(
+            "DEBUG: Registered generators: %s", list(get_registered_generators().keys())
+        )
 
         # Trigger execution loop for all requested CRISP-DM workflow blocks
         ctx = _execute_pipeline_steps(ctx, args.steps)

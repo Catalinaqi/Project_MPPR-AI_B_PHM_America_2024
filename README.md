@@ -196,7 +196,7 @@ Every run produces a self-contained snapshot under `outputs/runs/<task>/<timesta
 * [x] **Phase 3**: Data Preparation (Robust Scaling & Feature Engineering).
 * [x] **Phase 4**: Modeling & Calibration (Probabilistic Regression via NGBoost).
 * [x] **Phase 5**: Interpretation & Evaluation Metrics.
-* [ ] **Phase 6**: Final Deployment & Challenge Submission.
+* [x] **Phase 6**: Final Deployment & Challenge Submission.
 * [ ] **Refactoring**: Containerization (Docker) & CI/CD Pipelines.
 
 ---

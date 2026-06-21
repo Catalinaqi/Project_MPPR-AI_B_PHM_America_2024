@@ -14,6 +14,11 @@ from phm_america_2024.phase.phase5_evaluation_and_interpretation_phase import (
     Phase5EvaluationAndInterpretationRunner,
 )
 
+# (import section - add after existing phase imports)
+from phm_america_2024.phase.phase6_deployment_phase import (
+    Phase6DeploymentRunner,
+)
+
 log = get_logger(__name__)
 
 # Build prefix sets from StepsPhase enum
@@ -21,6 +26,7 @@ _PHASE2_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("st
 _PHASE3_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_3_")}
 _PHASE4_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_4_")}
 _PHASE5_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_5_")}
+_PHASE6_STEPS: set[str] = {m.value for m in StepsPhase if m.value.startswith("step_6_")}
 
 
 def run_regression_pipeline(ctx: RunContext, steps: list[str]) -> RunContext:
@@ -43,6 +49,7 @@ def run_regression_pipeline(ctx: RunContext, steps: list[str]) -> RunContext:
                 or step_name in _PHASE3_STEPS
                 or step_name in _PHASE4_STEPS
                 or step_name in _PHASE5_STEPS
+                or step_name in _PHASE6_STEPS
             ):
                 ctx = _exec_step(ctx, step_name)
             else:
@@ -100,6 +107,9 @@ def _exec_step(ctx: RunContext, step_key: str) -> RunContext:
     elif step_key.startswith("step_5_"):
         phase_config_key = "phase5_evaluation_and_interpretation"
         runner_cls = Phase5EvaluationAndInterpretationRunner
+    elif step_key.startswith("step_6_"):  # <-- NEW BLOCK
+        phase_config_key = "phase6_deployment"
+        runner_cls = Phase6DeploymentRunner
     else:
         log.error("[_exec_step] unknown phase for step_key='%s'", step_key)
         raise ValueError(f"Unknown phase for step: {step_key}")

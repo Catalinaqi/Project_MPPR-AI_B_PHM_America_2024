@@ -80,6 +80,8 @@ def cross_validation(
             "[classification cross_validation] Droped %d filas con NaN/Inf.", dropped
         )
 
+    log.info("[classification cross_validation] target_col is: %s", target_col)
+
     feature_cols: list[str] = [c for c in df.columns if c != target_col]
     # X: np.ndarray = df[feature_cols].values
     # y: np.ndarray = df[target_col].values

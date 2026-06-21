@@ -435,20 +435,39 @@ regression_pipeline_config:
       enabled: true
       objective: "Eseguire l'inferenza unificata sui test set interni e pacchettizzare i consegnabili per la valutazione accademica."
 
+#      read_strategy:
+#        mode: "academic_evaluation"
+#        input_source:
+#          # --- Modelli pre-addestrati ---
+#          classification_model: "4.2.training.lightgbm_raw_classifier.pkl"
+#          regression_model: "4.2.training.ngboost_regressor.pkl"
+#          classification_calibrator: "4.2.training.isotonic_calibrator.pkl"
+#
+#          # --- Dataset di Test e Train Interni (Generati nella Fase 3.5) ---
+#          # Nota: cascade_inference userà solo i test set, zip_delivery userà tutto.
+#          classification_test_data: "3.5.formatting.classification_internal_test.parquet"
+#          regression_test_data: "3.5.formatting.regression_internal_test.parquet"
+#          classification_train_data: "3.5.formatting.classification_internal_train.parquet"
+#          regression_train_data: "3.5.formatting.regression_internal_train.parquet"
       read_strategy:
         mode: "academic_evaluation"
         input_source:
           # --- Modelli pre-addestrati ---
-          classification_model: "4.2.training.lightgbm_raw_classifier.pkl"
-          regression_model: "4.2.training.ngboost_regressor.pkl"
-          classification_calibrator: "4.2.training.isotonic_calibrator.pkl"
+          # Usamos el timestamp correcto y la subcarpeta phase4_data_modeling
+          classification_model: "../../../classification/phm2024/20260621_160737/phase4_data_modeling/4.2.training.lightgbm_raw_classifier.pkl"
+          classification_calibrator: "../../../classification/phm2024/20260621_160737/phase4_data_modeling/4.2.training.isotonic_calibrator.pkl"
 
-          # --- Dataset di Test e Train Interni (Generati nella Fase 3.5) ---
-          # Nota: cascade_inference userà solo i test set, zip_delivery userà tutto.
-          classification_test_data: "3.5.formatting.classification_internal_test.parquet"
-          regression_test_data: "3.5.formatting.regression_internal_test.parquet"
-          classification_train_data: "3.5.formatting.classification_internal_train.parquet"
-          regression_train_data: "3.5.formatting.regression_internal_train.parquet"
+          # El modelo de regresión en la carpeta local phase4_data_modeling
+          regression_model: "phase4_data_modeling/4.2.training.ngboost_regressor.pkl"
+
+          # --- Dataset di Test e Train Interni ---
+          # Buscamos los datos de clasificación en su phase3_data_preparation
+          classification_test_data: "../../../classification/phm2024/20260621_160737/phase3_data_preparation/3.5.formatting.classification_internal_test.parquet"
+          classification_train_data: "../../../classification/phm2024/20260621_160737/phase3_data_preparation/3.5.formatting.classification_internal_train.parquet"
+
+          # Buscamos los datos de regresión locales
+          regression_test_data: "phase3_data_preparation/3.5.formatting.regression_internal_test.parquet"
+          regression_train_data: "phase3_data_preparation/3.5.formatting.regression_internal_train.parquet"
 
       steps:
         step_6_1_academic_scoring:
