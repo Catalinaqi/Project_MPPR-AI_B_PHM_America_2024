@@ -1,3 +1,31 @@
+"""
+Modulo: regression_evaluator_model.py
+Algoritmo utilizzato: NGBoost (Natural Gradient Boosting) – già addestrato in precedenza, qui solo valutazione.
+Metriche calcolate: Negative Log Likelihood (NLL) e Root Mean Squared Error (RMSE) sulle predizioni probabilistiche.
+
+Flusso:
+1. Legge i parametri dalla configurazione YAML (primary_metric, tie_breaker, output).
+2. Recupera il nome della variabile target dal contesto (dalla configurazione del passo 4.2).
+3. Recupera il percorso del dataset di validazione dalla configurazione globale (read_strategy → val_data).
+4. Carica il file parquet di validazione usando la funzione load_parquet.
+5. Pulisce i dati: sostituisce infiniti con NaN e rimuove righe con valori mancanti.
+6. Separa X_val (feature) e y_val (target) escludendo la variabile target.
+7. Chiama model.pred_dist(X_val) per ottenere le distribuzioni predittive.
+8. Calcola NLL = media negativa del log-pdf delle distribuzioni sui valori reali.
+9. Calcola RMSE = radice quadrata della media degli errori quadratici tra la media della distribuzione e y_val.
+10. Salva le metriche in un file JSON di trace nella directory di output.
+11. Restituisce il modello invariato e un dizionario extra contenente le metriche calcolate.
+
+Import:
+- json: per serializzare il trace.
+- pathlib.Path: per gestire i percorsi.
+- typing.Any: per annotazioni generiche.
+- numpy: per operazioni numeriche (inf, sqrt, mean).
+- pandas: per la gestione dei DataFrame (caricamento, pulizia).
+- logging_adapter_common: logger personalizzato.
+- io_service_common.load_parquet: caricamento di file Parquet.
+"""
+
 from __future__ import annotations
 
 import json

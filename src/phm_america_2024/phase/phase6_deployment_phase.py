@@ -20,6 +20,8 @@ from phm_america_2024.pipeline.utils.context_facade_common import RunContext
 # Technique implementations
 from phm_america_2024.deployment.academic_scoring_deployment import (
     run_cascade_inference,
+)
+from phm_america_2024.deployment.package_deliverable_deployment import (
     run_zip_delivery,
 )
 from phm_america_2024.domain.enum_registry_domain import Phase

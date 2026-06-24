@@ -1,3 +1,42 @@
+"""
+Modulo: regression_trainer_model.py
+Algoritmo principale: NGBoost (Natural Gradient Boosting) con distribuzione Normale e LogScore.
+Libreria: ngboost, scikit-learn (GaussianMixture, GroupKFold, DecisionTreeRegressor).
+
+Flusso:
+1. algorithm_selection():
+   - Estrae i parametri dalla configurazione YAML.
+   - Costruisce un dizionario model_cfg contenente le classi Normal e LogScore e i parametri iper.
+   - Salva un file JSON di trace nella directory di output.
+   - Restituisce il DataFrame invariato e la configurazione del modello.
+
+2. cross_validation():
+   - Legge il percorso del training set dal contesto ctx.config.
+   - Sostituisce infiniti con NaN e rimuove righe con valori mancanti.
+   - Usa GaussianMixture per creare cluster sulle feature specificate (raggruppamento dei voli).
+   - Applica GroupKFold rispettando i cluster come gruppi.
+   - Per ogni fold:
+       - Istanzia un DecisionTreeRegressor come base learner.
+       - Crea un NGBRegressor con i parametri iniettati da algorithm_config.
+       - Allena il modello (model.fit).
+       - Calcola la distribuzione predittiva sulle validation (model.pred_dist).
+       - Calcola NLL negativa media e RMSE.
+   - Seleziona il modello con la NLL più bassa.
+   - Salva i risultati della cross-validazione come JSON di trace.
+   - Restituisce il miglior modello e il dizionario extra.
+
+Import:
+- json, pathlib, typing: per serializzazione, percorsi e annotazioni.
+- numpy, pandas: manipolazione dati.
+- ngboost.NGBRegressor: modello probabilistico.
+- ngboost.distns.Normal: distribuzione normale per target.
+- ngboost.scores.LogScore: funzione di score basata su log-verosimiglianza.
+- sklearn.mixture.GaussianMixture: clustering per raggruppare voli simili.
+- sklearn.model_selection.GroupKFold: K-fold che rispetta i gruppi.
+- sklearn.tree.DecisionTreeRegressor: albero decisionale come base learner.
+- logging_adapter_common: logger personalizzato.
+"""
+
 from __future__ import annotations
 
 import json

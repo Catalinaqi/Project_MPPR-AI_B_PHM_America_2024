@@ -6,10 +6,10 @@ dataset_schema:
   # Total:         785,497 rows
   # ─────────────────────────────────────────────────────────────────────────
   dataset_sizes:
-    train:      742625 # settecento quaranta due mila seicento venti cinque
-    validation: 21436 # ventuno mila quattro cento trenta sei
-    test:       21436 # ventuno mila quattro cento trenta sei
-    total:      785497
+    train:      742 625 # settecento quaranta due mila seicento venti cinque
+    validation: 21 436 # ventuno mila quattro cento trenta sei
+    test:       21 436 # ventuno mila quattro cento trenta sei
+    total:      785 497
     train_pct:  94.54
     val_pct:    2.73
     test_pct:   2.73
@@ -17,18 +17,19 @@ dataset_schema:
   # ── GRUPPO 1: METADATI DEI CAMPI (Significato Fisico Inglese / Italiano) ─
   fields_metadata:
     id:           {en: "Identifier",                         it: "Identificativo Record"}
-    #----------------feature: representan las condiciones externas o entorno termino/aerodinamico
-    #-- variables de entorno
-    #------------GMM agrupa los datos por el entorno -> y fuerza al modelo ML aprender
-    #                                                   como reaccionan las variables de rendimiento
-    # representan el entorno y el régimen de vuelo -> variables atmosféricas + velocidad térmica
+    #--------------------------------------------------------------------------------------
+    # 1. rappresentano l'ambiente e il regime di volo -> variabili atmosferiche + velocità termica
+    # 2. variabili ambientali -> rappresentano le condizioni esterne in termini termici/aerodinamici
+    # 3. Il GMM raggruppa i dati in base all'ambiente e induce il modello ML a imparare come reagiscono le variabili di prestazione
+    #--------------------------------------------------------------------------------------
     oat:          {en: "Outside Air Temperature (Celsius)",  it: "Temperatura Aria Esterna (Celsius)"}
     mgt:          {en: "Measured Gas Temp (°C)",             it: "Temperatura del Gas Misurata (°C)"}
     ias:          {en: "Indicated Airspeed (Nodi)",          it: "Velocità Indicata (Nodi)"}
-    #----------------feature: representan la dinamica interna y el rendimiento mecanico
-    #-- variables de rendimiento
-    #------------GMM agrupa los datos por el entorno -> y fuerza al modelo ML aprender
-    #                                                   como reaccionan las variables de rendimiento
+    #--------------------------------------------------------------------------------------
+    # 1. rappresentano la dinamica interna e il rendimento meccanico
+    # 2. variabili di rendimento
+    # 3. Il GMM raggruppa i dati per ambiente e costringe il modello ML a imparare
+    #--------------------------------------------------------------------------------------
     pa:           {en: "Pressure Altitude (Piedi)",          it: "Altitudine di Pressione (Piedi)"}
     ng:           {en: "Gas Generator Speed (%)",            it: "Velocità del Generatore di Gas (%)"}
     np:           {en: "Power Turbine Speed (%)",            it: "Velocità della Turbina di Potenza (%)"}

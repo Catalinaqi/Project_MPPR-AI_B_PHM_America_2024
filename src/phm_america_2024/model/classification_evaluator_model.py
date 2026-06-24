@@ -1,3 +1,32 @@
+"""
+Modulo: classification_evaluator_model.py
+Algoritmo utilizzato: LightGBM (Gradient Boosting Decision Trees) per classificazione binaria – già addestrato in precedenza, qui solo valutazione.
+Metriche calcolate: Brier Score (errore quadratico medio delle probabilità) e ROC AUC (area sotto la curva ROC).
+
+Flusso:
+1. Legge i parametri dalla configurazione YAML (primary_metric, tie_breaker, output).
+2. Recupera il nome della variabile target dal contesto (dalla configurazione del passo 4.2).
+3. Recupera il percorso del dataset di validazione dalla configurazione globale (read_strategy → val_data).
+4. Carica il file parquet di validazione usando la funzione load_parquet.
+5. Pulisce i dati: sostituisce infiniti con NaN e rimuove righe con valori mancanti.
+6. Separa X_val (feature) e y_val (target) escludendo la variabile target.
+7. Chiama model.predict_proba(X_val) per ottenere le probabilità della classe positiva.
+8. Calcola Brier Score (brier_score_loss) e ROC AUC (roc_auc_score).
+9. Salva le metriche in un file JSON di trace nella directory di output.
+10. Restituisce il modello invariato e un dizionario extra contenente le metriche calcolate.
+
+Import:
+- json: per serializzare il trace.
+- pathlib.Path: per gestire i percorsi.
+- typing.Any: per annotazioni generiche.
+- numpy: per manipolazione numerica.
+- pandas: per la gestione dei DataFrame (caricamento, pulizia).
+- sklearn.metrics.brier_score_loss: calcolo del Brier Score.
+- sklearn.metrics.roc_auc_score: calcolo dell'area sotto la curva ROC.
+- logging_adapter_common: logger personalizzato.
+- io_service_common.load_parquet: caricamento di file Parquet.
+"""
+
 from __future__ import annotations
 
 import json

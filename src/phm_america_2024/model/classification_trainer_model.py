@@ -1,4 +1,45 @@
 # src/phm_america_2024/model/classification_trainer_model.py
+
+"""
+Modulo: classification_trainer_model.py
+Algoritmo principale: LightGBM (Gradient Boosting Decision Trees) per classificazione binaria.
+Calibratore: IsotonicRegression (regressione isotonica) per la calibrazione delle probabilità.
+
+Flusso:
+1. cross_validation():
+   - Estrae i parametri dalla configurazione YAML (strategia GroupKFold, target_variable, grouping_mechanism GMM).
+   - Valida consistenza: se n_splits > n_clusters, riduce n_splits.
+   - Sostituisce infiniti con NaN e rimuove righe con valori mancanti.
+   - Applica GaussianMixture sulle feature specificate per creare cluster di voli.
+   - Usa GroupKFold rispettando i cluster come gruppi.
+   - Per ogni fold:
+       - Istanzia un LGBMClassifier con i parametri da algorithm_config.
+       - Allena il modello (model.fit).
+       - Calcola le probabilità predette (predict_proba).
+       - Calcola il Brier score (errore quadratico medio tra probabilità e target reale).
+   - Seleziona il modello con il Brier score più basso.
+   - Salva i risultati della cross-validazione in un file JSON.
+   - Restituisce il miglior modello e un dizionario extra.
+
+2. post_processing_calibration():
+   - Carica il validation split dal contesto (val_data).
+   - Ottiene le predizioni grezze del modello (probabilità) sul validation set.
+   - Addestra un calibratore IsotonicRegression sulle predizioni grezze per mapparle a probabilità calibrate.
+   - Salva una traccia JSON con i dettagli della calibrazione.
+   - Restituisce il modello invariato e il calibratore nel dizionario extra.
+
+Import:
+- json: per serializzazione.
+- pathlib.Path: per gestione percorsi.
+- typing: per annotazioni.
+- numpy, pandas: manipolazione dati.
+- lightgbm: LGBMClassifier per classificazione.
+- sklearn.mixture.GaussianMixture: clustering per raggruppare voli.
+- sklearn.model_selection.GroupKFold: K-fold rispettando i gruppi.
+- sklearn.isotonic.IsotonicRegression: calibrazione delle probabilità.
+- logging_adapter_common: logger personalizzato.
+"""
+
 from __future__ import annotations
 
 import json

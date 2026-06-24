@@ -12,7 +12,7 @@ regression_pipeline_config:
   metadata:
     pipeline_key:
       task: "regression" #probabilistic_regression
-      version: "2.1" # Versión corregida para Cross-Asset Isolation
+      version: "2.1"
       objective: "Estimate torque margin probability density function under cross-asset domain shift."
       granularity: "flight_sample"
 
@@ -49,7 +49,7 @@ regression_pipeline_config:
 
       steps:
         # ────────────────────────────────────────────────────────────────────────
-        # STEP 3.1: SELECCIÓN DE VARIABLES
+        # STEP 3.1: VARIABLE SELECTION
         # ────────────────────────────────────────────────────────────────────────
         step_3_1_data_selection:
           enabled: true
@@ -81,7 +81,7 @@ regression_pipeline_config:
               description: "Intermediate regression matrix containing only selected operational columns."
               consumed_by: [ "step_3_2_data_cleaning" ]
         # ────────────────────────────────────────────────────────────────────────
-        # STEP 3.2: TRATAMIENTO DE OUTLIERS Y DUPLICADOS (CON CLIPPING EN TRQ_MARGIN)
+        # STEP 3.2: OUTLIER AND DUPLICATE HANDLING (WITH CLIPPING ON TRQ_MARGIN)
         # ────────────────────────────────────────────────────────────────────────
         step_3_2_data_cleaning:
           enabled: true

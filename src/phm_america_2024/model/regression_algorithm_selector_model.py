@@ -1,3 +1,27 @@
+"""
+Modulo: regression_algorithm_selector_model.py
+Algoritmo principale: NGBoost (Natural Gradient Boosting)
+Distribuzione: Normale (Normal)
+Funzione di score: LogScore (log-verosimiglianza)
+Libreria: ngboost
+
+Flusso:
+1. Estrae i parametri dalla configurazione YAML (tech_cfg["params"]).
+2. Costruisce la configurazione del modello probabilistico (model_cfg) con le classi Normal e LogScore.
+3. Costruisce un dizionario serializzabile 'trace' per il log su disco (JSON).
+4. Salva il trace come file JSON nella directory di output.
+5. Restituisce il DataFrame invariato e un dizionario extra contenente la configurazione effettiva del modello.
+
+Import:
+- json: per serializzare il trace in JSON.
+- pathlib.Path: per gestire i percorsi dei file.
+- typing.Any: per annotazioni generiche.
+- pandas: usato per logging (shape del DataFrame).
+- ngboost.distns.Normal: distribuzione normale per la variabile target.
+- ngboost.scores.LogScore: funzione di score basata sulla log-verosimiglianza.
+- logging_adapter_common: logger personalizzato.
+"""
+
 from __future__ import annotations
 
 import json
@@ -5,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
 from ngboost.distns import Normal
 from ngboost.scores import LogScore
 
@@ -45,6 +70,7 @@ def single_probabilistic_architecture(
         raise
 
     # Step 2: Build model configuration dict from YAML params
+    # Passo 2: Costruisci la configurazione del modello (oggetto passato al contesto per l'addestramento)
     model_cfg: dict[str, Any] = {
         "Dist": Normal,
         "Score": LogScore,
