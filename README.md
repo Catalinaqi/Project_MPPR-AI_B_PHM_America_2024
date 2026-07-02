@@ -420,4 +420,4 @@ outputs/runs/regression/phm2024/<timestamp>/
 
 ---
 
-**Built with ❤️ by [Catalinaqi**](https://www.google.com/search?q=https://github.com/Catalinaqi) *Software Engineering*
+**Built with ❤️ by [Catalinaqi]**  *Software Engineering*
