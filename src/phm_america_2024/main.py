@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import sys
+import os
 import argparse
 from typing import Any
+
+src_dir = os.path.dirname(__file__)
+sys.path.append(os.path.join(src_dir, '..'))
 
 # Import all facade step orchestration API functions
 from phm_america_2024.api.execution_facade_api import (

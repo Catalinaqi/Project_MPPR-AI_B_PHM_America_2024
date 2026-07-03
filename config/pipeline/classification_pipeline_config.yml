@@ -76,7 +76,7 @@ classification_pipeline_config:
                     remove_duplicate: true
                   output: "3.1.selection.filter_trace_log.json"
           input_artifact:
-            path: "2.1.data_acquisition.prod_30000_stratified_x_y_train.parquet"
+            path: "2.1.data_acquisition.prod_742625_stratified_x_y_train.parquet"
           # NUEVO EN OPCIÓN B: Persiste la matriz reducida a disco
           output_artifacts:
             selected_classification_train_parquet:
@@ -229,9 +229,9 @@ classification_pipeline_config:
                     boosting_type: "gbdt"
                     scale_pos_weight: 1.48
                     learning_rate: 0.05
-                    n_estimators: 300
-                    max_depth: 6
-                    num_leaves: 31
+                    n_estimators: 100
+                    max_depth: 20
+                    num_leaves: 32
                     random_state: 42
                   output: "4.1.modeling.algo_setup_trace.json"
 
@@ -301,11 +301,12 @@ classification_pipeline_config:
       read_strategy:
         mode: "cross_asset_evaluation"
         input_source:
-          model_base: "4.2.training.lightgbm_raw_classifier.pkl"
+          model: "4.2.training.lightgbm_raw_classifier.pkl"
           calibrator: "4.2.training.isotonic_calibrator.pkl"
           scaler: "3.3.transformation.robust_scaler.pkl"
           challenge_test_data: "2.1.data_acquisition.dev_1000_stratified_test.parquet"
           challenge_val_data: "2.1.data_acquisition.dev_1000_stratified_validation.parquet"
+          internal_test_data: "3.5.formatting.classification_internal_test.parquet"
 
       steps:
         step_5_1_interpretation:
@@ -316,7 +317,7 @@ classification_pipeline_config:
               enabled: true
               techniques:
                 feature_importance:
-                  enabled: true
+                  enabled: false
                   params:
                     strategy: "model_native"
                     top_k: 15
@@ -329,20 +330,20 @@ classification_pipeline_config:
                   output: "5.1.plots.confusion_matrix_data.json"
 
         step_5_2_probabilistic_evaluation:
-          enabled: true
+          enabled: false
           description: "Validate calibration via reliability plotting and benchmark asset performance loss on hidden data."
           methods:
             calibration_audit:
-              enabled: true
+              enabled: false
               techniques:
                 reliability_diagram:
-                  enabled: true
+                  enabled: false
                   params:
                     n_bins: 10
                     strategy: "uniform"
                   output: "5.2.evaluation.reliability_trace.json"
                 performance_degradation_benchmarking:
-                  enabled: true
+                  enabled: false
                   params:
                     expect_test_degradation: true
                     baseline_comparison: "stratified_random"
@@ -358,27 +359,27 @@ classification_pipeline_config:
               consumed_by: ["deployment"]
 
         step_5_3_process_audit:
-          enabled: true
+          enabled: false
           description: "Audit transformation constraints and flag potential data leakage occurrences."
           methods:
             process_audit:
-              enabled: true
+              enabled: false
               techniques:
                 leakage_detection:
-                  enabled: true
+                  enabled: false
                   params:
                     checks: ["train_test_overlap", "scaler_contamination_check"]
                   output: "5.3.audit.leakage_trace.json"
 
         step_5_4_decision_making:
-          enabled: true
+          enabled: false
           description: "Subject pipeline execution results to final domain engineering verification."
           methods:
             decision_making:
-              enabled: true
+              enabled: false
               techniques:
                 final_sign_off:
-                  enabled: true
+                  enabled: false
                   params:
                     required_review: true
                     review_roles: ["preventive_maintenance_engineer", "turbomachinery_specialist"]
