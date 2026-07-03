@@ -115,7 +115,7 @@ regression_pipeline_config:
               consumed_by: [ "step_3_3_data_transformation" ]
 
 
-        step_3_3_data_formatting:
+        step_3_5_data_formatting:
           enabled: true
           description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
           methods:
