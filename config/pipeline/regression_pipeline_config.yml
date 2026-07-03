@@ -113,60 +113,9 @@ regression_pipeline_config:
               path: "3.2.cleaning.cleaned_regression_train.parquet"
               description: "Intermediate regression matrix deduplicated and outlier-clipped."
               consumed_by: [ "step_3_3_data_transformation" ]
-        # ────────────────────────────────────────────────────────────────────────
-        # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
-        # ────────────────────────────────────────────────────────────────────────
-        step_3_3_data_transformation:
-          enabled: true
-          description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
-          methods:
-            data_transformation:
-              enabled: true
-              techniques:
-                # 1. PRIMERO: Feature Engineering (usando datos crudos sin alterar)
-                feature_engineering:
-                  enabled: true
-                  params:
-                    oat_denominator_protection:
-                      method: "convert_to_kelvin"
-                      offset: 273.15
-                    formulas:
-                      mgt_oat_ratio: "mgt / (oat + 273.15)"
-                      # Al ejecutarse primero, 'ng' usa su valor físico real (~95%), evitando la división por cero
-                      specific_power_index: "np / (ng * (oat + 273.15))" # "np / ((ng + 1e-9) * (oat + 273.15))"
-                    interactions:
-                      enabled: true
-                      degree: 2
-                      #features: [ "mgt", "ng", "trq_measured", "np" ]
-                      # Al dejar la lista vacía (o usar un keyword como "all" dependiendo de tu código Python),
-                      # el scaler debería detectar dinámicamente y aplicar a todas las columnas numéricas resultantes.
-                      features: "all"
-                  output: "3.3.transformation.engineering_formulas_log.json"
-                # 2. SEGUNDO: Feature Scaling (Aplicado a todo)
-                feature_scaling:
-                  enabled: true
-                  params:
-                    method: "RobustScaler"
-                    fit_on_train_only: true
-                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured","trq_margin" ]
-                  output: "3.3.transformation.scaler_fit_trace.json"
 
-          input_artifact:
-            path: "3.2.cleaning.cleaned_regression_train.parquet"
-            description: "Intermediate regression matrix deduplicated and outlier-clipped."
-          output_artifacts:
-            transformed_regression_train_parquet:
-              path: "3.3.transformation.transformed_regression_train.parquet" # -> el plato cocinado
-              description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
-              consumed_by: [ "step_3_5_data_formatting" ]
-            fitted_scaler_regression_artifact:
-              path: "3.3.transformation.robust_scaler_regression.pkl" # -> la receta
-              description: "Fitted state parameters of the training-isolated RobustScaler model for regression."
-              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
-        # ────────────────────────────────────────────────────────────────────────
-        # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS NUMÉRICOS
-        # ────────────────────────────────────────────────────────────────────────
-        step_3_5_data_formatting:
+
+        step_3_3_data_formatting:
           enabled: true
           description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
           methods:
@@ -191,8 +140,8 @@ regression_pipeline_config:
                   output: "3.5.formatting.arrays_manifest.json"
 
           input_artifact:
-            path: "3.3.transformation.transformed_regression_train.parquet"
-            description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
+            path: "3.2.cleaning.cleaned_regression_train.parquet"
+            description: "........."
           output_artifacts:
             engineered_train_split:
               path: "3.5.formatting.regression_internal_train.parquet"
@@ -206,6 +155,98 @@ regression_pipeline_config:
               path: "3.5.formatting.regression_internal_test.parquet"
               description: "Finalized internal test split."
               consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
+
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
+        # ────────────────────────────────────────────────────────────────────────
+        step_3_3_data_transformation:
+          enabled: true
+          description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
+          methods:
+            data_transformation:
+              enabled: true
+              techniques:
+                feature_engineering:
+                  enabled: true
+                  params:
+                    oat_denominator_protection:
+                      method: "convert_to_kelvin"
+                      offset: 273.15
+                    formulas:
+                      mgt_oat_ratio: "mgt / (oat + 273.15)"
+                      specific_power_index: "np / (ng * (oat + 273.15))" # "np / ((ng + 1e-9) * (oat + 273.15))"
+                    interactions:
+                      enabled: true
+                      degree: 2
+                      features: "all"
+                  output: "3.3.transformation.engineering_formulas_log.json"
+                feature_scaling:
+                  enabled: true
+                  params:
+                    method: "RobustScaler"
+                    fit_on_train_only: true
+                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured","trq_margin" ]
+                  output: "3.3.transformation.scaler_fit_trace.json"
+          input_artifact:
+            path: "3.5.formatting.regression_internal_train.parquet"
+            description: "..."
+          output_artifacts:
+            transformed_regression_train_parquet:
+              path: "3.3.transformation.transformed_regression_train.parquet"
+              description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
+              consumed_by: [ "step_3_5_data_formatting" ]
+            fitted_scaler_regression_artifact:
+              path: "3.3.transformation.robust_scaler_regression.pkl"
+              description: "Fitted state parameters of the training-isolated RobustScaler model for regression."
+              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
+            transformed_regression_test_parquet:
+              path: "3.3.transformation.transformed_regression_train.parquet"
+              description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
+              consumed_by: [ "step_3_5_data_formatting" ]
+
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS NUMÉRICOS
+        # ────────────────────────────────────────────────────────────────────────
+#        step_3_5_data_formatting:
+#          enabled: true
+#          description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
+#          methods:
+#            data_formatting:
+#              enabled: true
+#              techniques:
+#                data_split:
+#                  enabled: true
+#                  params:
+#                    test_size: 0.15    # 15% reservado para tu "test_internal" (Fase 5)
+#                    val_size: 0.15     # 15% reservado para tu "val_internal" (Fase 4)
+#                    random_state: 42   # Semilla de reproducibilidad (quedará 70% para Train)
+#                    stratify: false
+#                    target_col: "trq_margin"
+#                  output: "3.5.formatting.split_indices_trace.json"
+#                dataset_formatting:
+#                  enabled: true
+#                  params:
+#                    target_col: "trq_margin"
+#                    type_casting: "float64" # Target continuo para NGBoost
+#                    to_numpy: true
+#                  output: "3.5.formatting.arrays_manifest.json"
+#
+#          input_artifact:
+#            path: "3.3.transformation.transformed_regression_train.parquet"
+#            description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
+#          output_artifacts:
+#            engineered_train_split:
+#              path: "3.5.formatting.regression_internal_train.parquet"
+#              description: "Finalized scaling-safe internal training matrix for NGBoost."
+#              consumed_by: [ "phase4_data_modeling" ]
+#            engineered_val_split:
+#              path: "3.5.formatting.regression_internal_val.parquet"
+#              description: "Finalized internal validation split for NGBoost early stopping/CV."
+#              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
+#            engineered_test_split:
+#              path: "3.5.formatting.regression_internal_test.parquet"
+#              description: "Finalized internal test split."
+#              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
 #            engineered_test_challenge_parquet:
 #              path: "3.5.formatting.regression_challenge_test_processed.parquet"
