@@ -282,6 +282,7 @@ class StepOutputArtifact(str, Enum):
     selected_classification_train_parquet = "selected_classification_train_parquet"
     # Step 3.2 – Data Cleaning
     cleaned_classification_train_parquet = "cleaned_classification_train_parquet"
+    engineered_classification_train_parquet = "engineered_classification_train_parquet"
     # Step 3.3 – Data Transformation
     transformed_classification_train_parquet = (
         "transformed_classification_train_parquet"

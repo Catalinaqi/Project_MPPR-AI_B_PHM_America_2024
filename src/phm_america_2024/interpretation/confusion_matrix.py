@@ -28,6 +28,8 @@ def confusion_matrix(
     model = ctx.model
     calibrator = ctx.calibrator
 
+    test_df[:] = ctx.scaler.transform(test_df)
+
     results: dict[str, Any] = {}
 
     y_true = test_df[['faulty']]

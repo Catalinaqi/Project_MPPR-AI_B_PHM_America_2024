@@ -109,10 +109,7 @@ classification_pipeline_config:
               description: "Intermediate classification matrix deduplicated."
               consumed_by: ["step_3_3_data_transformation"]
 
-        # ────────────────────────────────────────────────────────────────────────
-        # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
-        # ────────────────────────────────────────────────────────────────────────
-        step_3_3_data_transformation:
+        step_3_4_data_integration:
           enabled: true
           description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
           methods:
@@ -129,30 +126,18 @@ classification_pipeline_config:
                       mgt_oat_ratio: "mgt / (oat + 273.15)"
                       specific_power_index: "np / (ng * (oat + 273.15))"
                     interactions:
-                      enabled: true
+                      enabled: false
                       degree: 2
                       features: "all "#["mgt", "ng", "trq_measured", "np"]
                   output: "3.3.transformation.engineering_formulas_log.json"
-                feature_scaling:
-                  enabled: true
-                  params:
-                    method: "RobustScaler"
-                    fit_on_train_only: true
-                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured", "faulty" ]
-                  output: "3.3.transformation.scaler_fit_trace.json"
-          # NUEVO EN OPCIÓN B: Consume el parquet de 3.2. Guarda la data transformada y el scaler
           input_artifact:
               path: "3.2.cleaning.cleaned_classification_train.parquet"
               description: "Intermediate classification matrix deduplicated."
           output_artifacts:
-            transformed_classification_train_parquet:
-              path: "3.3.transformation.transformed_classification_train.parquet"
+            engineered_classification_train_parquet:
+              path: "3.4.transformation.transformed_classification_train.parquet"
               description: "Intermediate classification matrix with scaling applied and engineered features."
               consumed_by: ["step_3_5_data_formatting"]
-            fitted_scaler_bin:
-              path: "3.3.transformation.robust_scaler_classification.pkl" # Renombrado para no pisar el de regresión
-              description: "Fitted state parameters of the training-isolated RobustScaler model."
-              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
         # ────────────────────────────────────────────────────────────────────────
         # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS
@@ -183,7 +168,7 @@ classification_pipeline_config:
                   output: "3.5.formatting.arrays_manifest.json"
           # Consume el parquet de 3.3 y genera los conjuntos finales para las fases siguientes
           input_artifact:
-              path: "3.3.transformation.transformed_classification_train.parquet"
+              path: "3.4.transformation.transformed_classification_train.parquet"
               description: "Intermediate classification matrix with scaling applied and engineered features."
           output_artifacts:
             engineered_train_split:
@@ -199,6 +184,37 @@ classification_pipeline_config:
               description: "Finalized internal test split."
               consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
+        # ────────────────────────────────────────────────────────────────────────
+        step_3_3_data_transformation:
+          enabled: true
+          description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
+          methods:
+            data_transformation:
+              enabled: true
+              techniques:
+                feature_scaling:
+                  enabled: true
+                  params:
+                    method: "RobustScaler"
+                    fit_on_train_only: true
+                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured", "faulty", "trq_margin", "mgt_oat_ratio", "specific_power_index"]
+                  output: "3.3.transformation.scaler_fit_trace.json"
+          # NUEVO EN OPCIÓN B: Consume el parquet de 3.2. Guarda la data transformada y el scaler
+          input_artifact:
+              path: "3.5.formatting.classification_internal_train.parquet"
+              description: "Intermediate classification matrix deduplicated."
+          output_artifacts:
+            transformed_classification_train_parquet:
+              path: "3.3.transformation.transformed_classification_train.parquet"
+              description: "Intermediate classification matrix with scaling applied and engineered features."
+              consumed_by: ["step_3_5_data_formatting"]
+            fitted_scaler_bin:
+              path: "3.3.transformation.robust_scaler_classification.pkl" # Renombrado para no pisar el de regresión
+              description: "Fitted state parameters of the training-isolated RobustScaler model."
+              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
+
     # ----------------------------------------------------------------------------
     # STAGE 4 — MODELING
     # ----------------------------------------------------------------------------
@@ -209,8 +225,9 @@ classification_pipeline_config:
       read_strategy:
         mode: "consume_engineered_splits"
         input_source:
-          train_data: "3.5.formatting.classification_internal_train.parquet"
+          train_data: "3.3.transformation.transformed_classification_train.parquet"
           val_data: "3.5.formatting.classification_internal_val.parquet" # Usado solo para fittear la calibración isotónica
+          scaler: "3.3.transformation.robust_scaler_classification.pkl"
 
       steps:
         step_4_1_algorithm_selection:

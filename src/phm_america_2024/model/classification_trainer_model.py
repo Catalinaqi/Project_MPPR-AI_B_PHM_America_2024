@@ -252,6 +252,7 @@ def post_processing_calibration(
         phase3_dir = getattr(ctx, "phase3_dir", ".")
         val_path = Path(phase3_dir) / val_data_rel
         df_val = pd.read_parquet(val_path)
+        df_val[:] = ctx.scaler.transform(df_val)
     except Exception as e:
         log.error(
             "[post_processing_calibration] No se pudo cargar validation split: %s", e
