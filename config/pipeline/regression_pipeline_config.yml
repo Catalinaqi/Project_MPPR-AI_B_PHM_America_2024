@@ -63,7 +63,7 @@ regression_pipeline_config:
                   params:
                     mode: "full_flight_records"
                     include: [ "oat", "mgt", "pa", "ias", "np", "ng","trq_measured",
-                               "trq_margin","faulty" ]
+                               "trq_margin"]
                     patterns_to_drop: [ "id"]
                   output: "3.1.selection.definition_trace_log.json"
                 feature_selection:
@@ -74,7 +74,7 @@ regression_pipeline_config:
                   output: "3.1.selection.filter_trace_log.json"
 
           input_artifact:
-            path: "2.1.data_acquisition.prod_30000_stratified_x_y_train.parquet"
+            path: "2.1.data_acquisition.prod_3000_stratified_x_y_train.parquet"
           output_artifacts:
             selected_regression_train_parquet:
               path: "3.1.selection.selected_regression_train.parquet"
@@ -91,14 +91,14 @@ regression_pipeline_config:
               enabled: true
               techniques:
                # control extra para trq_margin
-#                outlier_handling:
-#                  enabled: true
-#                  params:
-#                    target_clipping: true
-#                    target_variable: "trq_margin"
-#                    lower_percentile: 0.01
-#                    upper_percentile: 0.99
-#                  output: "3.2.cleaning.clipping_audit_log.json"
+                outlier_handling:
+                  enabled: true
+                  params:
+                    target_clipping: true
+                    target_variable: "trq_margin"
+                    lower_percentile: 0.01
+                    upper_percentile: 0.99
+                  output: "3.2.cleaning.clipping_audit_log.json"
                 duplicate_handling:
                   enabled: true
                   params:
@@ -114,6 +114,35 @@ regression_pipeline_config:
               description: "Intermediate regression matrix deduplicated and outlier-clipped."
               consumed_by: [ "step_3_3_data_transformation" ]
 
+        step_3_4_data_integration:
+          enabled: true
+          description: ".........."
+          methods:
+            data_transformation:
+              enabled: true
+              techniques:
+                feature_engineering:
+                  enabled: true
+                  params:
+                    oat_denominator_protection:
+                      method: "convert_to_kelvin"
+                      offset: 273.15
+                    formulas:
+                      mgt_oat_ratio: "mgt / (oat + 273.15)"
+                      specific_power_index: "np / (ng * (oat + 273.15))" # "np / ((ng + 1e-9) * (oat + 273.15))"
+                    interactions:
+                      enabled: true
+                      degree: 2
+                      features: "all"
+                  output: "3.3.transformation.engineering_formulas_log.json"
+          input_artifact:
+            path: "3.2.cleaning.cleaned_regression_train.parquet"
+            description: "..."
+          output_artifacts:
+            engineered_regression_train_parquet:
+              path: "3.4.transformation.transformed_regression_train.parquet"
+              description: "Intermediate regression matrix with newly engineered physical features."
+              consumed_by: [ "step_3_5_data_formatting" ]
 
         step_3_5_data_formatting:
           enabled: true
@@ -140,7 +169,7 @@ regression_pipeline_config:
                   output: "3.5.formatting.arrays_manifest.json"
 
           input_artifact:
-            path: "3.2.cleaning.cleaned_regression_train.parquet"
+            path: "3.4.transformation.transformed_regression_train.parquet"
             description: "........."
           output_artifacts:
             engineered_train_split:
@@ -166,26 +195,12 @@ regression_pipeline_config:
             data_transformation:
               enabled: true
               techniques:
-                feature_engineering:
-                  enabled: true
-                  params:
-                    oat_denominator_protection:
-                      method: "convert_to_kelvin"
-                      offset: 273.15
-                    formulas:
-                      mgt_oat_ratio: "mgt / (oat + 273.15)"
-                      specific_power_index: "np / (ng * (oat + 273.15))" # "np / ((ng + 1e-9) * (oat + 273.15))"
-                    interactions:
-                      enabled: true
-                      degree: 2
-                      features: "all"
-                  output: "3.3.transformation.engineering_formulas_log.json"
                 feature_scaling:
                   enabled: true
                   params:
                     method: "RobustScaler"
                     fit_on_train_only: true
-                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured","trq_margin" ]
+                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured","trq_margin", "mgt_oat_ratio" ,"specific_power_index"]
                   output: "3.3.transformation.scaler_fit_trace.json"
           input_artifact:
             path: "3.5.formatting.regression_internal_train.parquet"
@@ -199,75 +214,6 @@ regression_pipeline_config:
               path: "3.3.transformation.robust_scaler_regression.pkl"
               description: "Fitted state parameters of the training-isolated RobustScaler model for regression."
               consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
-            transformed_regression_test_parquet:
-              path: "3.3.transformation.transformed_regression_train.parquet"
-              description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
-              consumed_by: [ "step_3_5_data_formatting" ]
-
-        # ────────────────────────────────────────────────────────────────────────
-        # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS NUMÉRICOS
-        # ────────────────────────────────────────────────────────────────────────
-#        step_3_5_data_formatting:
-#          enabled: true
-#          description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
-#          methods:
-#            data_formatting:
-#              enabled: true
-#              techniques:
-#                data_split:
-#                  enabled: true
-#                  params:
-#                    test_size: 0.15    # 15% reservado para tu "test_internal" (Fase 5)
-#                    val_size: 0.15     # 15% reservado para tu "val_internal" (Fase 4)
-#                    random_state: 42   # Semilla de reproducibilidad (quedará 70% para Train)
-#                    stratify: false
-#                    target_col: "trq_margin"
-#                  output: "3.5.formatting.split_indices_trace.json"
-#                dataset_formatting:
-#                  enabled: true
-#                  params:
-#                    target_col: "trq_margin"
-#                    type_casting: "float64" # Target continuo para NGBoost
-#                    to_numpy: true
-#                  output: "3.5.formatting.arrays_manifest.json"
-#
-#          input_artifact:
-#            path: "3.3.transformation.transformed_regression_train.parquet"
-#            description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
-#          output_artifacts:
-#            engineered_train_split:
-#              path: "3.5.formatting.regression_internal_train.parquet"
-#              description: "Finalized scaling-safe internal training matrix for NGBoost."
-#              consumed_by: [ "phase4_data_modeling" ]
-#            engineered_val_split:
-#              path: "3.5.formatting.regression_internal_val.parquet"
-#              description: "Finalized internal validation split for NGBoost early stopping/CV."
-#              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
-#            engineered_test_split:
-#              path: "3.5.formatting.regression_internal_test.parquet"
-#              description: "Finalized internal test split."
-#              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
-
-#            engineered_test_challenge_parquet:
-#              path: "3.5.formatting.regression_challenge_test_processed.parquet"
-#              description: >
-#                Test del Challenge
-#                Este dataset de x_test del challenge fue procesado por
-#                los steps de fase 3, se sabe que no tiene el target
-#                "trq_margin
-#                ya que el modelo de regresion de NGBoot espera que haya pasado por
-#                RobustScaler y la misma ingenieria de variables.
-#                Asi que los datos crudos son transformados de acuerdo a los valores
-#                de escalas que aprende.
-#                Nota 1: 3.2 + 3.3 -> limpieza y transformacion
-#                Nota 2: 3.3 + 3.4 -> ingenieria de variables y formateo final para modelado
-#              consumed_by: [ "Fase_6_inferencia_despligue" ]
-#
-#            engineered_val_challenge_parquet:
-#               path: "3.5.formatting.regression_challenge_test_processed.parquet"
-#               description: >
-#                 Validation del Challenge
-#               consumed_by: [ "Fase_6_inferencia_despligue" ]
 
     # ----------------------------------------------------------------------------
     # STAGE 4 — MODELING (PROBABILISTIC DENSITY ESTIMATION)
@@ -280,9 +226,9 @@ regression_pipeline_config:
       read_strategy:
         mode: "consume_engineered_splits"
         input_source:
-          train_data: "3.5.formatting.regression_internal_train.parquet"
-          val_data: "3.5.formatting.regression_internal_val.parquet" # -> ¿Qué tan bueno es el modelo?"
-          #scaler: "3.3.transformation.robust_scaler_regression.pkl"
+          train_data: "3.3.transformation.transformed_regression_train.parquet"
+          val_data: "3.5.formatting.regression_internal_val.parquet"
+          scaler: "3.3.transformation.robust_scaler_regression.pkl"
 
       steps:
         step_4_1_algorithm_selection:

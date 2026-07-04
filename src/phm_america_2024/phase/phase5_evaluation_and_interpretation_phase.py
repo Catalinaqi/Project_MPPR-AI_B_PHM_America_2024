@@ -356,7 +356,8 @@ class Phase5EvaluationAndInterpretationRunner:
         # 4. Construcción de las rutas
         model_path = Path(self.ctx.phase4_dir) / str(input_source.get("model", ""))
         scaler_path = Path(self.ctx.phase3_dir) / str(input_source.get("scaler", ""))
-        calibrator_path = Path(self.ctx.phase4_dir) / str(input_source.get("calibrator", ""))
+        calibrator_name = str(input_source.get("calibrator", ""))
+        calibrator_path = (Path(self.ctx.phase4_dir) / calibrator_name) if len(calibrator_name) > 0 else None
 
         log.debug("[_load_artifacts] Resolviendo rutas dinámicas de datasets...")
 
@@ -408,7 +409,7 @@ class Phase5EvaluationAndInterpretationRunner:
             log.error("[_load_artifacts] Modelo no encontrado en: %s", model_path)
             raise FileNotFoundError(f"Model missing: {model_path}")
         
-        if calibrator_path.exists() and getattr(self.ctx, "calibrator", None) is None:
+        if calibrator_path is not None and calibrator_path.exists() and getattr(self.ctx, "calibrator", None) is None:
             log.debug("[_load_artifacts] Cargando calibrator desde %s...", model_path.name)
             import joblib
 

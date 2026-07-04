@@ -268,6 +268,7 @@ class StepOutputArtifact(str, Enum):
     # Step 3.2 – Data Cleaning
     cleaned_regression_train_parquet = "cleaned_regression_train_parquet"
     # Step 3.3 – Data Transformation
+    engineered_regression_train_parquet = "engineered_regression_train_parquet"
     transformed_regression_train_parquet = "transformed_regression_train_parquet"
     fitted_scaler_regression_artifact = "fitted_scaler_regression_artifact"
     # Step 3.5 – Data Formatting

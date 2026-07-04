@@ -125,6 +125,8 @@ def model_selection_criteria(
     val_data = val_data.replace([np.inf, -np.inf], np.nan).dropna()
     dropped_rows = initial_len - len(val_data)
 
+    val_data[:] = ctx.scaler.transform(val_data)
+
     if dropped_rows > 0:
         log.warning(
             f"[model_selection_criteria] Dropped {dropped_rows} rows containing NaN "

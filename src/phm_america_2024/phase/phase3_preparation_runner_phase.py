@@ -45,12 +45,13 @@ class Phase3PreparationRunner:
         # step 3.2
         "outlier_handling": outlier_handling,
         "duplicate_handling": duplicate_handling,
-        # step 3.3
-        "feature_scaling": feature_scaling,
+        # step 3.4
         "feature_engineering": feature_engineering,
         # step 3.5
         "data_split": data_split,
         "dataset_formatting": dataset_formatting,
+        # step 3.3
+        "feature_scaling": feature_scaling,
     }
 
     def __init__(
@@ -138,6 +139,7 @@ class Phase3PreparationRunner:
             lineage_map = {
                 StepsPhase.STEP_3_2.value: "*.selected_regression_train.parquet",
                 StepsPhase.STEP_3_3.value: "*.cleaned_regression_train.parquet",
+                StepsPhase.STEP_3_4.value: "*.engineered_regression_train.parquet",
                 StepsPhase.STEP_3_5.value: "*.transformed_regression_train.parquet",
             }
             pattern = lineage_map.get(self.step_key)
