@@ -114,7 +114,7 @@ regression_pipeline_config:
               description: "Intermediate regression matrix deduplicated and outlier-clipped."
               consumed_by: [ "step_3_3_data_transformation" ]
 
-        step_3_4_data_integration:
+        step_3_4_data_engineering:
           enabled: true
           description: ".........."
           methods:

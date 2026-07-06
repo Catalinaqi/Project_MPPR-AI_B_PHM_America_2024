@@ -109,7 +109,7 @@ classification_pipeline_config:
               description: "Intermediate classification matrix deduplicated."
               consumed_by: ["step_3_3_data_transformation"]
 
-        step_3_4_data_integration:
+        step_3_4_data_engineering:
           enabled: true
           description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
           methods:

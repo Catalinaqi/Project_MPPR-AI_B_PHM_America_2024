@@ -328,7 +328,7 @@ class StepsPhase(str, Enum):  # noqa: D101
     STEP_3_1 = "step_3_1_data_selection"
     STEP_3_2 = "step_3_2_data_cleaning"
     STEP_3_3 = "step_3_3_data_transformation"
-    STEP_3_4 = "step_3_4_data_integration"
+    STEP_3_4 = "step_3_4_data_engineering"
     STEP_3_5 = "step_3_5_data_formatting"
     STEP_4_1 = "step_4_1_algorithm_selection"
     STEP_4_2 = "step_4_2_model_training"
