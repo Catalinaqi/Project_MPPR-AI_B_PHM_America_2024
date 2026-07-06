@@ -312,7 +312,7 @@ def run_3_2_data_cleaning(ctx: RunContext) -> RunContext:
     return ctx
 
 
-def run_3_3_data_transformation(ctx: RunContext) -> RunContext:
+def run_3_5_data_transformation(ctx: RunContext) -> RunContext:
     """Run Step 3.3 – Data Transformation (scaling & feature engineering).
 
     Step 1: CALL _dispatch_step(ctx, StepsPhase.STEP_3_3).
@@ -320,49 +320,49 @@ def run_3_3_data_transformation(ctx: RunContext) -> RunContext:
     Step 3: Return updated context.
     """
     log.info(
-        "[run_3_3_data_transformation] start task=%s run_id=%s", ctx.task, ctx.run_id
+        "[run_3_5_data_transformation] start task=%s run_id=%s", ctx.task, ctx.run_id
     )
-    ctx = _dispatch_step(ctx, StepsPhase.STEP_3_3)
-    log.debug("[run_3_3_data_transformation] after dispatch")
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_3_5)
+    log.debug("[run_3_5_data_transformation] after dispatch")
 
     if hasattr(ctx, "df_transformed") and ctx.df_transformed is not None:
         log.info(
-            "[run_3_3_data_transformation] done df_transformed_shape=%s",
+            "[run_3_5_data_transformation] done df_transformed_shape=%s",
             ctx.df_transformed.shape,
         )
     else:
-        log.warning("[run_3_3_data_transformation] done df_transformed not available")
+        log.warning("[run_3_5_data_transformation] done df_transformed not available")
 
     return ctx
 
-def run_3_4_data_engineering(ctx: RunContext) -> RunContext:
+def run_3_3_data_engineering(ctx: RunContext) -> RunContext:
     log.info(
-        "[run_3_4_data_engineering] start task=%s run_id=%s", ctx.task, ctx.run_id
+        "[run_3_3_data_engineering] start task=%s run_id=%s", ctx.task, ctx.run_id
     )
-    ctx = _dispatch_step(ctx, StepsPhase.STEP_3_4)
-    log.debug("[run_3_4_data_engineering] after dispatch")
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_3_3)
+    log.debug("[run_3_3_data_engineering] after dispatch")
     return ctx
 
 
-def run_3_5_data_formatting(ctx: RunContext) -> RunContext:
+def run_3_4_data_formatting(ctx: RunContext) -> RunContext:
     """Run Step 3.5 – Data Formatting (internal train/val split & type casting).
 
     Step 1: CALL _dispatch_step(ctx, StepsPhase.STEP_3_5).
     Step 2: Log split shapes if available.
     Step 3: Return updated context.
     """
-    log.info("[run_3_5_data_formatting] start task=%s run_id=%s", ctx.task, ctx.run_id)
-    ctx = _dispatch_step(ctx, StepsPhase.STEP_3_5)
-    log.debug("[run_3_5_data_formatting] after dispatch")
+    log.info("[run_3_4_data_formatting] start task=%s run_id=%s", ctx.task, ctx.run_id)
+    ctx = _dispatch_step(ctx, StepsPhase.STEP_3_4)
+    log.debug("[run_3_4_data_formatting] after dispatch")
 
     if hasattr(ctx, "df_train_split") and ctx.df_train_split is not None:
         log.info(
-            "[run_3_5_data_formatting] done train_shape=%s val_shape=%s",
+            "[run_3_4_data_formatting] done train_shape=%s val_shape=%s",
             ctx.df_train_split.shape,
             ctx.df_val_split.shape if hasattr(ctx, "df_val_split") else "N/A",
         )
     else:
-        log.warning("[run_3_5_data_formatting] done df_train_split not available")
+        log.warning("[run_3_4_data_formatting] done df_train_split not available")
 
     return ctx
 

@@ -114,7 +114,7 @@ regression_pipeline_config:
               description: "Intermediate regression matrix deduplicated and outlier-clipped."
               consumed_by: [ "step_3_3_data_transformation" ]
 
-        step_3_4_data_engineering:
+        step_3_3_data_engineering:
           enabled: true
           description: ".........."
           methods:
@@ -144,7 +144,7 @@ regression_pipeline_config:
               description: "Intermediate regression matrix with newly engineered physical features."
               consumed_by: [ "step_3_5_data_formatting" ]
 
-        step_3_5_data_formatting:
+        step_3_4_data_formatting:
           enabled: true
           description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
           methods:
@@ -188,7 +188,7 @@ regression_pipeline_config:
         # ────────────────────────────────────────────────────────────────────────
         # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
         # ────────────────────────────────────────────────────────────────────────
-        step_3_3_data_transformation:
+        step_3_5_data_transformation:
           enabled: true
           description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
           methods:

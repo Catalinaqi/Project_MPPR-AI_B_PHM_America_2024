@@ -254,7 +254,6 @@ class Phase3PreparationRunner:
         pattern = self.step_cfg["input_artifact"]["path"]
 
         if self.step_key == StepsPhase.STEP_3_1.value:
-            print(f"dioporto {pattern}")
             search_dir = self.ctx.phase2_dir
             target_phase_folder = "phase2_data_understanding"
         else:
@@ -384,7 +383,7 @@ class Phase3PreparationRunner:
         task: str = self.ctx.config.metadata.pipeline_key.task
 
         # ── Step 1: Gestionar DataFrames principales según el paso ──
-        if self.step_key == StepsPhase.STEP_3_5.value:
+        if self.step_key == StepsPhase.STEP_3_4.value:
             # El paso 3.5 genera conjuntos disjuntos (train, val, test)
             if df is not None:
                 context_data[StepOutputArtifact.engineered_train_split.value] = df
@@ -405,7 +404,7 @@ class Phase3PreparationRunner:
                     break
 
         # ── Step 2: Mapeo inteligente del Scaler según la tarea (Paso 3.3) ──
-        if self.step_key == StepsPhase.STEP_3_3.value:
+        if self.step_key == StepsPhase.STEP_3_5.value:
             # Capturamos el objeto scaler sin importar la llave interna con la que venga
             scaler_data = extra_artifacts.get(
                 "fitted_scaler_regression_artifact"

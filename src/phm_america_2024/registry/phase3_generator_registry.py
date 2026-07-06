@@ -171,10 +171,10 @@ def _save_cleaned_classification_train(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# step_3_3_data_transformation -> regression
+# step_3_5_data_transformation -> regression
 # ──────────────────────────────────────────────────────────────────────────────
 @register_artifact(
-    StepsPhase.STEP_3_3.value,
+    StepsPhase.STEP_3_5.value,
     StepOutputArtifact.transformed_regression_train_parquet.value,
 )
 def _save_transformed_regression_train(
@@ -196,7 +196,7 @@ def _save_transformed_regression_train(
     )
 
 @register_artifact(
-    StepsPhase.STEP_3_4.value,
+    StepsPhase.STEP_3_3.value,
     StepOutputArtifact.engineered_regression_train_parquet.value,
 )
 def _save_engineered_regression_train(
@@ -218,7 +218,7 @@ def _save_engineered_regression_train(
     )
 
 @register_artifact(
-    StepsPhase.STEP_3_3.value,
+    StepsPhase.STEP_3_5.value,
     StepOutputArtifact.fitted_scaler_regression_artifact.value,
 )
 def _save_fitted_scaler(ctx: Any, artifact_path: str, **context_data: Any) -> None:
@@ -251,12 +251,12 @@ def _save_fitted_scaler(ctx: Any, artifact_path: str, **context_data: Any) -> No
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# step_3_3_data_transformation -> classification
+# step_3_5_data_transformation -> classification
 # ──────────────────────────────────────────────────────────────────────────────
 
 
 @register_artifact(
-    StepsPhase.STEP_3_3.value,
+    StepsPhase.STEP_3_5.value,
     StepOutputArtifact.transformed_classification_train_parquet.value,
 )
 def _save_transformed_classification_train(
@@ -280,7 +280,7 @@ def _save_transformed_classification_train(
     )
 
 @register_artifact(
-    StepsPhase.STEP_3_4.value,
+    StepsPhase.STEP_3_3.value,
     StepOutputArtifact.engineered_classification_train_parquet.value,
 )
 def _save_engineered_classification_train(
@@ -303,7 +303,7 @@ def _save_engineered_classification_train(
 
 
 @register_artifact(
-    StepsPhase.STEP_3_3.value,
+    StepsPhase.STEP_3_5.value,
     StepOutputArtifact.fitted_scaler_bin.value,
 )
 def _save_fitted_scaler_classification(
@@ -341,7 +341,7 @@ def _save_fitted_scaler_classification(
 
 
 @register_artifact(
-    StepsPhase.STEP_3_5.value, StepOutputArtifact.engineered_train_split.value
+    StepsPhase.STEP_3_4.value, StepOutputArtifact.engineered_train_split.value
 )
 def _save_engineered_train_split(
     ctx: Any, artifact_path: str, **context_data: Any
@@ -353,7 +353,6 @@ def _save_engineered_train_split(
         return
     full_path: Path = resolve_path(ctx.phase3_dir / artifact_path)
     full_path.parent.mkdir(parents=True, exist_ok=True)
-    # save_parquet(df, str(full_path))
     save_parquet(df, str(full_path), compression="snappy")
     log.info(
         "[_save_engineered_train_split] Saved rows=%d to %s", len(df), artifact_path
@@ -361,7 +360,7 @@ def _save_engineered_train_split(
 
 
 @register_artifact(
-    StepsPhase.STEP_3_5.value, StepOutputArtifact.engineered_val_split.value
+    StepsPhase.STEP_3_4.value, StepOutputArtifact.engineered_val_split.value
 )
 def _save_engineered_val_split(
     ctx: Any, artifact_path: str, **context_data: Any
@@ -379,7 +378,7 @@ def _save_engineered_val_split(
 
 
 @register_artifact(
-    StepsPhase.STEP_3_5.value, StepOutputArtifact.engineered_test_split.value
+    StepsPhase.STEP_3_4.value, StepOutputArtifact.engineered_test_split.value
 )
 def _save_engineered_val_split(
     ctx: Any, artifact_path: str, **context_data: Any
