@@ -335,12 +335,12 @@ def run_3_3_data_transformation(ctx: RunContext) -> RunContext:
 
     return ctx
 
-def run_3_4_data_integration(ctx: RunContext) -> RunContext:
+def run_3_4_data_engineering(ctx: RunContext) -> RunContext:
     log.info(
-        "[run_3_4_data_integration] start task=%s run_id=%s", ctx.task, ctx.run_id
+        "[run_3_4_data_engineering] start task=%s run_id=%s", ctx.task, ctx.run_id
     )
     ctx = _dispatch_step(ctx, StepsPhase.STEP_3_4)
-    log.debug("[run_3_4_data_integration] after dispatch")
+    log.debug("[run_3_4_data_engineering] after dispatch")
     return ctx
 
 
