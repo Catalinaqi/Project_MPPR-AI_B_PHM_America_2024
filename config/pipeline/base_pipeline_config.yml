@@ -45,7 +45,7 @@ pipeline_base:
         Sample capped at 300,000 to keep memory manageable on CPU while
         preserving statistical representativeness.
       mode: "sample"
-      sample_rows: 742_625 # 300 000 -> 30 000
+      sample_rows: 3000 # 300 000 -> 30 000
       stratify_column: "faulty"   # confirmed lowercase
 
   common_phases_config:

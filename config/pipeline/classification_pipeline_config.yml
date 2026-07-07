@@ -76,7 +76,7 @@ classification_pipeline_config:
                     remove_duplicate: true
                   output: "3.1.selection.filter_trace_log.json"
           input_artifact:
-            path: "2.1.data_acquisition.prod_742625_stratified_x_y_train.parquet"
+            path: "2.1.data_acquisition.prod_3000_stratified_x_y_train.parquet"
           # NUEVO EN OPCIÓN B: Persiste la matriz reducida a disco
           output_artifacts:
             selected_classification_train_parquet:
@@ -135,7 +135,7 @@ classification_pipeline_config:
               description: "Intermediate classification matrix deduplicated."
           output_artifacts:
             engineered_classification_train_parquet:
-              path: "3.4.transformation.transformed_classification_train.parquet"
+              path: "3.3.transformation.transformed_classification_train.parquet"
               description: "Intermediate classification matrix with scaling applied and engineered features."
               consumed_by: ["step_3_5_data_formatting"]
 
@@ -168,7 +168,7 @@ classification_pipeline_config:
                   output: "3.5.formatting.arrays_manifest.json"
           # Consume el parquet de 3.3 y genera los conjuntos finales para las fases siguientes
           input_artifact:
-              path: "3.4.transformation.transformed_classification_train.parquet"
+              path: "3.3.transformation.transformed_classification_train.parquet"
               description: "Intermediate classification matrix with scaling applied and engineered features."
           output_artifacts:
             engineered_train_split:
@@ -207,7 +207,7 @@ classification_pipeline_config:
               description: "Intermediate classification matrix deduplicated."
           output_artifacts:
             transformed_classification_train_parquet:
-              path: "3.3.transformation.transformed_classification_train.parquet"
+              path: "3.5.transformation.scaled_classification_train.parquet"
               description: "Intermediate classification matrix with scaling applied and engineered features."
               consumed_by: ["step_3_5_data_formatting"]
             fitted_scaler_bin:
@@ -225,7 +225,7 @@ classification_pipeline_config:
       read_strategy:
         mode: "consume_engineered_splits"
         input_source:
-          train_data: "3.3.transformation.transformed_classification_train.parquet"
+          train_data: "3.5.transformation.scaled_classification_train.parquet"
           val_data: "3.5.formatting.classification_internal_val.parquet" # Usado solo para fittear la calibración isotónica
           scaler: "3.3.transformation.robust_scaler_classification.pkl"
 

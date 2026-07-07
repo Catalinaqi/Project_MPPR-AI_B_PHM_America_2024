@@ -140,7 +140,7 @@ regression_pipeline_config:
             description: "..."
           output_artifacts:
             engineered_regression_train_parquet:
-              path: "3.4.transformation.transformed_regression_train.parquet"
+              path: "3.3.transformation.transformed_regression_train.parquet"
               description: "Intermediate regression matrix with newly engineered physical features."
               consumed_by: [ "step_3_5_data_formatting" ]
 
@@ -169,7 +169,7 @@ regression_pipeline_config:
                   output: "3.5.formatting.arrays_manifest.json"
 
           input_artifact:
-            path: "3.4.transformation.transformed_regression_train.parquet"
+            path: "3.3.transformation.transformed_regression_train.parquet"
             description: "........."
           output_artifacts:
             engineered_train_split:
@@ -207,7 +207,7 @@ regression_pipeline_config:
             description: "..."
           output_artifacts:
             transformed_regression_train_parquet:
-              path: "3.3.transformation.transformed_regression_train.parquet"
+              path: "3.5.transformation.scaled_regression_train.parquet"
               description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
               consumed_by: [ "step_3_5_data_formatting" ]
             fitted_scaler_regression_artifact:
@@ -226,7 +226,7 @@ regression_pipeline_config:
       read_strategy:
         mode: "consume_engineered_splits"
         input_source:
-          train_data: "3.3.transformation.transformed_regression_train.parquet"
+          train_data: "3.5.transformation.scaled_regression_train.parquet"
           val_data: "3.5.formatting.regression_internal_val.parquet"
           scaler: "3.3.transformation.robust_scaler_regression.pkl"
 
