@@ -51,6 +51,8 @@ from ngboost.scores import LogScore
 from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import GroupKFold
 from sklearn.tree import DecisionTreeRegressor
+import random
+import struct
 
 from phm_america_2024.common.logging_adapter_common import get_logger
 
@@ -159,6 +161,7 @@ def cross_validation(
         params: Dict[str, Any] = tech_cfg["params"]
         # ----- params start------------
         random_seed: int = params["random_seed"]
+        n_iterations = params["iterations"]
         strategy: str = params["strategy"]
         if strategy != "GroupKFold":
             log.error("[cross_validation] unsupported strategy: %s", strategy)
@@ -241,6 +244,11 @@ def cross_validation(
         lr: float = algorithm_config["learning_rate"]
         mini_batch: float = algorithm_config["minibatch_frac"]
         algo_seed: int = algorithm_config["random_state"]
+        tree_depth_uncertainty = algorithm_config["Base"]["max_depth_uncertainty"]
+        min_samples_uncertainty: int = algorithm_config["Base"]["min_samples_leaf_uncertainty"]
+        n_est_uncertainty: int = algorithm_config["n_estimators_uncertainty"]
+        lr_uncertainty: float = algorithm_config["learning_rate_uncertainty"]
+        mini_batch_uncertainty: float = algorithm_config["minibatch_frac_uncertainty"]
     except KeyError as e:
         log.error(
             "[cross_validation] YAML key missing in injected algorithm_config: %s", e
@@ -256,71 +264,103 @@ def cross_validation(
 
     best_model: Any = None
     best_nll: float = float("inf")
-    fold_results: list[Dict[str, Any]] = []
+    best_config = None
+    fold_results = []
 
-    for fold_idx, (train_idx, val_idx) in enumerate(
-        gkf.split(X, y, groups=cluster_labels)
-    ):
-        log.info("[cross_validation] Fold %d/%d", fold_idx + 1, n_splits)
+    for _ in range(n_iterations):
+        tree_depth_u: int = tree_depth + random.randrange(-tree_depth_uncertainty,tree_depth_uncertainty)
+        min_samples_u: int = min_samples + random.randrange(-min_samples_uncertainty,min_samples_uncertainty)
+        n_est_u: int = n_est + random.randrange(-n_est_uncertainty,n_est_uncertainty)
+        lr_u: float = lr + ((random.random()-0.5)*2*lr_uncertainty)
+        mini_batch_u: float = mini_batch + ((random.random()-0.5)*2*mini_batch_uncertainty)
 
-        X_train, X_val = X[train_idx], X[val_idx]
-        y_train, y_val = y[train_idx], y[val_idx]
+        for fold_idx, (train_idx, val_idx) in enumerate(
+            gkf.split(X, y, groups=cluster_labels)
+        ):
+            log.info("[cross_validation] Fold %d/%d", fold_idx + 1, n_splits)
 
-        # Step 9: CALL DecisionTreeRegressor() — instantiate robust base learner
-        base_learner = DecisionTreeRegressor(
-            max_depth=tree_depth, min_samples_leaf=min_samples, random_state=algo_seed
-        )
+            X_train, X_val = X[train_idx], X[val_idx]
+            y_train, y_val = y[train_idx], y[val_idx]
 
-        # Step 10: CALL NGBRegressor() — instantiate probabilistic model
-        model = NGBRegressor(
-            Dist=Normal,
-            Score=LogScore,
-            Base=base_learner,
-            n_estimators=n_est,
-            learning_rate=lr,
-            minibatch_frac=mini_batch,
-            random_state=algo_seed,
-        )
+            # Step 9: CALL DecisionTreeRegressor() — instantiate robust base learner
+            base_learner = DecisionTreeRegressor(
+                max_depth=tree_depth_u, min_samples_leaf=min_samples_u, random_state=algo_seed
+            )
 
-        # Step 11: CALL fit() — train model fold
-        # internal_train: Se usa exclusivamente dentro de la función model.fit(X_train, y_train).
-        # Es el material de estudio del modelo
-        model.fit(X_train, y_train)
+            # Step 10: CALL NGBRegressor() — instantiate probabilistic model
+            model = NGBRegressor(
+                Dist=Normal,
+                Score=LogScore,
+                Base=base_learner,
+                n_estimators=n_est_u,
+                learning_rate=lr_u,
+                minibatch_frac=mini_batch_u,
+                random_state=algo_seed,
+            )
 
-        # Step 12: CALL pred_dist() — generate normal distribution parameters
-        y_pred_dist = model.pred_dist(X_val)
+            # Step 11: CALL fit() — train model fold
+            # internal_train: Se usa exclusivamente dentro de la función model.fit(X_train, y_train).
+            # Es el material de estudio del modelo
+            model.fit(X_train, y_train)
 
-        # Step 13: CALL logpdf() — evaluate negative log likelihood
-        # internal_val: Se usa inmediatamente después en model.pred_dist(X_val).
-        # Es el "examen de prueba" que le haces al modelo para calcular el RMSE y el NLL base.
-        nll: float = -y_pred_dist.logpdf(y_val).mean()
+            # Step 12: CALL pred_dist() — generate normal distribution parameters
+            y_pred_dist = model.pred_dist(X_val)
 
-        # Obtenemos el array de medias (las predicciones puntuales reales)
-        pred_means = y_pred_dist.mean()
+            # Step 13: CALL logpdf() — evaluate negative log likelihood
+            # internal_val: Se usa inmediatamente después en model.pred_dist(X_val).
+            # Es el "examen de prueba" que le haces al modelo para calcular el RMSE y el NLL base.
+            nll: float = -y_pred_dist.logpdf(y_val).mean()
 
-        # Calculamos RMSE usando numpy puramente para evitar problemas de tipos
-        errors = pred_means - y_val
-        rmse: float = np.sqrt(np.mean(errors**2))
+            # Obtenemos el array de medias (las predicciones puntuales reales)
+            pred_means = y_pred_dist.mean()
 
-        fold_results.append({"fold": fold_idx, "nll": nll, "rmse": rmse})
+            # Calculamos RMSE usando numpy puramente para evitar problemas de tipos
+            errors = pred_means - y_val
+            rmse: float = np.sqrt(np.mean(errors**2))
 
-        if nll < best_nll:
-            best_nll = nll
-            best_model = model
+            fold_results.append({"fold": fold_idx, "nll": nll, "rmse": rmse})
 
-        log.info(
-            "[cross_validation] Fold %d results: NLL=%.4f RMSE=%.4f",
-            fold_idx + 1,
-            nll,
-            rmse,
-        )
+
+            log.info(
+                "[cross_validation] Fold %d results: NLL=%.4f RMSE=%.4f",
+                fold_idx + 1,
+                nll,
+                rmse,
+            )
+
+        nll_list = [f['nll'] for f in fold_results]
+        nll_avg = sum(nll_list)/len(nll_list)
+        if best_nll is None or nll_avg < best_nll:
+            best_nll = nll_avg
+            best_config = {
+                    'Base': {
+                        'max_depth': tree_depth_u,
+                        'min_samples_leaf': min_samples_u
+                    },
+                    "n_estimators": n_est_u,
+                    "learning_rate": lr_u,
+                    "minibatch_frac": mini_batch_u,
+                    "random_state": algo_seed
+            }
+
+    best_model_base = DecisionTreeRegressor(max_depth=best_config['Base']['max_depth'], min_samples_leaf=best_config['Base']['min_samples_leaf'], random_state=best_config['random_state'])
+    best_model = NGBRegressor(
+                Dist=Normal,
+                Score=LogScore,
+                Base=best_model_base,
+                n_estimators=best_config['n_estimators'],
+                learning_rate=best_config["learning_rate"],
+                minibatch_frac=best_config["minibatch_frac"],
+                random_state=best_config["random_state"]
+            )
+    best_model.fit(X, y)
 
     trace_results: Dict[str, Any] = {
         "n_folds": n_splits,
         "gmm_features": gmm_features,
         "gmm_n_clusters": n_clusters,
         "fold_results": fold_results,
-        "best_fold_nll": best_nll,
+        "best_fold_nll": best_nll
     }
 
     output_path = output_dir / output_filename

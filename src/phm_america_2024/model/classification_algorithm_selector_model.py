@@ -47,10 +47,15 @@ def single_calibrated_architecture(
         "objective": params["objective"],
         "boosting_type": params.get("boosting_type", "gbdt"),
         "scale_pos_weight": params.get("scale_pos_weight", 1.0),
+        "scale_pos_weight_uncertainty": params.get("scale_pos_weight_uncertainty",0),
         "learning_rate": params["learning_rate"],
+        "learning_rate_uncertainty": params["learning_rate_uncertainty"],
         "n_estimators": params["n_estimators"],
+        "n_estimators_uncertainty": params["n_estimators_uncertainty"],
         "max_depth": params.get("max_depth", -1),
+        "max_depth_uncertainty": params.get("max_depth_uncertainty",0),
         "num_leaves": params.get("num_leaves", 31),
+        "num_leaves_uncertainty": params.get("num_leaves_uncertainty",0),
         "random_state": params.get("random_state", None),
         # Additional parameters from YAML (e.g., min_child_samples, subsample, colsample_bytree)
         # could be added generically:

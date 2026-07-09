@@ -246,12 +246,17 @@ regression_pipeline_config:
                     Dist: "Normal" # Predice Media y Varianza (Incertidumbre)
                     Score: "LogScore" # Optimiza para que la incertidumbre sea realista
                     n_estimators: 400        # <--- Buen balance entre aprendizaje y velocidad
+                    n_estimators_uncertainty: 100
                     learning_rate: 0.03     # <--- Tasa de aprendizaje estándar
+                    learning_rate_uncertainty: 0.02
                     minibatch_frac: 0.1    # <--- CLAVE: Toma solo el 10% de los datos por árbol. ¡Súper rápido!
+                    minibatch_frac_uncertainty: 0.05
                     Base:
                       type: "DecisionTreeRegressor"
                       max_depth: 4         # <--- Árboles poco profundos, previene memorización
+                      max_depth_uncertainty: 2
                       min_samples_leaf: 30  # 20
+                      min_samples_leaf_uncertainty: 20
                     random_state: 42
                   output: "4.1.modeling.algo_setup_trace.json"
 
@@ -266,6 +271,7 @@ regression_pipeline_config:
                   enabled: true
                   params:
                     random_seed: 7
+                    iterations: 10
                     strategy: "GroupKFold"
                     target_variable: "trq_margin"
                     n_splits: 5

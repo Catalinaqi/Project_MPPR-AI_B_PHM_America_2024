@@ -52,6 +52,8 @@ import lightgbm as lgb
 from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import GroupKFold
 from sklearn.isotonic import IsotonicRegression
+import random
+import struct
 
 from phm_america_2024.common.logging_adapter_common import get_logger
 
@@ -86,6 +88,7 @@ def cross_validation(
         n_splits: int = params["n_splits"]
         strategy: str = params["strategy"]
         target_col: str = params["target_variable"]
+        n_iterations = params["iterations"]
         grouping: Dict[str, Any] = params["grouping_mechanism"]
         gmm_features: list[str] = grouping["features"]
         n_clusters: int = grouping["n_clusters"]
@@ -158,6 +161,13 @@ def cross_validation(
             "num_leaves": algorithm_config.get("num_leaves", 31),
             "random_state": algorithm_config.get("random_state", 42),
         }
+        lgb_uncertainty = {
+            "scale_pos_weight": algorithm_config.get("scale_pos_weight_uncertainty", 0),
+            "learning_rate": algorithm_config.get("learning_rate_uncertainty", 0),
+            "n_estimators": algorithm_config.get("n_estimators_uncertainty", 0),
+            "max_depth": algorithm_config.get("max_depth_uncertainty", 0),
+            "num_leaves": algorithm_config.get("num_leaves_uncertainty", 0),
+        }
     except KeyError as e:
         log.error(
             "[classification cross_validation] Falta clave en algorithm_config: %s", e
@@ -168,41 +178,56 @@ def cross_validation(
 
     # ── 7. Iterar folds ──
     best_model: Any = None
-    best_brier: float = float("inf")
-    fold_results: list[Dict[str, Any]] = []
+    best_brier = None
+    fold_results = []
+    best_params = None
 
-    for fold_idx, (train_idx, val_idx) in enumerate(
-        gkf.split(X, y, groups=cluster_labels)
-    ):
-        log.info("[classification cross_validation] Fold %d/%d", fold_idx + 1, n_splits)
-        # X_train, X_val = X[train_idx], X[val_idx]
-        X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
-        y_train, y_val = y[train_idx], y[val_idx]
+    for _ in range(n_iterations):
+        newparams = lgb_params.copy()
+        newparams["scale_pos_weight"] += (random.random()-0.5)*2*lgb_uncertainty["scale_pos_weight"]
+        newparams["learning_rate"] += (random.random()-0.5)*2*lgb_uncertainty["learning_rate"]
+        newparams["n_estimators"] += int((random.random()-0.5)*2*lgb_uncertainty["n_estimators"])
+        newparams["max_depth"] += int((random.random()-0.5)*2*lgb_uncertainty["max_depth"])
+        newparams["num_leaves"] += int((random.random()-0.5)*2*lgb_uncertainty["num_leaves"])
 
-        model = lgb.LGBMClassifier(**lgb_params)
-        model.fit(X_train, y_train)
+        for fold_idx, (train_idx, val_idx) in enumerate(
+            gkf.split(X, y, groups=cluster_labels)
+        ):
+            log.info("[classification cross_validation] Fold %d/%d", fold_idx + 1, n_splits)
+            # X_train, X_val = X[train_idx], X[val_idx]
+            X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+            y_train, y_val = y[train_idx], y[val_idx]
 
-        # Predecir probabilidades
-        y_proba = model.predict_proba(X_val)[:, 1]
-        # Brier score
-        brier = np.mean((y_val - y_proba) ** 2)
+            model = lgb.LGBMClassifier(**newparams)
+            model.fit(X_train, y_train)
 
-        fold_results.append({"fold": fold_idx, "brier_score": float(brier)})
+            # Predecir probabilidades
+            y_proba = model.predict_proba(X_val)[:, 1]
+            # Brier score
+            brier = np.mean((y_val - y_proba) ** 2)
 
-        if brier < best_brier:
-            best_brier = brier
-            best_model = model
+            fold_results.append(float(brier))
 
-        log.info(
-            "[classification cross_validation] Fold %d Brier = %.6f", fold_idx, brier
-        )
+            log.info(
+                "[classification cross_validation] Fold %d Brier = %.6f", fold_idx, brier
+            )
+
+        params_brier_score = sum(fold_results)/len(fold_results)
+        if best_brier is None or params_brier_score < best_brier:
+            best_brier = params_brier_score
+            best_params = newparams
+
+    best_model = lgb.LGBMClassifier(**best_params)
+    best_model.fit(X, y)
+    y_proba = best_model.predict_proba(X)[:,1]
+    best_brier = brier = np.mean((y - y_proba) ** 2)
 
     # ── 8. Escribir traza ──
     trace: Dict[str, Any] = {
+        "best_parameters": best_params,
         "n_folds": n_splits,
         "gmm_features": gmm_features,
         "gmm_n_clusters": n_clusters,
-        "fold_results": fold_results,
         "best_fold_brier": float(best_brier),
     }
     output_path = output_dir / output_filename

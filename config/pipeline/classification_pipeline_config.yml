@@ -245,10 +245,15 @@ classification_pipeline_config:
                     objective: "binary"
                     boosting_type: "gbdt"
                     scale_pos_weight: 1.48
+                    scale_pos_weight_uncertainty: 1.48
                     learning_rate: 0.05
+                    learning_rate_uncertainty: 0.02
                     n_estimators: 100
+                    n_estimators_uncertainty: 50
                     max_depth: 20
+                    max_depth_uncertainty: 10
                     num_leaves: 32
+                    num_leaves_uncertainty: 16
                     random_state: 42
                   output: "4.1.modeling.algo_setup_trace.json"
 
@@ -265,6 +270,7 @@ classification_pipeline_config:
                     strategy: "StratifiedKFold"
                     target_variable: "faulty"
                     n_splits: 5
+                    iterations: 10
                     grouping_mechanism:
                       type: "GMM_Clusterer"
                       features: ["oat", "mgt", "ias"]
