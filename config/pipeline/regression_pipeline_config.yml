@@ -74,7 +74,7 @@ regression_pipeline_config:
                   output: "3.1.selection.filter_trace_log.json"
 
           input_artifact:
-            path: "2.1.data_acquisition.prod_3000_stratified_x_y_train.parquet"
+            path: "2.1.data_acquisition.prod_742625_stratified_x_y_train.parquet"
           output_artifacts:
             selected_regression_train_parquet:
               path: "3.1.selection.selected_regression_train.parquet"
@@ -271,7 +271,7 @@ regression_pipeline_config:
                   enabled: true
                   params:
                     random_seed: 7
-                    iterations: 10
+                    iterations: 200
                     strategy: "GroupKFold"
                     target_variable: "trq_margin"
                     n_splits: 5
