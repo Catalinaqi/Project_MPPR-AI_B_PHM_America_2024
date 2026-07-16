@@ -1,12 +1,3 @@
-# ══════════════════════════════════════════════════════════════════════════════
-# PROBABILISTIC REGRESSION PIPELINE CONFIGURATION (TORQUE MARGIN)
-# ══════════════════════════════════════════════════════════════════════════════
-# CRISP-DM Phases: 3 (Data Preparation), 4 (Modeling), 5 (Evaluation)
-# Selected Architecture: NGBoost (Natural Gradient Boosting)
-# Core Target: trq_margin (Estimating Conditional Mean \mu and Variance \sigma^2)
-# Methodology Requirements: Rigid step layout with explicit method/technique splits
-# ══════════════════════════════════════════════════════════════════════════════
-
 regression_pipeline_config:
 
   metadata:
@@ -27,18 +18,17 @@ regression_pipeline_config:
 
   phases:
     # ----------------------------------------------------------------------------
-    # STAGE 2 — DATA UNDERSTANDING
+    # [WORKFLOW: 1. Acquisizione dati | SCHEMA-V: System design]
     # ----------------------------------------------------------------------------
     phase2_data_understanding:
       enabled: true
 
     # ----------------------------------------------------------------------------
-    # STAGE 3 — DATA PREPARATION (ISOLATED TO TRAINING MOTORS - STEP MODULARITY)
+    # [WORKFLOW: 2. Pre processamento | SCHEMA-V: System design]
     # ----------------------------------------------------------------------------
     phase3_data_preparation:
       enabled: true
       objective: "Clean, transform, and internal split ONLY the 4 training motors."
-
       read_strategy:
         mode: "full_flight_records"
         input_source:
@@ -48,9 +38,6 @@ regression_pipeline_config:
            Data acquisition step 2.1 x+y train stratified parquet.
 
       steps:
-        # ────────────────────────────────────────────────────────────────────────
-        # STEP 3.1: VARIABLE SELECTION
-        # ────────────────────────────────────────────────────────────────────────
         step_3_1_data_selection:
           enabled: true
           description: "Filter operational features and remove irrelevant technical variables."
@@ -62,27 +49,17 @@ regression_pipeline_config:
                   enabled: true
                   params:
                     mode: "full_flight_records"
-                    include: [ "oat", "mgt", "pa", "ias", "np", "ng","trq_measured",
-                               "trq_margin","faulty" ]
+                    include: [ "oat", "mgt", "pa", "ias", "np", "ng","trq_measured","faulty","trq_margin"]
                     patterns_to_drop: [ "id"]
                   output: "3.1.selection.definition_trace_log.json"
-                feature_selection:
-                  enabled: true
-                  params:
-                    remove_constant: true
-                    remove_duplicate: true
-                  output: "3.1.selection.filter_trace_log.json"
-
           input_artifact:
-            path: "2.1.data_acquisition.prod_30000_stratified_x_y_train.parquet"
+            path: "2.1.data_acquisition.prod_742625_stratified_x_y_train.parquet"
           output_artifacts:
             selected_regression_train_parquet:
               path: "3.1.selection.selected_regression_train.parquet"
               description: "Intermediate regression matrix containing only selected operational columns."
               consumed_by: [ "step_3_2_data_cleaning" ]
-        # ────────────────────────────────────────────────────────────────────────
-        # STEP 3.2: OUTLIER AND DUPLICATE HANDLING (WITH CLIPPING ON TRQ_MARGIN)
-        # ────────────────────────────────────────────────────────────────────────
+
         step_3_2_data_cleaning:
           enabled: true
           description: "Mitigate severe target asymmetries and check training set row duplications."
@@ -90,21 +67,20 @@ regression_pipeline_config:
             data_cleaning:
               enabled: true
               techniques:
-               # control extra para trq_margin
-#                outlier_handling:
-#                  enabled: true
-#                  params:
-#                    target_clipping: true
-#                    target_variable: "trq_margin"
-#                    lower_percentile: 0.01
-#                    upper_percentile: 0.99
-#                  output: "3.2.cleaning.clipping_audit_log.json"
                 duplicate_handling:
                   enabled: true
                   params:
                     keep: "first"
                   output: "3.2.cleaning.duplicates_trace.json"
-
+                # controllo aggiuntivo per trq_margin
+                outlier_handling:
+                  enabled: true
+                  params:
+                    target_clipping: true
+                    target_variable: "trq_margin"
+                    lower_percentile: 0.01
+                    upper_percentile: 0.99
+                  output: "3.2.cleaning.clipping_audit_log.json"
           input_artifact:
             path: "3.1.selection.selected_regression_train.parquet"
             description: "Intermediate regression matrix containing only selected operational columns."
@@ -113,17 +89,18 @@ regression_pipeline_config:
               path: "3.2.cleaning.cleaned_regression_train.parquet"
               description: "Intermediate regression matrix deduplicated and outlier-clipped."
               consumed_by: [ "step_3_3_data_transformation" ]
-        # ────────────────────────────────────────────────────────────────────────
-        # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
-        # ────────────────────────────────────────────────────────────────────────
-        step_3_3_data_transformation:
+
+        step_3_3_data_engineering:
           enabled: true
-          description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
+          description: >
+            Estrazione feature: creates two physically-motivated ratio 
+            features (Kelvin-protected) and second-degree polynomial interactions among the 7 raw sensor/physical features. 
+            Target variable (trq_margin) and classification label (faulty) are explicitly excluded from the interaction 
+            feature set to avoid target leakage; they remain in the dataset only as passthrough columns for downstream splitting.
           methods:
             data_transformation:
               enabled: true
               techniques:
-                # 1. PRIMERO: Feature Engineering (usando datos crudos sin alterar)
                 feature_engineering:
                   enabled: true
                   params:
@@ -132,41 +109,24 @@ regression_pipeline_config:
                       offset: 273.15
                     formulas:
                       mgt_oat_ratio: "mgt / (oat + 273.15)"
-                      # Al ejecutarse primero, 'ng' usa su valor físico real (~95%), evitando la división por cero
-                      specific_power_index: "np / (ng * (oat + 273.15))" # "np / ((ng + 1e-9) * (oat + 273.15))"
+                      specific_power_index: "np / (ng * (oat + 273.15))"
                     interactions:
                       enabled: true
                       degree: 2
-                      #features: [ "mgt", "ng", "trq_measured", "np" ]
-                      # Al dejar la lista vacía (o usar un keyword como "all" dependiendo de tu código Python),
-                      # el scaler debería detectar dinámicamente y aplicar a todas las columnas numéricas resultantes.
-                      features: "all"
+                      features:  ["oat", "mgt", "pa", "ias", "np", "ng", "trq_measured"]
                   output: "3.3.transformation.engineering_formulas_log.json"
-                # 2. SEGUNDO: Feature Scaling (Aplicado a todo)
-                feature_scaling:
-                  enabled: true
-                  params:
-                    method: "RobustScaler"
-                    fit_on_train_only: true
-                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured","trq_margin" ]
-                  output: "3.3.transformation.scaler_fit_trace.json"
-
           input_artifact:
             path: "3.2.cleaning.cleaned_regression_train.parquet"
-            description: "Intermediate regression matrix deduplicated and outlier-clipped."
+            description: >
+              Cleaned regression train set (683,025 rows, 9 columns: 7 
+              sensor features + faulty + trq_margin) after duplicate removal and trq_margin clipping (step 3.2).
           output_artifacts:
-            transformed_regression_train_parquet:
-              path: "3.3.transformation.transformed_regression_train.parquet" # -> el plato cocinado
-              description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
-              consumed_by: [ "step_3_5_data_formatting" ]
-            fitted_scaler_regression_artifact:
-              path: "3.3.transformation.robust_scaler_regression.pkl" # -> la receta
-              description: "Fitted state parameters of the training-isolated RobustScaler model for regression."
-              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
-        # ────────────────────────────────────────────────────────────────────────
-        # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS NUMÉRICOS
-        # ────────────────────────────────────────────────────────────────────────
-        step_3_5_data_formatting:
+            engineered_regression_train_parquet:
+              path: "3.3.transformation.transformed_regression_train.parquet"
+              description: "Intermediate regression matrix with newly engineered physical features."
+              consumed_by: [ "step_3_4_data_formatting" ]
+
+        step_3_4_data_formatting:
           enabled: true
           description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
           methods:
@@ -176,72 +136,88 @@ regression_pipeline_config:
                 data_split:
                   enabled: true
                   params:
-                    test_size: 0.15    # 15% reservado para tu "test_internal" (Fase 5)
-                    val_size: 0.15     # 15% reservado para tu "val_internal" (Fase 4)
-                    random_state: 42   # Semilla de reproducibilidad (quedará 70% para Train)
+                    test_size: 0.15
+                    val_size: 0.15
+                    random_state: 42
                     stratify: false
                     target_col: "trq_margin"
-                  output: "3.5.formatting.split_indices_trace.json"
+                  output: "3.4.formatting.split_indices_trace.json"
                 dataset_formatting:
                   enabled: true
                   params:
                     target_col: "trq_margin"
-                    type_casting: "float64" # Target continuo para NGBoost
+                    type_casting: "float64"
                     to_numpy: true
-                  output: "3.5.formatting.arrays_manifest.json"
-
+                  output: "3.4.formatting.arrays_manifest.json"
           input_artifact:
             path: "3.3.transformation.transformed_regression_train.parquet"
-            description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
+            description: >
+              Engineered regression train set (683,025 rows, 39 columns: 
+              7 sensor features + faulty + trq_margin + 2 physical ratio features + 28 degree-2 polynomial 
+              interaction terms over the 7 sensor features, target-excluded to avoid leakage) after step 3.3. 
+              Ready for internal train/val/test partitioning..
           output_artifacts:
             engineered_train_split:
-              path: "3.5.formatting.regression_internal_train.parquet"
+              path: "3.4.formatting.regression_internal_train.parquet"
               description: "Finalized scaling-safe internal training matrix for NGBoost."
-              consumed_by: [ "phase4_data_modeling" ]
+              consumed_by: [ "phase4_data_modeling" ,"step_3_5_data_transformation","phase6_deployment"]
             engineered_val_split:
-              path: "3.5.formatting.regression_internal_val.parquet"
+              path: "3.4.formatting.regression_internal_val.parquet"
               description: "Finalized internal validation split for NGBoost early stopping/CV."
               consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
             engineered_test_split:
-              path: "3.5.formatting.regression_internal_test.parquet"
+              path: "3.4.formatting.regression_internal_test.parquet"
               description: "Finalized internal test split."
               consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
-#            engineered_test_challenge_parquet:
-#              path: "3.5.formatting.regression_challenge_test_processed.parquet"
-#              description: >
-#                Test del Challenge
-#                Este dataset de x_test del challenge fue procesado por
-#                los steps de fase 3, se sabe que no tiene el target
-#                "trq_margin
-#                ya que el modelo de regresion de NGBoot espera que haya pasado por
-#                RobustScaler y la misma ingenieria de variables.
-#                Asi que los datos crudos son transformados de acuerdo a los valores
-#                de escalas que aprende.
-#                Nota 1: 3.2 + 3.3 -> limpieza y transformacion
-#                Nota 2: 3.3 + 3.4 -> ingenieria de variables y formateo final para modelado
-#              consumed_by: [ "Fase_6_inferencia_despligue" ]
-#
-#            engineered_val_challenge_parquet:
-#               path: "3.5.formatting.regression_challenge_test_processed.parquet"
-#               description: >
-#                 Validation del Challenge
-#               consumed_by: [ "Fase_6_inferencia_despligue" ]
+        step_3_5_data_transformation:
+          enabled: true
+          description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
+          methods:
+            data_transformation:
+              enabled: true
+              techniques:
+                feature_scaling:
+                  enabled: true
+                  params:
+                    method: "RobustScaler"
+                    fit_on_train_only: true
+                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured","trq_margin", "mgt_oat_ratio" ,"specific_power_index"]
+                  output: "3.5.transformation.scaler_fit_trace.json"
+          input_artifact:
+            path: "3.4.formatting.regression_internal_train.parquet"
+            description: >
+              Internal training split (478,117 rows, 39 columns) from step 3.4, in original physical units (pre-scaling). 
+              RobustScaler is fitted exclusively on this train partition (fit_on_train_only=true) to prevent scale leakage 
+              into val/test; the fitted scaler is persisted separately (robust_scaler_regression.pkl) for later 
+              transform-only application on validation and test sets. 
+              NOTE: the current 'features' list scales only 10 of the 39 available columns 
+              (oat, mgt, pa, ias, np, ng, trq_measured, trq_margin, mgt_oat_ratio, specific_power_index). 
+              The remaining 28 polynomial interaction columns are left unscaled by design — the downstream NGBoost Base estimator 
+              (DecisionTreeRegressor) is scale-invariant, so this asymmetry does not affect model performance, 
+              only cross-feature magnitude comparability in interpretability outputs (Phase 5 feature importance).
+          output_artifacts:
+            transformed_regression_train_parquet:
+              path: "3.5.transformation.scaled_regression_train.parquet"
+              description: "Intermediate regression matrix with scaling applied and newly engineered physical features."
+              consumed_by: [ "phase4_data_modeling" ]
+            fitted_scaler_regression_artifact:
+              path: "3.5.transformation.robust_scaler_regression.pkl"
+              description: "Fitted state parameters of the training-isolated RobustScaler model for regression."
+              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
     # ----------------------------------------------------------------------------
-    # STAGE 4 — MODELING (PROBABILISTIC DENSITY ESTIMATION)
+    # [WORKFLOW: 4. Addestramento classificatore/predittore | SCHEMA-V: System design — Design of methods]
     # ----------------------------------------------------------------------------
     phase4_data_modeling:
       enabled: true
       objective: "Train NGBoost over simulated operational flight envelope groups to isolate engine-asset features."
-
-      # [REGLA 3] DAG Traceability: Insumos de la Fase 3
       read_strategy:
         mode: "consume_engineered_splits"
         input_source:
-          train_data: "3.5.formatting.regression_internal_train.parquet"
-          val_data: "3.5.formatting.regression_internal_val.parquet" # -> ¿Qué tan bueno es el modelo?"
-          #scaler: "3.3.transformation.robust_scaler_regression.pkl"
+          train_data: "3.5.transformation.scaled_regression_train.parquet"
+          val_data: "3.4.formatting.regression_internal_val.parquet"
+          scaler: "3.5.transformation.robust_scaler_regression.pkl"
 
       steps:
         step_4_1_algorithm_selection:
@@ -256,15 +232,20 @@ regression_pipeline_config:
                   params:
                     library: "ngboost"
                     estimator: "NGBRegressor"
-                    Dist: "Normal" # Predice Media y Varianza (Incertidumbre)
-                    Score: "LogScore" # Optimiza para que la incertidumbre sea realista
-                    n_estimators: 400        # <--- Buen balance entre aprendizaje y velocidad
-                    learning_rate: 0.03     # <--- Tasa de aprendizaje estándar
-                    minibatch_frac: 0.1    # <--- CLAVE: Toma solo el 10% de los datos por árbol. ¡Súper rápido!
+                    Dist: "Normal"
+                    Score: "LogScore"
+                    n_estimators: 300
+                    n_estimators_uncertainty: 50
+                    learning_rate: 0.03
+                    learning_rate_uncertainty: 0.02
+                    minibatch_frac: 0.1
+                    minibatch_frac_uncertainty: 0.05
                     Base:
                       type: "DecisionTreeRegressor"
-                      max_depth: 4         # <--- Árboles poco profundos, previene memorización
-                      min_samples_leaf: 30  # 20
+                      max_depth: 4
+                      max_depth_uncertainty: 2
+                      min_samples_leaf: 30
+                      min_samples_leaf_uncertainty: 20
                     random_state: 42
                   output: "4.1.modeling.algo_setup_trace.json"
 
@@ -279,20 +260,32 @@ regression_pipeline_config:
                   enabled: true
                   params:
                     random_seed: 7
+                    iterations: 5
                     strategy: "GroupKFold"
                     target_variable: "trq_margin"
+                    features:
+                      - "oat"
+                      - "mgt"
+                      - "pa"
+                      - "ias"
+                      - "np"
+                      - "ng"
+                      - "trq_measured"
+                      - "mgt_oat_ratio"
+                      - "specific_power_index"
                     n_splits: 5
+                    n_jobs: 5
+                    early_stopping_rounds: 20
                     grouping_mechanism:
                       type: "GMM_Clusterer"
-                      features: [ "oat", "mgt", "ias" ]
+                      features: [ "oat", "mgt", "ias" ] # "Variabili ambientali/regime di volo — il GMM raggruppa per ambiente"
                       n_clusters: 5
                       covariance_type: "full"
                       log_centroids_verification: true
                   output: "4.2.training.cv_fold_execution_trace.json"
           #input_artifact:
-           #path: "3.5.formatting.regression_internal_train.parquet"
+           #path: "3.4.formatting.regression_internal_train.parquet"
           output_artifacts:
-            # trained_ngboost_model:
             trained_model:
               path: "4.2.training.ngboost_regressor.pkl"
               description: "Fitted NGBoost parameters structure ready for variance forecasting inference."
@@ -310,10 +303,21 @@ regression_pipeline_config:
                   params:
                     primary_metric: "neg_log_likelihood"
                     tie_breaker: "rmse"
+                    target_variable: "trq_margin"
+                    features:
+                      - "oat"
+                      - "mgt"
+                      - "pa"
+                      - "ias"
+                      - "np"
+                      - "ng"
+                      - "trq_measured"
+                      - "mgt_oat_ratio"
+                      - "specific_power_index"
                   output: "4.4.evaluation.ranking_trace.json"
           #input_artifact:
            #ngboost_pkl: "4.2.training.ngboost_regressor.pkl"
-           #internal_val_parquet: "3.5.formatting.regression_internal_val.parquet"
+           #internal_val_parquet: "3.4.formatting.regression_internal_val.parquet"
           output_artifacts:
             best_regression_model_metadata:
               path: "4.4.evaluation.final_best_model_meta.json"
@@ -321,24 +325,23 @@ regression_pipeline_config:
               consumed_by: [ "phase5_evaluation_and_interpretation" ]
 
     # ----------------------------------------------------------------------------
-    # STAGE 5 — EVALUATION & UNCERTAINTY INTERPRETATION
+    # [SCHEMA-V: Verifica — System testing]
     # ----------------------------------------------------------------------------
     phase5_evaluation_and_interpretation:
       enabled: true
       objective: "Verify prediction interval calibration honesty on UNSEEN CROSS-ASSET MOTORS."
 
-      # ¡CORRECCIÓN CRÍTICA APLICADA! Carga el scaler, modelo y los DATOS DEL CHALLENGE CRUDOS
       read_strategy:
         mode: "cross_asset_evaluation"
         input_source:
           model: "4.2.training.ngboost_regressor.pkl"
-          scaler: "3.3.transformation.robust_scaler_regression.pkl"
+          scaler: "3.5.transformation.robust_scaler_regression.pkl"
           metadata: "4.4.evaluation.final_best_model_meta.json"
-          internal_test_data: "3.5.formatting.regression_internal_test.parquet" ## ¿Por qué el modelo es bueno/malo?
+          internal_test_data: "3.4.formatting.regression_internal_test.parquet" ## ¿Por qué el modelo es bueno/malo?
 
       steps:
         step_5_1_interpretation:
-          enabled: true
+          enabled: false
           description: "Extract feature coefficients mapping the behavior of both Mu and Sigma sub-trees."
           methods:
             model_interpretation:
@@ -431,43 +434,30 @@ regression_pipeline_config:
               description: "Cryptographic or structured approval marker for production release."
               consumed_by: [ "deployment" ]
 
+    # ----------------------------------------------------------------------------
+    # [WORKFLOW: 5. Integrazione | SCHEMA-V: System integration]
+    # ----------------------------------------------------------------------------
     phase6_deployment:
       enabled: true
       objective: "Eseguire l'inferenza unificata sui test set interni e pacchettizzare i consegnabili per la valutazione accademica."
 
-#      read_strategy:
-#        mode: "academic_evaluation"
-#        input_source:
-#          # --- Modelli pre-addestrati ---
-#          classification_model: "4.2.training.lightgbm_raw_classifier.pkl"
-#          regression_model: "4.2.training.ngboost_regressor.pkl"
-#          classification_calibrator: "4.2.training.isotonic_calibrator.pkl"
-#
-#          # --- Dataset di Test e Train Interni (Generati nella Fase 3.5) ---
-#          # Nota: cascade_inference userà solo i test set, zip_delivery userà tutto.
-#          classification_test_data: "3.5.formatting.classification_internal_test.parquet"
-#          regression_test_data: "3.5.formatting.regression_internal_test.parquet"
-#          classification_train_data: "3.5.formatting.classification_internal_train.parquet"
-#          regression_train_data: "3.5.formatting.regression_internal_train.parquet"
       read_strategy:
         mode: "academic_evaluation"
         input_source:
           # --- Modelli pre-addestrati ---
-          # Usamos el timestamp correcto y la subcarpeta phase4_data_modeling
-          classification_model: "../../../classification/phm2024/20260621_160737/phase4_data_modeling/4.2.training.lightgbm_raw_classifier.pkl"
-          classification_calibrator: "../../../classification/phm2024/20260621_160737/phase4_data_modeling/4.2.training.isotonic_calibrator.pkl"
-
-          # El modelo de regresión en la carpeta local phase4_data_modeling
+          # step_6_1_academic_scoring
+          classification_model: "../../../classification/phm2024/completo/phase4_data_modeling/4.2.training.lightgbm_raw_classifier.pkl"
+          classification_calibrator: "../../../classification/phm2024/completo/phase4_data_modeling/4.2.training.isotonic_calibrator.pkl"
           regression_model: "phase4_data_modeling/4.2.training.ngboost_regressor.pkl"
+          regression_scaler: "phase3_data_preparation/3.5.transformation.robust_scaler_regression.pkl"
 
           # --- Dataset di Test e Train Interni ---
-          # Buscamos los datos de clasificación en su phase3_data_preparation
-          classification_test_data: "../../../classification/phm2024/20260621_160737/phase3_data_preparation/3.5.formatting.classification_internal_test.parquet"
-          classification_train_data: "../../../classification/phm2024/20260621_160737/phase3_data_preparation/3.5.formatting.classification_internal_train.parquet"
-
-          # Buscamos los datos de regresión locales
-          regression_test_data: "phase3_data_preparation/3.5.formatting.regression_internal_test.parquet"
-          regression_train_data: "phase3_data_preparation/3.5.formatting.regression_internal_train.parquet"
+          # step_6_1_academic_scoring | step_6_2_package_deliverables
+          classification_test_data: "../../../classification/phm2024/completo/phase3_data_preparation/3.5.formatting.classification_internal_test.parquet"
+          regression_test_data: "phase3_data_preparation/3.4.formatting.regression_internal_test.parquet"
+          # step_6_2_package_deliverables
+          classification_train_data: "../../../classification/phm2024/completo/phase3_data_preparation/3.5.formatting.classification_internal_train.parquet"
+          regression_train_data: "phase3_data_preparation/3.4.formatting.regression_internal_train.parquet"
 
       steps:
         step_6_1_academic_scoring:
@@ -477,12 +467,34 @@ regression_pipeline_config:
             batch_scoring:
               enabled: true
               techniques:
-                cascade_inference:
-                  enabled: true # Al mismo nivel que params
+                dual_model_inference:
+                  enabled: true
                   params:
+                    mode: "cascade" # "cascade" (default, comportamento attuale) o "independent" (sensa gating)
                     execution_order: ["classification", "regression"]
                     filter_threshold: 0.5
                     save_predictions: true
+                    regression_features: # deve corrispondere con step_4_2
+                      - "oat"
+                      - "mgt"
+                      - "pa"
+                      - "ias"
+                      - "np"
+                      - "ng"
+                      - "trq_measured"
+                      - "mgt_oat_ratio"
+                      - "specific_power_index"
+                    classification_features: # esplicitamente ciò che usa in LightGBM
+                      - "oat"
+                      - "mgt"
+                      - "pa"
+                      - "ias"
+                      - "np"
+                      - "ng"
+                      - "trq_measured"
+                      - "trq_margin"
+                      - "mgt_oat_ratio"
+                      - "specific_power_index"
                     datasets_to_score:
                       - "classification_test_data"
                       - "regression_test_data"
@@ -496,13 +508,13 @@ regression_pipeline_config:
               enabled: true
               techniques:
                 zip_delivery:
-                  enabled: true # Al mismo nivel que params
+                  enabled: true
                   params:
                     include_code: true
                     files_to_include:
                       - "3.5.formatting.classification_internal_train.parquet"
                       - "3.5.formatting.classification_internal_test.parquet"
-                      - "3.5.formatting.regression_internal_train.parquet"
-                      - "3.5.formatting.regression_internal_test.parquet"
+                      - "3.4.formatting.regression_internal_train.parquet"
+                      - "3.4.formatting.regression_internal_test.parquet"
                       - "6.1.final_academic_predictions.parquet"
                   output: "Consegna_PHM_America_2024.zip"

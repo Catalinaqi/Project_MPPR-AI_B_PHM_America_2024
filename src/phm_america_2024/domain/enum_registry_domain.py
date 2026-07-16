@@ -268,6 +268,7 @@ class StepOutputArtifact(str, Enum):
     # Step 3.2 – Data Cleaning
     cleaned_regression_train_parquet = "cleaned_regression_train_parquet"
     # Step 3.3 – Data Transformation
+    engineered_regression_train_parquet = "engineered_regression_train_parquet"
     transformed_regression_train_parquet = "transformed_regression_train_parquet"
     fitted_scaler_regression_artifact = "fitted_scaler_regression_artifact"
     # Step 3.5 – Data Formatting
@@ -281,6 +282,7 @@ class StepOutputArtifact(str, Enum):
     selected_classification_train_parquet = "selected_classification_train_parquet"
     # Step 3.2 – Data Cleaning
     cleaned_classification_train_parquet = "cleaned_classification_train_parquet"
+    engineered_classification_train_parquet = "engineered_classification_train_parquet"
     # Step 3.3 – Data Transformation
     transformed_classification_train_parquet = (
         "transformed_classification_train_parquet"
@@ -325,9 +327,9 @@ class StepsPhase(str, Enum):  # noqa: D101
     STEP_2_4 = "step_2_4_data_exploration"
     STEP_3_1 = "step_3_1_data_selection"
     STEP_3_2 = "step_3_2_data_cleaning"
-    STEP_3_3 = "step_3_3_data_transformation"
-    STEP_3_4 = "step_3_4_data_integration"
-    STEP_3_5 = "step_3_5_data_formatting"
+    STEP_3_3 = "step_3_3_data_engineering"
+    STEP_3_4 = "step_3_4_data_formatting"
+    STEP_3_5 = "step_3_5_data_transformation"
     STEP_4_1 = "step_4_1_algorithm_selection"
     STEP_4_2 = "step_4_2_model_training"
     STEP_4_4 = "step_4_4_model_evaluation"

@@ -19,7 +19,7 @@ from phm_america_2024.pipeline.utils.context_facade_common import RunContext
 
 # Technique implementations
 from phm_america_2024.deployment.academic_scoring_deployment import (
-    run_cascade_inference,
+    run_dual_model_inference,
 )
 from phm_america_2024.deployment.package_deliverable_deployment import (
     run_zip_delivery,
@@ -43,7 +43,7 @@ class Phase6DeploymentRunner:
     # updated RunContext (convention: the function enriches ctx with e.g.
     # ctx.predictions_path / ctx.zip_path).
     _TECHNIQUE_DISPATCH: Dict[str, Any] = {
-        "cascade_inference": run_cascade_inference,
+        "dual_model_inference": run_dual_model_inference,
         "zip_delivery": run_zip_delivery,
     }
 
@@ -222,7 +222,7 @@ class Phase6DeploymentRunner:
             )
             return False
 
-        # We do not actually load models here because cascade_inference
+        # We do not actually load models here because dual_model_inference
         # does it internally using _resolve_artifact_path. However, we can
         # perform an existence check to fail early.
         # (Optional) Verify files exist.

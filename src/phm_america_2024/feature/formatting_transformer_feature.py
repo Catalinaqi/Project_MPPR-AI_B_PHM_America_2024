@@ -13,27 +13,28 @@ from phm_america_2024.common.logging_adapter_common import get_logger
 log = get_logger(__name__)
 
 
+
 def data_split(
-    df: pd.DataFrame,
-    params: dict[str, Any],
-    ctx: Any,
-    output_dir: Path,
+        df: pd.DataFrame,
+        params: dict[str, Any],
+        ctx: Any,
+        output_dir: Path,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Partition the DataFrame into internal training, validation, and test splits."""
     log.debug(
-        "[data_split] ENTRY - Iniciando proceso de partición. DataFrame original shape: %s",
+        "[data_split] ENTRY - starting partition process. Original DataFrame shape: %s",
         df.shape,
     )
 
     try:
-        # 1. Extracción de parámetros
+        # --- Tappa 1: Estrazione dei parametri dal file di configurazione (YAML) ---
         test_size: float = params.get("test_size", 0.15)
 
-        # LOG WARNING: Te avisa si te olvidaste de poner val_size en el YAML
+        # Log di avviso: informa se "val_size" non è stato specificato nello YAML
         if "val_size" not in params:
             val_size: float = test_size
             log.warning(
-                "[data_split] 'val_size' no especificado en YAML. Asumiendo el mismo valor que test_size: %.2f",
+                "[data_split] 'val_size' not specified in YAML. Assuming same value as test_size: %.2f",
                 val_size,
             )
         else:
@@ -41,50 +42,52 @@ def data_split(
 
         random_state: int = params.get("random_state", 42)
 
-        # --- NUEVO: Extraer parámetros de estratificación ---
+        # Parametri di stratificazione (per ora non usati in regressione: stratify=False)
         use_stratify: bool = params.get("stratify", False)
         target_col: str = params.get(
             "target_col", "faulty"
-        )  # Por defecto faulty para clasificación
+        )  # Default "faulty" per classificazione
 
         log.info(
-            "[data_split] Parámetros cargados: test_size=%.2f, val_size=%.2f, random_state=%d",
+            "[data_split] Parameters loaded: test_size=%.2f, val_size=%.2f, random_state=%d, stratify=%s",
             test_size,
             val_size,
             random_state,
             use_stratify,
         )
 
-        # LOG ERROR preventivo: Validación matemática
+        # Validazione matematica preventiva: la somma delle due quote non può superare 1.0
         if test_size + val_size >= 1.0:
-            err_msg = f"Inconsistencia matemática: sum(test_size, val_size) = {test_size + val_size}. Debe ser menor a 1.0."
+            err_msg = f"Mathematical inconsistency: sum(test_size, val_size) = {test_size + val_size}. Must be less than 1.0."
             log.error("[data_split] %s", err_msg)
             raise ValueError(err_msg)
 
-        # Configurar la data de estratificación para el PRIMER corte
+        # Colonna di stratificazione per il PRIMO taglio (None se stratify=False)
         stratify_data_1 = (
             df[target_col] if use_stratify and target_col in df.columns else None
         )
 
-        # 2. PRIMER CORTE: Separar el Test Set del resto
-        log.debug("[data_split] Ejecutando Primer Corte: Extrayendo Test Set...")
+        # --- Tappa 2: PRIMO TAGLIO - separazione del Test Set dal resto ---
+        log.debug("[data_split] Executing first cut: extracting Test Set...")
         train_val_df, test_df = train_test_split(
             df,
             test_size=test_size,
             random_state=random_state,
             shuffle=True,
-            stratify=stratify_data_1,  # <--- SE APLICA AQUÍ
+            stratify=stratify_data_1,  # <-- applicato qui
         )
         log.info(
-            "[data_split] Primer Corte exitoso. Restante (Train+Val)=%s, Test=%s",
+            "[data_split] First cut successful. Remaining (Train+Val)=%s, Test=%s",
             train_val_df.shape,
             test_df.shape,
         )
 
-        # 3. SEGUNDO CORTE: Separar Validation Set del Training restante
+        # --- Tappa 3: SECONDO TAGLIO - separazione del Validation Set dal Training restante ---
+        # Il rapporto va ricalcolato perché val_size è espresso sul totale originale,
+        # non sul sottoinsieme (train_val_df) rimasto dopo il primo taglio.
         val_ratio_of_remaining = val_size / (1.0 - test_size)
 
-        # Configurar la data de estratificación para el SEGUNDO corte
+        # Colonna di stratificazione per il SECONDO taglio
         stratify_data_2 = (
             train_val_df[target_col]
             if use_stratify and target_col in train_val_df.columns
@@ -92,7 +95,7 @@ def data_split(
         )
 
         log.debug(
-            "[data_split] Ejecutando Segundo Corte: Extrayendo Val Set (Proporción matemática ajustada: %.4f)...",
+            "[data_split] Executing second cut: extracting Val Set (adjusted ratio: %.4f)...",
             val_ratio_of_remaining,
         )
 
@@ -101,28 +104,28 @@ def data_split(
             test_size=val_ratio_of_remaining,
             random_state=random_state,
             shuffle=True,
-            stratify=stratify_data_2,  # <--- SE APLICA AQUÍ
+            stratify=stratify_data_2,  # <-- applicato qui
         )
 
         log.info(
-            "[data_split] Partición finalizada con éxito -> Train: %s | Val: %s | Test: %s",
+            "[data_split] Partition completed successfully -> Train: %s | Val: %s | Test: %s",
             train_df.shape,
             val_df.shape,
             test_df.shape,
         )
 
     except Exception as e:
-        # LOG ERROR crítico: Captura cualquier falla de Scikit-Learn
+        # Log critico: cattura qualsiasi errore proveniente da scikit-learn
         log.error(
-            "[data_split] Falla crítica durante la división (train_test_split): %s",
+            "[data_split] Critical failure during split (train_test_split): %s",
             str(e),
             exc_info=True,
         )
         raise
 
-    # 4. Trazabilidad de Índices
+    # --- Tappa 4: Tracciabilità degli indici (per audit e riproducibilità) ---
     log.debug(
-        "[data_split] Recolectando índices para archivo de auditoría (traceability)..."
+        "[data_split] Collecting indices for audit trace file..."
     )
     train_indices = train_df.index.tolist()
     val_indices = val_df.index.tolist()
@@ -140,24 +143,25 @@ def data_split(
         "test_indices_sample": test_indices[:5],
     }
 
-    # 5. Persistencia del JSON
-    output_path = output_dir / "3.5.formatting.split_indices_trace.json"
+    # --- Tappa 5: Persistenza del file JSON di traccia ---
+    output_filename = params.get("output", "3.4.formatting.split_indices_trace.json")
+    output_path = output_dir / output_filename
 
     try:
-        log.debug("[data_split] Escribiendo archivo JSON de traza en: %s", output_path)
+        log.debug("[data_split] Writing JSON trace file to: %s", output_path)
         output_path.write_text(
             json.dumps(trace, indent=2, default=str), encoding="utf-8"
         )
-        log.info("[data_split] Archivo de traza guardado correctamente.")
+        log.info("[data_split] Trace file saved successfully.")
     except Exception as e:
-        # LOG ERROR de I/O (ej. disco lleno o sin permisos)
+        # Log di errore I/O (es. disco pieno o permessi mancanti)
         log.error(
-            "[data_split] Error al escribir el archivo de traza JSON en disco: %s",
+            "[data_split] Error writing JSON trace file to disk: %s",
             str(e),
         )
         raise
 
-    # 6. Empaquetado
+    # --- Tappa 6: Confezionamento del risultato ---
     extra = {
         "trace": trace,
         "val_df": val_df,
@@ -166,10 +170,9 @@ def data_split(
     }
 
     log.debug(
-        "[data_split] EXIT - Retornando DataFrame de entrenamiento y diccionario extra."
+        "[data_split] EXIT - returning training DataFrame and extra artifact dict."
     )
     return train_df, extra
-
 
 def dataset_formatting(
     df: pd.DataFrame,
@@ -251,7 +254,8 @@ def dataset_formatting(
         "to_numpy_applied": to_numpy,
         "arrays_metadata": arrays,
     }
-    output_path = output_dir / "3.5.formatting.arrays_manifest.json"
+    output_filename = params.get("output", "3.4.formatting.arrays_manifest.json")
+    output_path = output_dir / output_filename
     output_path.write_text(
         json.dumps(manifest, indent=2, default=str), encoding="utf-8"
     )

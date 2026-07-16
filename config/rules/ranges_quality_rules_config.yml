@@ -1,3 +1,34 @@
+######### CONOSCENZA DEL DOMINIO #########
+#
+# Questo file applica conoscenza di dominio (Manutenzione Preventiva /
+# PHM aeronautico) al dataset del PHM North America 2024 Data Challenge.
+# Il challenge stesso NON impone questi criteri esplicitamente — vengono
+# applicati perché il corso richiede di dimostrare l'integrazione di
+# conoscenza fisica/ingegneristica nella pipeline data-driven, non solo
+# di ottimizzare una metrica di leaderboard (peraltro ormai chiuso).
+#
+# In questo file convivono tre tipi di contenuto, di natura diversa:
+#
+#   [FISICA]   Leggi fisiche universali — vere indipendentemente da
+#              qualunque costruttore, epoca o normativa
+#              (es. una coppia negativa non ha senso fisico).
+#
+#   [DOMINIO]  Convenzioni ingegneristiche/operative del settore PHM
+#              aeronautico — vere per questo tipo di sistema, ma sono
+#              soglie di progetto/operative, non costanti fisiche
+#              universali (es. l'80% come soglia di Ground Idle è una
+#              convenzione del costruttore, non una legge di natura).
+#
+#   [CONFIG]   Struttura tecnica che permette al codice di leggere ed
+#              eseguire le regole (chiavi come `condition`, `threshold`,
+#              `min`/`max`) — non è conoscenza di dominio, è sintassi.
+#
+# Questo file viene letto esclusivamente dallo script di verifica
+# incrociata Fase 2.2 (PARTE 1 / PARTE 2, technical_ranges + quality_pipeline).
+# Nessun altro script del progetto lo utilizza.
+#
+######### DOMINIO FISICO #########
+
 # ==============================================================================
 # config/rules/ranges_quality_rules_config.yml
 # ==============================================================================
@@ -60,86 +91,142 @@
 #
 # ==============================================================================
 # 1. Criteri Tecnici e Intervalli Consentiti (Limiti Generali di Operazione Sicura)
+#
+# [FISICA + DOMINIO] Questo blocco definisce i limiti operativi generali di
+# ciascun sensore. Alcuni limiti sono fisica pura (es. trq_measured >= 0),
+# altri sono convenzioni ingegneristiche di sicurezza operativa (es. i
+# margini climatici di oat) — entrambi sono legittimi come conoscenza di
+# dominio, ma di natura leggermente diversa (vedi nota per ciascun campo).
 technical_ranges:
   oat:
+    # [DOMINIO] Convenzione operativa di sicurezza, non legge fisica: un
+    # elicottero può fisicamente esistere fuori da -50/60°C, ma non è
+    # certificato per operare in sicurezza fuori da questo range.
     min: -50.0
     max: 60.0
     description: "Outside Air Temperature (Celsius). Limiti climatici estremi per un'operazione sicura."
     short_description: "Limiti climatici sicuri."
   ias:
+    # [DOMINIO] 0.0 come valore valido (hovering) è conoscenza operativa
+    # specifica dell'elicottero — un aereo ad ala fissa non avrebbe questo
+    # stato normale a velocità zero.
     min: 0.0
     max: 250.0
     description: "Indicated Airspeed (Nodi). 0.0 rappresenta uno stato di hovering o su pista; è un dato valido e critico."
     short_description: "Velocità indicata, include hovering."
   pa:
+    # [FISICA] Le altitudini negative sono un fatto fisico-geografico
+    # (pressione atmosferica relativa al livello del mare), non una
+    # convenzione del costruttore.
     min: -1000.0
     max: 20000.0
     description: "Pressure Altitude (Piedi). Le altitudini negative sono fisicamente possibili a causa di alta pressione o depressioni geografiche."
     short_description: "Altitudine (incluse depressioni)."
   mgt:
+    # [FISICA] Un motore acceso ha necessariamente una temperatura del gas
+    # superiore a questa soglia — è termodinamica, non convenzione.
     min: 200.0
     max: 1000.0
     description: "Measured Gas Temp (°C). Soglia termica; valori < 200°C indicano motore spento o sensore guasto."
     short_description: "Soglia termica del gas."
   ng:
+    # [FISICA] Il nucleo del motore non può fisicamente girare sotto questo
+    # regime da acceso — è un vincolo meccanico/termodinamico del sistema.
     min: 60.0
     max: 110.0
     description: "Gas Generator Speed (%). Il nucleo non può girare al di sotto di questo valore durante l'operazione; 0 indica un guasto totale."
     short_description: "Velocità minima del generatore di gas."
   np:
+    # [DOMINIO] L'80% come soglia di Ground Idle è una convenzione di
+    # progetto del costruttore, non una costante fisica universale — un
+    # altro modello di elicottero potrebbe avere una soglia diversa.
     min: 80.0
     max: 115.0
     description: "Power Turbine Speed (%). Include Ground Idle e transitori di accensione; l'intervallo >= 80% è operativamente valido."
     short_description: "Velocità turbina, include Ground Idle."
   trq_measured:
+    # [FISICA] Una coppia negativa non ha senso fisico in questo contesto
+    # — è un vincolo meccanico assoluto, non una convenzione.
     min: 0.0
     max: 125.0
     description: "Coppia Reale Misurata (%). I valori negativi non hanno senso fisico; implicano la frattura dell'albero o un errore del sensore."
     short_description: "Coppia misurata (valori >= 0)."
   trq_margin:
+    # [DOMINIO] Variabile target — il range è una convenzione di
+    # progettazione (percentuale di margine), non una legge fisica.
     min: -100.0
     max: 100.0
     description: "Margine di Coppia (%). Variabile target. Deviazioni estreme indicano guasti critici della telemetria."
     short_description: "Margine di coppia (Target)."
 
 # 2. Definizione della Pipeline di Controllo Qualità
+#
+# [DOMINIO + CONFIG] Questo blocco traduce la conoscenza di dominio in
+# regole eseguibili dal codice. Il CONTENUTO (soglie, descrizioni,
+# dipendenze) è conoscenza di dominio; la STRUTTURA (chiavi come
+# `condition`, `threshold`) è sintassi di configurazione generica,
+# riutilizzabile per qualunque dominio — non porta significato fisico.
 quality_pipeline:
   # A. Anomalie del Sensore (Dati Critici da Scartare)
+  # [DOMINIO] Ogni regola qui identifica un valore che, pur essendo
+  # "matematicamente possibile", è fisicamente incompatibile con un
+  # motore acceso e funzionante — quindi indica guasto del sensore.
   anomalies_to_discard:
     ng:
+      # [FISICA] Vedi giustificazione in technical_ranges.ng — stesso
+      # vincolo meccanico, qui applicato come criterio di scarto.
       threshold: 60.0
-      condition: "less_than"
+      condition: "less_than"  # [CONFIG] sintassi, non dominio
       description: "ng < 60.0: Indica un guasto del sensore, poiché il nucleo non può girare al di sotto di questo regime quando è acceso."
       short_description: "Guasto sensore nucleo (< 60%)."
     trq_measured:
+      # [FISICA] Vedi giustificazione in technical_ranges.trq_measured.
       threshold: 0.0
-      condition: "less_than"
+      condition: "less_than"  # [CONFIG]
       description: "trq_measured < 0.0: Fisicamente impossibile; se c'è coppia negativa, il sensore o l'albero sono fratturati."
       short_description: "Coppia negativa (Fisicamente impossibile)."
     mgt:
+      # [DOMINIO] Questa è la regola con la conoscenza di dominio più
+      # ricca del file: non basta il valore assoluto di mgt, serve
+      # incrociarlo con lo stato di volo (ias). "Motore freddo" è normale
+      # a terra, ma è un guasto di sensore se avviene in volo — è
+      # esattamente il tipo di ragionamento contestuale che un tecnico
+      # di manutenzione applicherebbe, e che una soglia isolata non
+      # potrebbe catturare da sola.
       threshold: 200.0
-      condition: "less_than"
+      condition: "less_than"  # [CONFIG]
       dependency:
         variable: "ias"
-        condition: "greater_than"
+        condition: "greater_than"  # [CONFIG]
         threshold: 0.0
       description: "mgt < 200.0: Soglia di 'motore freddo'. Se si verifica durante il volo (ias > 0), il sensore è guasto."
       short_description: "Guasto sensore termico in volo."
 
   # B. Contesto Operativo (Dati Critici da Mantenere)
+  # [DOMINIO] Questo blocco esiste specificamente per correggere falsi
+  # positivi che un'analisi puramente statistica (es. Z-Score a 3-sigma
+  # calcolato in Fase 2.2) segnalerebbe come anomalie — qui la conoscenza
+  # di dominio interviene per dire "questo sembra un outlier statistico,
+  # ma è uno stato operativo reale e legittimo".
   context_to_retain:
     pa:
+      # [FISICA] Condizioni atmosferiche reali (alta pressione o
+      # depressione geografica), non errore di sensore.
       min: -1000.0
       max: 0.0
       description: "Altitudine di Pressione (pa) tra -1000 e 0: Validazione di condizioni atmosferiche reali (alta pressione) o depressioni geografiche, non errori dell'altimetro."
       short_description: "Condizioni di alta pressione reali."
     np:
+      # [DOMINIO] Ground Idle — stato operativo definito dal costruttore,
+      # non un fenomeno fisico universale.
       min: 80.0
       max: 90.0
       description: "Rotor RPM (np) tra 80 e 90: Classificato come Ground Idle (minimo a terra). È uno stato transitorio legittimo per l'addestramento."
       short_description: "Stato transitorio di Ground Idle."
     ias:
+      # [DOMINIO] Hovering — manovra di volo specifica dell'elicottero,
+      # conoscenza operativa, non legge fisica generale.
       value: 0.0
-      condition: "equal"
+      condition: "equal"  # [CONFIG]
       description: "Velocità (ias) = 0.0: Identifica la manovra di hovering (volo stazionario). Eliminare questo dato significherebbe perdere la fase di volo più critica dell'elicottero."
       short_description: "Manovra di hovering confermata."

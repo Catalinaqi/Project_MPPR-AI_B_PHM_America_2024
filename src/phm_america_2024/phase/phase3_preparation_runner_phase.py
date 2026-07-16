@@ -30,39 +30,44 @@ log = get_logger(__name__)
 
 
 class Phase3PreparationRunner:
-    """Execute all techniques for a single CRISP‑DM data‑preparation step.
+    """Execute all techniques for a single step of Stage 3 (Feature Extraction)
+    of the data-driven diagnosis/prognosis workflow.
 
     Each step loads a DataFrame from the previous phase/step, applies
-    the configured feature‑engineering functions, and persists the
+    the configured feature-engineering functions, and persists the
     result as parquet (and optional pickle) via the central artifact registry.
     """
 
     # ── Technique dispatch mapping ────────────────────────────────────────────
+    # NOTE: technique -> function resolution happens by technique NAME (dict
+    # key), not by step number, so the step labels below are purely
+    # documentation and do not affect execution order or correctness.
     _TECHNIQUE_DISPATCH: dict[str, Any] = {
-        # step 3.1
+        # step 3.1 (data_selection)
         "dataset_definition": dataset_definition,
         "feature_selection": feature_selection,
-        # step 3.2
+        # step 3.2 (data_cleaning)
         "outlier_handling": outlier_handling,
         "duplicate_handling": duplicate_handling,
-        # step 3.3
-        "feature_scaling": feature_scaling,
+        # step 3.3 (data_engineering)
         "feature_engineering": feature_engineering,
-        # step 3.5
+        # step 3.4 (data_formatting)
         "data_split": data_split,
         "dataset_formatting": dataset_formatting,
+        # step 3.5 (data_transformation)
+        "feature_scaling": feature_scaling,
     }
 
     def __init__(
-        self, ctx: RunContext, step_key: str, step_cfg: dict[str, Any]
+            self, ctx: RunContext, step_key: str, step_cfg: dict[str, Any]
     ) -> None:
-        """Initialize the data‑preparation runner for a specific step."""
+        """Initialize the data-preparation runner for a specific step."""
         self.ctx: RunContext = ctx
         self.step_key: str = step_key
         self.step_cfg: dict[str, Any] = step_cfg
         self.base_dir: Path = getattr(ctx, "phase3_dir", None)
 
-        # Step 1: CALL validate_dir() – ensure phase3 output directory exists
+        # Step 1: ensure the Phase 3 output directory exists
         if self.base_dir is None:
             log.error(
                 "[Phase3PreparationRunner] ctx.phase3_dir is None – cannot resolve artifact paths"
@@ -87,6 +92,10 @@ class Phase3PreparationRunner:
         df = self._load_input_dataframe()
 
         # ── Step 2: iterate methods and techniques ─────────────────────────
+        # Execution order follows dict insertion order (Python 3.7+ preserves
+        # it), which in turn follows the order techniques are declared in the
+        # JSON/YAML config. This is relevant, for example, for the relative
+        # order between 'outlier_handling' and 'duplicate_handling' in step 3.2.
         methods: dict[str, Any] = self.step_cfg.get("methods", {})
         log.debug("[Phase3PreparationRunner] methods=%s", list(methods.keys()))
 
@@ -113,7 +122,7 @@ class Phase3PreparationRunner:
                 if art is not None:
                     extra_artifacts.update(art)
 
-        # ── Step 4: persist artifacts via registry ─────────────────────────
+        # ── Step 3: persist artifacts via registry ──────────────────────────
         self._persist_artifacts(df, extra_artifacts)
 
         log.info("[Phase3PreparationRunner] completed step='%s'", self.step_key)
@@ -122,87 +131,21 @@ class Phase3PreparationRunner:
     # ──────────────────────────────────────────────────────────────────────────
     # Input loading
     # ──────────────────────────────────────────────────────────────────────────
-
-    def _load_input_dataframe_old(self) -> Any:
-        """Carga el DataFrame de entrada de manera dinámica usando linaje de archivos y búsqueda histórica."""
-        log.debug("[_load_input_dataframe] entry step='%s'", self.step_key)
-
-        # 1. Definir qué buscar y dónde debería estar
-        if self.step_key == StepsPhase.STEP_3_1.value:
-            search_dir = self.ctx.phase2_dir
-            pattern = "*_train.parquet"
-            target_phase_folder = "phase2_data_understanding"
-        else:
-            search_dir = self.base_dir
-            target_phase_folder = "phase3_data_preparation"
-            lineage_map = {
-                StepsPhase.STEP_3_2.value: "*.selected_regression_train.parquet",
-                StepsPhase.STEP_3_3.value: "*.cleaned_regression_train.parquet",
-                StepsPhase.STEP_3_5.value: "*.transformed_regression_train.parquet",
-            }
-            pattern = lineage_map.get(self.step_key)
-            if not pattern:
-                raise ValueError(
-                    f"No lineage mapping defined for step: {self.step_key}"
-                )
-
-        # INTENTO 1: Buscar en la corrida actual (ej. si corres todo el pipeline de corrido)
-        if search_dir and search_dir.exists():
-            matches = list(search_dir.glob(pattern))
-            if matches:
-                log.info(
-                    "[_load_input_dataframe] Lineage resolved in current run. Loading: %s",
-                    matches[0].name,
-                )
-                return load_parquet(str(matches[0]))
-
-        # INTENTO 2: Motor de búsqueda histórica (Fallback para cuando aíslas pasos como el 3.1)
-        log.warning(
-            "[_load_input_dataframe] Artifact not in active run. Scanning history for '%s'...",
-            pattern,
-        )
-
-        runs_root = self.base_dir.parent.parent
-
-        if runs_root.exists() and runs_root.is_dir():
-            import os
-
-            # Ordenar las carpetas de corridas por fecha (las más recientes primero)
-            past_runs = sorted(
-                [d for d in runs_root.iterdir() if d.is_dir()],
-                key=os.path.getmtime,
-                reverse=True,
-            )
-
-            for run_dir in past_runs:
-                historical_phase_dir = run_dir / target_phase_folder
-                if historical_phase_dir.exists():
-                    historical_matches = list(historical_phase_dir.glob(pattern))
-                    if historical_matches:
-                        log.info(
-                            "✅ [Historical Fallback] Found precursor data at: %s",
-                            historical_matches[0],
-                        )
-                        return load_parquet(str(historical_matches[0]))
-
-        # Si el motor histórico también falla
-        log.error(
-            "[_load_input_dataframe] Missing upstream data. Searched history for '%s'",
-            pattern,
-        )
-        raise FileNotFoundError(
-            f"Dependency failed. Could not find precursor data for step {self.step_key}"
-        )
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Input loading
-    # ──────────────────────────────────────────────────────────────────────────
+    #
+    # AUDIT NOTE: an earlier version of this file contained two near-identical
+    # copies of a legacy loader ('_load_input_dataframe_old'), neither of
+    # which was ever called anywhere in the codebase — the active path always
+    # used '_load_input_dataframe' below. The exact duplicate has been
+    # removed here; a single legacy copy is kept, clearly marked, purely for
+    # historical traceability. This does not change runtime behavior in any
+    # way, since dead code was never executed.
 
     def _load_input_dataframe(self) -> Any:
-        """Load the required input DataFrame strictly based on step configuration."""
+        """[ACTIVE] Load the required input DataFrame strictly based on step
+        configuration (explicit path declared in the YAML/JSON config)."""
         log.debug("[_load_input_dataframe] entry step='%s'", self.step_key)
 
-        # 1. Extraer la ruta explícita del artefacto desde el YAML
+        # 1. Extract the explicit artifact path from the config
         try:
             artifact_path_str = self.step_cfg["input_artifact"]["path"]
         except KeyError:
@@ -212,8 +155,9 @@ class Phase3PreparationRunner:
             )
             raise ValueError(f"Step {self.step_key} config lacks 'input_artifact.path'")
 
-        # 2. Determinar el directorio base origen
-        # El paso 3.1 lee de la Fase 2. El resto (3.2, 3.3, 3.5) leen de la propia Fase 3.
+        # 2. Determine the source base directory.
+        # Step 3.1 reads from Phase 2. The remaining steps (3.2 through 3.5)
+        # read from Phase 3 itself.
         if self.step_key == StepsPhase.STEP_3_1.value:
             source_dir = self.ctx.phase2_dir
         else:
@@ -226,7 +170,7 @@ class Phase3PreparationRunner:
 
         full_path: Path = source_dir / artifact_path_str
 
-        # 3. Validar existencia y cargar
+        # 3. Validate existence and load
         if not full_path.exists():
             log.error(
                 "[_load_input_dataframe] Dependency failed. Input data file not found at: %s",
@@ -238,43 +182,54 @@ class Phase3PreparationRunner:
 
         log.info("[_load_input_dataframe] Resolving input data from: %s", full_path)
 
-        # 4. Deserializar
+        # 4. Deserialize
         df = load_parquet(str(full_path))
         log.info("[_load_input_dataframe] Loaded shape=%s", getattr(df, "shape", "N/A"))
 
         return df
 
-    def _load_input_dataframe_old(self) -> Any:
-        """Carga el DataFrame de entrada de manera dinámica usando linaje de archivos y búsqueda histórica."""
-        log.debug("[_load_input_dataframe] entry step='%s'", self.step_key)
+    def _load_input_dataframe_legacy(self) -> Any:
+        """[LEGACY - NOT REFERENCED ANYWHERE] Dynamically load the input
+        DataFrame using file lineage patterns and a historical-run fallback
+        search. Superseded by '_load_input_dataframe' above, which reads the
+        explicit path from config instead of guessing via glob patterns.
+        Kept only for historical traceability; safe to remove entirely once
+        no longer needed as reference."""
+        log.debug("[_load_input_dataframe_legacy] entry step='%s'", self.step_key)
 
-        # 1. Definir qué buscar y dónde debería estar
-        pattern = self.step_cfg["input_artifact"]["path"]
-
+        # 1. Define what to search for and where it should live
         if self.step_key == StepsPhase.STEP_3_1.value:
-            print(f"dioporto {pattern}")
             search_dir = self.ctx.phase2_dir
+            pattern = "*_train.parquet"
             target_phase_folder = "phase2_data_understanding"
         else:
             search_dir = self.base_dir
             target_phase_folder = "phase3_data_preparation"
+            lineage_map = {
+                StepsPhase.STEP_3_2.value: "*.selected_regression_train.parquet",
+                StepsPhase.STEP_3_3.value: "*.cleaned_regression_train.parquet",
+                StepsPhase.STEP_3_4.value: "*.engineered_regression_train.parquet",
+                StepsPhase.STEP_3_5.value: "*.transformed_regression_train.parquet",
+            }
+            pattern = lineage_map.get(self.step_key)
+            if not pattern:
+                raise ValueError(
+                    f"No lineage mapping defined for step: {self.step_key}"
+                )
 
-        if not pattern:
-            raise ValueError(f"No lineage mapping defined for step: {self.step_key}")
-
-        # INTENTO 1: Buscar en la corrida actual (ej. si corres todo el pipeline de corrido)
+        # ATTEMPT 1: search within the current run (e.g. full pipeline executed in sequence)
         if search_dir and search_dir.exists():
             matches = list(search_dir.glob(pattern))
             if matches:
                 log.info(
-                    "[_load_input_dataframe] Lineage resolved in current run. Loading: %s",
+                    "[_load_input_dataframe_legacy] Lineage resolved in current run. Loading: %s",
                     matches[0].name,
                 )
                 return load_parquet(str(matches[0]))
 
-        # INTENTO 2: Motor de búsqueda histórica (Fallback para cuando aíslas pasos como el 3.1)
+        # ATTEMPT 2: historical search engine (fallback for isolated step runs, e.g. 3.1 alone)
         log.warning(
-            "[_load_input_dataframe] Artifact not in active run. Scanning history for '%s'...",
+            "[_load_input_dataframe_legacy] Artifact not in active run. Scanning history for '%s'...",
             pattern,
         )
 
@@ -283,7 +238,7 @@ class Phase3PreparationRunner:
         if runs_root.exists() and runs_root.is_dir():
             import os
 
-            # Ordenar las carpetas de corridas por fecha (las más recientes primero)
+            # Sort run folders by modification date (most recent first)
             past_runs = sorted(
                 [d for d in runs_root.iterdir() if d.is_dir()],
                 key=os.path.getmtime,
@@ -296,14 +251,14 @@ class Phase3PreparationRunner:
                     historical_matches = list(historical_phase_dir.glob(pattern))
                     if historical_matches:
                         log.info(
-                            "✅ [Historical Fallback] Found precursor data at: %s",
+                            "[Historical Fallback] Found precursor data at: %s",
                             historical_matches[0],
                         )
                         return load_parquet(str(historical_matches[0]))
 
-        # Si el motor histórico también falla
+        # If the historical engine also fails
         log.error(
-            "[_load_input_dataframe] Missing upstream data. Searched history for '%s'",
+            "[_load_input_dataframe_legacy] Missing upstream data. Searched history for '%s'",
             pattern,
         )
         raise FileNotFoundError(
@@ -315,12 +270,13 @@ class Phase3PreparationRunner:
     # ──────────────────────────────────────────────────────────────────────────
 
     def _execute_technique(
-        self,
-        technique_name: str,
-        tech_cfg: dict[str, Any],
-        df: Any,
+            self,
+            technique_name: str,
+            tech_cfg: dict[str, Any],
+            df: Any,
     ) -> tuple[Any, dict[str, Any]]:
         """Apply the feature function for a single technique."""
+        # Step 1: resolve the function via the dispatch dictionary
         func = self._TECHNIQUE_DISPATCH.get(technique_name)
         if func is None:
             log.warning(
@@ -328,26 +284,24 @@ class Phase3PreparationRunner:
             )
             return df, {}
 
-        output_dir = self.base_dir
-        log.debug("[_execute_technique] executing '%s' a ciegas", technique_name)
+        log.debug("[_execute_technique] executing '%s'", technique_name)
 
         try:
-            # Todas las funciones de la Fase 3 deben retornar: (DataFrame, diccionario_artefactos)
-            # df_new, extra = func(df, tech_cfg, self.ctx, output_dir)
+            # All Phase 3 functions must return: (DataFrame, artifacts_dict)
 
-            # Ejecución universal
+            # Step 2: run the technique
             df_new, extra = func(df, tech_cfg, self.ctx, self.base_dir)
 
-            # Normalización defensiva (por si la función devolvió None en extra)
+            # Step 3: defensive normalization (in case the function returned None for extra)
             extra = extra if extra is not None else {}
 
-            # Autoguardado de JSONs de auditoría (si el YAML tiene el atributo 'output')
+            # Step 4: auto-save audit JSONs (if the config declares an 'output' attribute)
             output_key = tech_cfg.get("output")
             if output_key and str(output_key).endswith(".json"):
-                # Si la función devolvió la traza en el diccionario, la guardamos
+                # If the function returned a trace in the dict, save it
                 trace_data = extra.pop(
                     "trace", None
-                )  # Extraemos la traza sin enviarla al Registry
+                )  # extract the trace without sending it to the Registry
                 if trace_data:
                     from phm_america_2024.common.io_service_common import save_json
 
@@ -366,80 +320,6 @@ class Phase3PreparationRunner:
     # Artifact persistence
     # ──────────────────────────────────────────────────────────────────────────
 
-    def _persist_artifacts_old(self, df: Any, extra_artifacts: dict[str, Any]) -> None:
-        """Build the context_data payload and call write_output_artifacts."""
-        log.debug("[_persist_artifacts] entry step='%s'", self.step_key)
-
-        context_data: dict[str, Any] = {}
-
-        # 1. Gestionar el DataFrame principal y artefactos específicos
-        # Paso 3.5 tiene lógica especial porque genera DOS parquets (train y val)
-        # if self.step_key == StepsPhase.STEP_3_5.value:
-        #     # Validación: df debe existir para ser el train split
-        #     if df is not None:
-        #         context_data[StepOutputArtifact.engineered_train_split.value] = df
-        #
-        #     # Buscamos el val_df en los artefactos extra
-        #     if "val_df" in extra_artifacts:
-        #         context_data[StepOutputArtifact.engineered_val_split.value] = (
-        #             extra_artifacts["val_df"]
-        #         )
-        if self.step_key == StepsPhase.STEP_3_5.value:
-            if df is not None:
-                context_data[StepOutputArtifact.engineered_train_split.value] = df
-
-            if "val_df" in extra_artifacts:
-                context_data[StepOutputArtifact.engineered_val_split.value] = (
-                    extra_artifacts["val_df"]
-                )
-
-            # 👇 NUEVO: Capturar y guardar el dataset de test interno
-            if "test_df" in extra_artifacts:
-                # Si tienes un enum, úsalo: StepOutputArtifact.engineered_test_split.value
-                # Si no, usa el string directamente (o actualiza tu enum_registry_domain.py)
-                context_data["engineered_test_split"] = extra_artifacts["test_df"]
-        else:
-            # Para los demás pasos, buscamos el nombre del parquet en la config del YAML
-            output_artifacts_cfg = self.step_cfg.get("output_artifacts", {})
-            for key in output_artifacts_cfg.keys():
-                if "parquet" in key:
-                    context_data[key] = df
-                    break
-
-        # 2. Inyectar todo lo demás (Scalers, indices, etc.)
-        for key, value in extra_artifacts.items():
-            if key in [
-                "trace",
-                "val_df",
-            ]:  # 'val_df' ya se trató arriba, 'trace' se ignoró
-                continue
-            context_data[key] = value
-
-        # 3. Guardado final
-        if not context_data:
-            log.warning(
-                "[_persist_artifacts] No artifacts to persist for %s", self.step_key
-            )
-            return
-
-        log.debug(
-            "[_persist_artifacts] Dispatching to registry with keys: %s",
-            list(context_data.keys()),
-        )
-
-        write_output_artifacts(
-            ctx=self.ctx,
-            step_key=self.step_key,
-            step_cfg=self.step_cfg,
-            base_dir=self.base_dir,
-            **context_data,
-        )
-        log.info(
-            "Artifacts persisted for step '%s': %s",
-            self.step_key,
-            list(context_data.keys()),
-        )
-
     def _persist_artifacts(self, df: Any, extra_artifacts: dict[str, Any]) -> None:
         """Write artifacts generated by Phase 3 to disk via the central registry.
 
@@ -455,9 +335,9 @@ class Phase3PreparationRunner:
         context_data: dict[str, Any] = {}
         task: str = self.ctx.config.metadata.pipeline_key.task
 
-        # ── Step 1: Gestionar DataFrames principales según el paso ──
-        if self.step_key == StepsPhase.STEP_3_5.value:
-            # El paso 3.5 genera conjuntos disjuntos (train, val, test)
+        # ── Step 1: handle the main DataFrame(s) depending on the step ──
+        if self.step_key == StepsPhase.STEP_3_4.value:
+            # The data-formatting step (3.4) produces disjoint sets (train, val, test)
             if df is not None:
                 context_data[StepOutputArtifact.engineered_train_split.value] = df
             if "val_df" in extra_artifacts:
@@ -469,16 +349,16 @@ class Phase3PreparationRunner:
                     extra_artifacts["test_df"]
                 )
         else:
-            # Para los pasos 3.1, 3.2 y 3.3 extraemos dinámicamente el Parquet desde la config del YAML
+            # For all other steps, dynamically extract the parquet key from the config
             output_artifacts_cfg = self.step_cfg.get("output_artifacts", {})
             for key in output_artifacts_cfg.keys():
                 if "parquet" in key:
                     context_data[key] = df
                     break
 
-        # ── Step 2: Mapeo inteligente del Scaler según la tarea (Paso 3.3) ──
-        if self.step_key == StepsPhase.STEP_3_3.value:
-            # Capturamos el objeto scaler sin importar la llave interna con la que venga
+        # ── Step 2: task-aware scaler routing (data-transformation / scaling step) ──
+        if self.step_key == StepsPhase.STEP_3_5.value:
+            # Capture the scaler object regardless of the internal key it arrives under
             scaler_data = extra_artifacts.get(
                 "fitted_scaler_regression_artifact"
             ) or extra_artifacts.get("fitted_scaler_bin")
@@ -498,7 +378,7 @@ class Phase3PreparationRunner:
                         StepOutputArtifact.fitted_scaler_regression_artifact.value
                     ] = scaler_data
 
-        # ── Step 3: Consolidar artefactos restantes (Exclusión limpia estilo Fase 4) ──
+        # ── Step 3: consolidate remaining artifacts (clean exclusion, same pattern as Phase 4) ──
         keys_to_exclude = {
             "trace",
             "val_df",
@@ -511,7 +391,7 @@ class Phase3PreparationRunner:
         }
         context_data.update(remaining)
 
-        # ── Step 4: Guardado final y despacho al Registry central ──
+        # ── Step 4: final save and dispatch to the central Registry ──
         if not context_data:
             log.warning(
                 "[_persist_artifacts] No artifacts to persist for step='%s'",

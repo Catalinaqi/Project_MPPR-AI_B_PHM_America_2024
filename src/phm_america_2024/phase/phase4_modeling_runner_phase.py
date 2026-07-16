@@ -136,6 +136,16 @@ class Phase4ModelingRunner:
         methods: Dict[str, Any] = self.step_cfg.get("methods", {})
         log.debug("[Phase4ModelingRunner] methods to execute: %s", list(methods.keys()))
 
+        # Step pkl: load scaler from disk
+        phase_cfg = self.ctx.config.phases["phase4_data_modeling"]
+        input_source = phase_cfg.read_strategy.input_source
+        scaler_path = Path(self.ctx.phase3_dir) / str(input_source.scaler)
+
+        if scaler_path.exists():
+            import joblib
+            scaler = joblib.load(scaler_path)
+            self.ctx.scaler=scaler
+
         # Step 5: CALL items() — iterate over configured methods
         for method_name, method_cfg in methods.items():
             if not method_cfg.get("enabled", True):
@@ -302,6 +312,7 @@ class Phase4ModelingRunner:
         log.debug(
             "[_get_explicit_train_path] resolved train_data path: %s", explicit_train
         )
+
 
         if not explicit_train:
             log.error(

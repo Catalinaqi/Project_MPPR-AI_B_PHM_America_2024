@@ -1,0 +1,22 @@
+fields_metadata:
+  id:           {en: "Identifier",                         it: "Identificativo Record"}
+  #--------------------------------------------------------------------------------------
+  # 1. rappresentano l'ambiente e il regime di volo -> variabili atmosferiche + velocità termica
+  # 2. variabili ambientali -> rappresentano le condizioni esterne in termini termici/aerodinamici
+  # 3. Il GMM raggruppa i dati in base all'ambiente e induce il modello ML a imparare come reagiscono le variabili di prestazione
+  #--------------------------------------------------------------------------------------
+  oat:          {en: "Outside Air Temperature (Celsius)",  it: "Temperatura Aria Esterna (Celsius)"}
+  mgt:          {en: "Measured Gas Temp (°C)",             it: "Temperatura del Gas Misurata (°C)"}
+  ias:          {en: "Indicated Airspeed (Nodi)",          it: "Velocità Indicata (Nodi)"}
+  #--------------------------------------------------------------------------------------
+  # 1. rappresentano la dinamica interna e il rendimento meccanico
+  # 2. variabili di rendimento
+  # 3. Il GMM raggruppa i dati per ambiente e costringe il modello ML a imparare
+  #--------------------------------------------------------------------------------------
+  pa:           {en: "Pressure Altitude (Piedi)",          it: "Altitudine di Pressione (Piedi)"}
+  ng:           {en: "Gas Generator Speed (%)",            it: "Velocità del Generatore di Gas (%)"}
+  np:           {en: "Power Turbine Speed (%)",            it: "Velocità della Turbina di Potenza (%)"}
+  trq_measured: {en: "Measured Torque (%)",                it: "Coppia Reale Misurata (%)"}
+  #----------------target
+  faulty:       {en: "Faulty Indicator (0=Nominal, 1=Fail)",it: "Indicatore di Guasto (0=Nominale, 1=Guasto)"}
+  trq_margin:   {en: "Torque Margin (%)",                  it: "Margine di Coppia (%)"}

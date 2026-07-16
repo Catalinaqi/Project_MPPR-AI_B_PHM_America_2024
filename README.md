@@ -44,9 +44,11 @@ In the context of **helicopter turbine engines**, PHM is critical: an in-flight 
 
 PHM is structured around three fundamental phases:
 
-- **Diagnostics** – Detection and identification of a fault that has already occurred. In this project, it corresponds to the **binary classification** of engine state (nominal 0 vs faulty 1).
-- **Prognostics** – Prediction of the future evolution of degradation and estimation of the remaining useful life (RUL). Here, **probabilistic regression of the torque margin** provides a quantitative measure of current degradation that can be projected forward.
-- **Health Management** – Operational decisions based on diagnostic and prognostic information: scheduling maintenance interventions, adjusting operating regimes to slow degradation, or stopping the asset for safety.
+- **Diagnostics** – Detection and identification of the current health state. In this project, it corresponds to two complementary outputs, both evaluated at the instantaneous flight-sample level: **binary classification** of engine state (nominal 0 vs faulty 1), and **probabilistic estimation of the torque margin** (a continuous health indicator with quantified uncertainty).
+- **Prognostics** – Prediction of the future evolution of degradation and estimation of Remaining Useful Life (RUL), which requires a temporal degradation trajectory per asset. **This project does not perform prognostics**: the training data is shuffled and provides no engine identifier or timestamp, making it structurally impossible to build the per-asset trajectories that RUL estimation requires. The torque margin regression is therefore a second diagnostic output (current-state severity), not a projection into the future.
+- **Health Management** – Operational decisions based on diagnostic information: scheduling maintenance interventions, adjusting operating regimes to slow degradation, or stopping the asset for safety. Out of scope for this project.
+
+This distinction follows the **data-driven diagnosis workflow** taught in the *Manutenzione Preventiva per la Robotica e l'Automazione Intelligente* course (Acquisizione dati → Preprocessamento → Estrazione feature → Addestramento classificatore/predittore → Integrazione), applied here to both the classification and the torque-margin regression task. See `docs/RELAZIONE/2.0.metodologia.md` for the full mapping between this workflow, the internal phase-runner naming (Section 2 below), and the V-model referenced in the course.
 
 The **Torque Margin** is the key indicator for quantifying degradation:
 
@@ -73,6 +75,8 @@ The dataset contains observations from **7 engines** of the same type:
 | Test | 21,436 | 2.73% | Features only |
 | **Total** | **785,497** | **100%** | — |
 
+> **Challenge status**: the PHM2024 Conference Data Challenge submission window is closed. The `validation`/`test` partitions above were never released with ground truth, and no further scoring is possible against them. Consequently, this project targets an **internal academic evaluation** rather than the original competition submission format — see Section 8 for the actual output produced by `phase6_deployment`.
+
 ### 1.3 Architecture Overview
 
 The solution adopts a **hybrid cascade architecture** combining a probabilistic NGBoost regressor with a calibrated LightGBM classifier, supported by physics-based feature engineering and a robust validation strategy for cross-asset generalization:
@@ -91,7 +95,7 @@ Input → Audit & Data Prep → Feature Engineering → NGBoost (μ, σ²) → �
 
 ## 2. System Architecture
 
-The project implements a clean, modular architecture fully aligned with the **CRISP-DM** standard.
+The project implements a clean, modular pipeline whose runtime phases are internally named `phase2`…`phase6` for traceability, and which implements the **data-driven diagnosis workflow** of the course (Acquisizione dati → Preprocessamento → Estrazione feature → Addestramento classificatore/predittore → Integrazione), extended with an explicit verification stage (`phase5`) before deployment. The full terminology mapping — internal phase names ↔ course workflow ↔ V-model — is documented in `docs/RELAZIONE/2.0.metodologia.md`; it is intentionally kept out of this README to avoid duplicating a mapping that only makes sense read alongside the course's own diagrams.
 
 ### Pipeline Flow Diagram
 
@@ -108,10 +112,10 @@ The project implements a clean, modular architecture fully aligned with the **CR
             │       └──────────────┬──────────────────────────┘       │
             │                      │ Strict Validation Passed         │
             │       ┌──────────────▼──────────────────────────┐       │
-            │       │    CRISP-DM PIPELINE ORCHESTRATION      │       │
+            │       │      PHASE-RUNNER ORCHESTRATION         │       │
             │       │ ┌────────┐  ┌────────┐  ┌────────┐      │       │
             │ Data  │ │Phase 2 │  │Phase 3 │  │Phase 4 │      │ Model │
-            │ Ingest│ │  EDA   │─►│ Prep   │─►│ Model  │─►... │ Output│
+            │ Ingest│ │Acquis. │─►│ Prepr. │─►│ Model  │─►... │ Output│
             │ DuckDB│ └────────┘  └────────┘  └────────┘      │       │
             │       └──────────────┬──────────────────────────┘       │
             │                      │ Deterministic Execution          │
@@ -136,7 +140,7 @@ Each layer maintains a strict contract, enabling independent phase execution wit
 | Domain | Enumerations and registry types for pipeline configurations. | `enum_registry_domain.py` |
 | Feature | Cleaning, formatting, transformation, and selection of features. | `cleaning_transformer_feature.py`, `formatting_transformer_feature.py`, `transformation_transformer_feature.py`, `selection_selector_feature.py` |
 | Model | Algorithm selection, training, and evaluation for regression and classification. | `regression_trainer_model.py`, `regression_evaluator_model.py`, `regression_algorithm_selector_model.py`, `classification_trainer_model.py`, `classification_evaluator_model.py`, `classification_algorithm_selector_model.py`, `utils/model_registry_config.py` |
-| Phase | Independent CRISP-DM runners. Never re-executes completed work. | `phase2_understanding_runner_phase.py`, `phase3_preparation_runner_phase.py`, `phase4_modeling_runner_phase.py`, `phase5_evaluation_and_interpretation_phase.py`, `phase6_deployment_phase.py` |
+| Phase | Independent runners implementing the course's data-driven workflow (`phase2`≈Acquisizione, `phase3`≈Preprocessamento/Estrazione feature, `phase4`≈Addestramento, `phase5`≈Verifica, `phase6`≈Integrazione). Never re-executes completed work. | `phase2_understanding_runner_phase.py`, `phase3_preparation_runner_phase.py`, `phase4_modeling_runner_phase.py`, `phase5_evaluation_and_interpretation_phase.py`, `phase6_deployment_phase.py` |
 | Pipeline | Problem-specific orchestrators linking phases. | `classification_runner_pipeline.py`, `regression_runner_pipeline.py`, `utils/context_facade_common.py` |
 | Registry | Dynamic phase component registries for modular extension. | `generator_registry_registry.py`, `phase2_generator_registry.py`, `phase3_generator_registry.py`, `phase4_generator_registry.py`, `phase5_generator_registry.py` |
 | Interpretation | Pipeline auditing, cluster interpretation, deployment reporting, business alignment. | `pipeline_auditor_interpretation.py`, `cluster_interpreter_interpretation.py`, `deployment_reporter_interpretation.py`, `business_alignment_evaluator_interpretation.py` |
@@ -380,9 +384,9 @@ Every run produces a self-contained snapshot under `outputs/runs/<task>/<timesta
 - **Intermediate artifacts** (Parquet datasets, Pickle models, scaling parameters).
 - **Automated Reports** (JSON traces and PNG visualizations for every step, making results inspectable without code).
 - **Model metadata** (best fold selection, hyperparameters, evaluation metrics).
-- **Deployment packages** (final submission ZIP for the PHM2024 competition).
+- **Deployment packages** (academic evaluation ZIP — the PHM2024 competition submission window is closed, see note in Section 1.2; this package is not a competition submission).
 
-The outputs directory structure follows the CRISP-DM phases:
+The outputs directory structure follows the project's phase runners, which implement the course's data-driven workflow (Section 2):
 
 ```
 outputs/runs/regression/phm2024/<timestamp>/
@@ -419,5 +423,3 @@ outputs/runs/regression/phm2024/<timestamp>/
 * [ ] **Unit & Integration Testing**: Comprehensive test coverage
 
 ---
-
-**Built with ❤️ by [Catalinaqi]**  *Software Engineering*

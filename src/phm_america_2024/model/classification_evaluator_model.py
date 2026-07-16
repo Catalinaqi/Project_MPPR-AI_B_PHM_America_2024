@@ -101,6 +101,7 @@ def model_selection_criteria(
         raise FileNotFoundError(f"Validation file missing: {full_val_path}")
 
     val_data: pd.DataFrame = load_parquet(str(full_val_path))
+    val_data[:] = ctx.scaler.transform(val_data)
     log.info(f"Loaded validation data from {full_val_path}")
 
     # Step 3: Sanitize data

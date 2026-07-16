@@ -22,6 +22,10 @@ from phm_america_2024.interpretation.business_alignment_evaluator_interpretation
     performance_degradation_benchmarking,
 )
 
+from phm_america_2024.interpretation.confusion_matrix import (
+    confusion_matrix,
+)
+
 # step_5_3_process_audit
 from phm_america_2024.interpretation.pipeline_auditor_interpretation import (
     leakage_detection,
@@ -52,6 +56,7 @@ class Phase5EvaluationAndInterpretationRunner:
         "performance_degradation_benchmarking": performance_degradation_benchmarking,
         "leakage_detection": leakage_detection,
         "final_sign_off": final_sign_off,
+        "confusion_matrix_analysis": confusion_matrix
     }
 
     def __init__(
@@ -351,6 +356,8 @@ class Phase5EvaluationAndInterpretationRunner:
         # 4. Construcción de las rutas
         model_path = Path(self.ctx.phase4_dir) / str(input_source.get("model", ""))
         scaler_path = Path(self.ctx.phase3_dir) / str(input_source.get("scaler", ""))
+        calibrator_name = str(input_source.get("calibrator", ""))
+        calibrator_path = (Path(self.ctx.phase4_dir) / calibrator_name) if len(calibrator_name) > 0 else None
 
         log.debug("[_load_artifacts] Resolviendo rutas dinámicas de datasets...")
 
@@ -401,6 +408,13 @@ class Phase5EvaluationAndInterpretationRunner:
         elif not model_path.exists():
             log.error("[_load_artifacts] Modelo no encontrado en: %s", model_path)
             raise FileNotFoundError(f"Model missing: {model_path}")
+        
+        if calibrator_path is not None and calibrator_path.exists() and getattr(self.ctx, "calibrator", None) is None:
+            log.debug("[_load_artifacts] Cargando calibrator desde %s...", model_path.name)
+            import joblib
+
+            self.ctx.calibrator = joblib.load(calibrator_path)
+            log.info("[_load_artifacts] Calibrator cargado exitosamente.")
 
         # 6. Carga Test Data y Scaler
         if test_path.exists() and getattr(self.ctx, "df_test", None) is None:

@@ -2,9 +2,9 @@ pipeline_base:
   metadata:
     project: "PHM North America 2024 - Turboshaft Engine Degradation"
     purpose: "Base configuration for PHASE 2 - Physics-based profiling"
-    methodology: "CRISP-DM"
+    methodology: "SCHEMA_V-DATA_DRIVEN"
     version: "2.2.0"
-    date: "2025-05-23"
+    date: "2025-07-14"
     changelog:
       v2.2.0: >
         Column names confirmed lowercase from DESCRIBE df_train.
@@ -17,7 +17,7 @@ pipeline_base:
       v2.0.0: "Initial configuration"
 
   common_base_config:
-    methodology: "CRISP-DM"
+    methodology: "SCHEMA_V-DATA_DRIVEN"
     version: "2.2.0"
     runtime:
       random_seed: 7
@@ -45,11 +45,12 @@ pipeline_base:
         Sample capped at 300,000 to keep memory manageable on CPU while
         preserving statistical representativeness.
       mode: "sample"
-      sample_rows: 30000 # 300 000 -> 30 000
+      sample_rows: 742625
       stratify_column: "faulty"   # confirmed lowercase
 
   common_phases_config:
     phases:
+      # [WORKFLOW: 1. Acquisizione dati | SCHEMA-V: System design]
       phase2_data_understanding:
         enabled: true
         objective: "Physical limits profiling and statistical distribution checks"
@@ -93,7 +94,7 @@ pipeline_base:
               sample_x_y_train_parquet:
                 path: "2.1.data_acquisition-sample_x_y_train.parquet"
                 description: >
-                  Random sample of 300,000 rows from df_train (merged X+Y).
+                  Sample from df_train (merged X+Y).
                   Contains all features + faulty + trq_margin.
                   Primary input for all Phase 2 profiling steps and Phase 3 feature engineering.
                 consumed_by: [ "step_2_2", "step_2_3", "step_2_4", "phase_3", "phase_4" ]
@@ -234,7 +235,7 @@ pipeline_base:
                       reference_split: "train"
                       compare_splits: [ "validation", "test" ]
                       significance_level: 0.01
-                      shift_threshold: 0.1  # KS statistic > 0.1 = shift detectado
+                      shift_threshold: 0.1
                     output: "2.4.data_exploration-ks_test_per_feature.json"
 
                   gmm_exploration:
@@ -366,17 +367,17 @@ pipeline_base:
               Normal distribution assumes symmetry. With heavy negative tail,
               NGBoost may under-predict extreme degradation values.
             phase_4_options:
-              option_A: # Recomendado: simple y efectivo
+              option_A:
                 action: "clip_targets_before_training"
                 bounds: "[-43.4, +41.0]"  # ±3σ del train
                 Distribution: "Normal"
 
-              option_B: # Avanzado: modelar asimetría
+              option_B:
                 action: "use_asymmetric_distribution"
                 Distribution: "SkewNormal"  # Requiere ngboost >= 0.8
                 note: "Validate calibration on validation split"
 
-              option_C: # Conservador: robust loss
+              option_C:
                 action: "use_robust_loss_function"
                 loss: "LogScore with sigma_clipping"
                 sigma_min: 0.01  # Evitar σ→0

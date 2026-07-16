@@ -1,0 +1,34 @@
+dataset_schema:
+  # ── CONFIRMED DATASET SIZES (from DuckDB COUNT queries) ─────────────────
+  # df_train:      742,625 rows  — 94.54% of total — has X and Y labels
+  # df_validation:  21,436 rows  —  2.73% of total — X only, no Y labels
+  # df_test:        21,436 rows  —  2.73% of total — X only, no Y labels
+  # Total:         785,497 rows
+  # ─────────────────────────────────────────────────────────────────────────
+  dataset_sizes:
+    train:      742 625
+    validation: 21 436
+    test:       21 436
+    total:      785 497
+    train_pct:  94.54
+    val_pct:    2.73
+    test_pct:   2.73
+
+
+  # ── CONFIRMED COLUMN SCHEMA (from DESCRIBE df_train) ────────────────────
+  # All feature columns are DOUBLE and nullable.
+  # id and faulty are BIGINT.
+  # No datetime columns — data is shuffled, no temporal order exists.
+  # ─────────────────────────────────────────────────────────────────────────
+  confirmed_schema:
+    columns:
+      id:           {type: BIGINT,  role: identifier,             nullable: true}
+      trq_measured: {type: DOUBLE,  role: feature,                nullable: true,  note: "Coppia Reale Misurata (%)"}
+      oat:          {type: DOUBLE,  role: feature,                nullable: true,  note: "Outside Air Temperature (Celsius)"}
+      mgt:          {type: DOUBLE,  role: feature,                nullable: true,  note: "Measured Gas Temp (°C)"}
+      pa:           {type: DOUBLE,  role: feature,                nullable: true,  note: "Pressure Altitude (Piedi)"}
+      ias:          {type: DOUBLE,  role: feature,                nullable: true,  note: "Indicated Airspeed (Nodi)"}
+      np:           {type: DOUBLE,  role: feature,                nullable: true,  note: "Power Turbine Speed (%)"}
+      ng:           {type: DOUBLE,  role: feature,                nullable: true,  note: "Gas Generator Speed (%)"}
+      faulty:       {type: BIGINT,  role: target_classification,  nullable: true,  note: "Binary label: 0=nominal, 1=faulty"}
+      trq_margin:   {type: DOUBLE,  role: target_regression,      nullable: true,  note: "Margine di Coppia (%)"}

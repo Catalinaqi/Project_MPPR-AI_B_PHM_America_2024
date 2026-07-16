@@ -72,6 +72,18 @@ def dataset_definition(
     return df, {"trace": trace}
 
 
+# La rimozione dei duplicati di riga è stata identificata come effettivamente
+# eseguita in step_3_2 (duplicate_handling), non qui. Questa funzione rimane
+# nel codice per tracciabilità storica ma non è più referenziata dal config YAML.
+
+# effettuata nella config 3.2
+#                feature_selection:
+#                  enabled: true
+#                  params:
+#                    remove_constant: true
+#                    remove_duplicate: true
+#                  output: "3.1.selection.filter_trace_log.json"
+
 def feature_selection(
     df: pd.DataFrame,
     tech_cfg: dict[str, Any],  # <- Riceviamo la config completa

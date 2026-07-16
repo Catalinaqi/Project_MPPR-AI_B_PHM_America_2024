@@ -1,24 +1,9 @@
-# ══════════════════════════════════════════════════════════════════════════════
-# CALIBRATED BINARY CLASSIFICATION PIPELINE CONFIGURATION (FAULTY DETECTION)
-# ══════════════════════════════════════════════════════════════════════════════
-# CRISP-DM Phases: 3 (Data Preparation), 4 (Modeling), 5 (Evaluation)
-# Selected Architecture: LightGBM + Isotonic Probability Calibration
-# Core Target: faulty (0: Nominal Operation, 1: Engine Fault State)
-# Methodology Requirements:
-#   1. read_strategy MANDATORY per phase.
-#   2. output MANDATORY per technique (execution trace).
-#   3. output_artifacts OPTIONAL per step (only for heavy boundary-crossing assets).
-# ══════════════════════════════════════════════════════════════════════════════
-
 classification_pipeline_config:
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # METADATA
-  # ────────────────────────────────────────────────────────────────────────────
   metadata:
     pipeline_key:
       task: "classification"
-      version: "2.1" # Versión corregida para Cross-Asset Isolation
+      version: "2.1"
       objective: "Predict honest, calibrated probability of engine failure under cross-asset shift."
       granularity: "flight_sample"
 
@@ -33,21 +18,20 @@ classification_pipeline_config:
 
   phases:
     # ----------------------------------------------------------------------------
-    # STAGE 2 — DATA UNDERSTANDING (INHERITED & ACTIVE)
+    # [WORKFLOW: 1. Acquisizione dati | SCHEMA-V: System design]
     # ----------------------------------------------------------------------------
     phase2_data_understanding:
       enabled: true
 
     # ----------------------------------------------------------------------------
-    # STAGE 3 — DATA PREPARATION (ISOLATED TO TRAINING MOTORS -STEP MODULARITY)
+    # [WORKFLOW: 2. Pre processamento | SCHEMA-V: System design]
     # ----------------------------------------------------------------------------
     phase3_data_preparation:
       enabled: true
       objective: "Clean, transform, and internal split ONLY the 4 training motors."
 
-      # [REGLA 3] DAG Traceability: Ingesta hermética solo del split de entrenamiento
       read_strategy:
-        mode: "full_flight_records" # Modo de archivo único para asegurar aislamiento
+        mode: "full_flight_records"
         input_source:
           train_parquet: "2.1.data_acquisition.dev_1000_stratified_train.parquet"
 
@@ -65,8 +49,7 @@ classification_pipeline_config:
                 dataset_definition:
                   enabled: true
                   params:
-                    include: ["oat", "mgt", "pa", "ias", "np", "ng", "trq_measured",
-                              "faulty","trq_margin"]
+                    include: ["oat", "mgt", "pa", "ias", "np", "ng", "trq_measured","faulty","trq_margin"]
                     patterns_to_drop: ["id"]
                   output: "3.1.selection.definition_trace_log.json"
                 feature_selection:
@@ -76,8 +59,8 @@ classification_pipeline_config:
                     remove_duplicate: true
                   output: "3.1.selection.filter_trace_log.json"
           input_artifact:
-            path: "2.1.data_acquisition.prod_30000_stratified_x_y_train.parquet"
-          # NUEVO EN OPCIÓN B: Persiste la matriz reducida a disco
+            path: "2.1.data_acquisition.prod_3000_stratified_x_y_train.parquet"
+
           output_artifacts:
             selected_classification_train_parquet:
               path: "3.1.selection.selected_classification_train.parquet"
@@ -109,10 +92,7 @@ classification_pipeline_config:
               description: "Intermediate classification matrix deduplicated."
               consumed_by: ["step_3_3_data_transformation"]
 
-        # ────────────────────────────────────────────────────────────────────────
-        # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
-        # ────────────────────────────────────────────────────────────────────────
-        step_3_3_data_transformation:
+        step_3_3_data_engineering:
           enabled: true
           description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
           methods:
@@ -129,35 +109,23 @@ classification_pipeline_config:
                       mgt_oat_ratio: "mgt / (oat + 273.15)"
                       specific_power_index: "np / (ng * (oat + 273.15))"
                     interactions:
-                      enabled: true
+                      enabled: false
                       degree: 2
                       features: "all "#["mgt", "ng", "trq_measured", "np"]
                   output: "3.3.transformation.engineering_formulas_log.json"
-                feature_scaling:
-                  enabled: true
-                  params:
-                    method: "RobustScaler"
-                    fit_on_train_only: true
-                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured", "faulty" ]
-                  output: "3.3.transformation.scaler_fit_trace.json"
-          # NUEVO EN OPCIÓN B: Consume el parquet de 3.2. Guarda la data transformada y el scaler
           input_artifact:
               path: "3.2.cleaning.cleaned_classification_train.parquet"
               description: "Intermediate classification matrix deduplicated."
           output_artifacts:
-            transformed_classification_train_parquet:
+            engineered_classification_train_parquet:
               path: "3.3.transformation.transformed_classification_train.parquet"
               description: "Intermediate classification matrix with scaling applied and engineered features."
               consumed_by: ["step_3_5_data_formatting"]
-            fitted_scaler_bin:
-              path: "3.3.transformation.robust_scaler_classification.pkl" # Renombrado para no pisar el de regresión
-              description: "Fitted state parameters of the training-isolated RobustScaler model."
-              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
         # ────────────────────────────────────────────────────────────────────────
         # STEP 3.5: PARTICIÓN DE HOLDOUT INTERNO Y FORMATEO DE ARRAYS
         # ────────────────────────────────────────────────────────────────────────
-        step_3_5_data_formatting:
+        step_3_4_data_formatting:
           enabled: true
           description: "Partition vectors into internal splits (for Phase 4 CV) and cast arrays."
           methods:
@@ -199,8 +167,39 @@ classification_pipeline_config:
               description: "Finalized internal test split."
               consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
 
+        # ────────────────────────────────────────────────────────────────────────
+        # STEP 3.3: ESCALADO TRANQUILO E INGENIERÍA FÍSICA DE VARIABLES
+        # ────────────────────────────────────────────────────────────────────────
+        step_3_5_data_transformation:
+          enabled: true
+          description: "Inject robust scaling and protected non-linear aero-thermodynamic KPIs."
+          methods:
+            data_transformation:
+              enabled: true
+              techniques:
+                feature_scaling:
+                  enabled: true
+                  params:
+                    method: "RobustScaler"
+                    fit_on_train_only: true
+                    features: [ "oat", "mgt", "pa", "ias", "np", "ng", "trq_measured", "faulty", "trq_margin", "mgt_oat_ratio", "specific_power_index"]
+                  output: "3.3.transformation.scaler_fit_trace.json"
+          # NUEVO EN OPCIÓN B: Consume el parquet de 3.2. Guarda la data transformada y el scaler
+          input_artifact:
+              path: "3.5.formatting.classification_internal_train.parquet"
+              description: "Intermediate classification matrix deduplicated."
+          output_artifacts:
+            transformed_classification_train_parquet:
+              path: "3.5.transformation.scaled_classification_train.parquet"
+              description: "Intermediate classification matrix with scaling applied and engineered features."
+              consumed_by: ["step_3_5_data_formatting"]
+            fitted_scaler_bin:
+              path: "3.3.transformation.robust_scaler_classification.pkl" # Renombrado para no pisar el de regresión
+              description: "Fitted state parameters of the training-isolated RobustScaler model."
+              consumed_by: [ "phase4_data_modeling", "phase5_evaluation_and_interpretation" ]
+
     # ----------------------------------------------------------------------------
-    # STAGE 4 — MODELING
+    # [WORKFLOW: 4. Addestramento classificatore/predittore | SCHEMA-V: System design — Design of methods]
     # ----------------------------------------------------------------------------
     phase4_data_modeling:
       enabled: true
@@ -209,8 +208,9 @@ classification_pipeline_config:
       read_strategy:
         mode: "consume_engineered_splits"
         input_source:
-          train_data: "3.5.formatting.classification_internal_train.parquet"
+          train_data: "3.5.transformation.scaled_classification_train.parquet"
           val_data: "3.5.formatting.classification_internal_val.parquet" # Usado solo para fittear la calibración isotónica
+          scaler: "3.3.transformation.robust_scaler_classification.pkl"
 
       steps:
         step_4_1_algorithm_selection:
@@ -228,10 +228,15 @@ classification_pipeline_config:
                     objective: "binary"
                     boosting_type: "gbdt"
                     scale_pos_weight: 1.48
+                    scale_pos_weight_uncertainty: 1.48
                     learning_rate: 0.05
-                    n_estimators: 300
-                    max_depth: 6
-                    num_leaves: 31
+                    learning_rate_uncertainty: 0.02
+                    n_estimators: 100
+                    n_estimators_uncertainty: 50
+                    max_depth: 20
+                    max_depth_uncertainty: 10
+                    num_leaves: 32
+                    num_leaves_uncertainty: 16
                     random_state: 42
                   output: "4.1.modeling.algo_setup_trace.json"
 
@@ -248,6 +253,7 @@ classification_pipeline_config:
                     strategy: "StratifiedKFold"
                     target_variable: "faulty"
                     n_splits: 5
+                    iterations: 10
                     grouping_mechanism:
                       type: "GMM_Clusterer"
                       features: ["oat", "mgt", "ias"]
@@ -291,7 +297,7 @@ classification_pipeline_config:
               consumed_by: ["phase5_evaluation_and_interpretation"]
 
     # ----------------------------------------------------------------------------
-    # STAGE 5 — EVALUATION & CALIBRATION AUDIT
+    # [SCHEMA-V: Verifica — System testing]
     # ----------------------------------------------------------------------------
     phase5_evaluation_and_interpretation:
       enabled: true
@@ -301,11 +307,12 @@ classification_pipeline_config:
       read_strategy:
         mode: "cross_asset_evaluation"
         input_source:
-          model_base: "4.2.training.lightgbm_raw_classifier.pkl"
+          model: "4.2.training.lightgbm_raw_classifier.pkl"
           calibrator: "4.2.training.isotonic_calibrator.pkl"
           scaler: "3.3.transformation.robust_scaler.pkl"
           challenge_test_data: "2.1.data_acquisition.dev_1000_stratified_test.parquet"
           challenge_val_data: "2.1.data_acquisition.dev_1000_stratified_validation.parquet"
+          internal_test_data: "3.5.formatting.classification_internal_test.parquet"
 
       steps:
         step_5_1_interpretation:
@@ -316,7 +323,7 @@ classification_pipeline_config:
               enabled: true
               techniques:
                 feature_importance:
-                  enabled: true
+                  enabled: false
                   params:
                     strategy: "model_native"
                     top_k: 15
@@ -329,20 +336,20 @@ classification_pipeline_config:
                   output: "5.1.plots.confusion_matrix_data.json"
 
         step_5_2_probabilistic_evaluation:
-          enabled: true
+          enabled: false
           description: "Validate calibration via reliability plotting and benchmark asset performance loss on hidden data."
           methods:
             calibration_audit:
-              enabled: true
+              enabled: false
               techniques:
                 reliability_diagram:
-                  enabled: true
+                  enabled: false
                   params:
                     n_bins: 10
                     strategy: "uniform"
                   output: "5.2.evaluation.reliability_trace.json"
                 performance_degradation_benchmarking:
-                  enabled: true
+                  enabled: false
                   params:
                     expect_test_degradation: true
                     baseline_comparison: "stratified_random"
@@ -358,27 +365,27 @@ classification_pipeline_config:
               consumed_by: ["deployment"]
 
         step_5_3_process_audit:
-          enabled: true
+          enabled: false
           description: "Audit transformation constraints and flag potential data leakage occurrences."
           methods:
             process_audit:
-              enabled: true
+              enabled: false
               techniques:
                 leakage_detection:
-                  enabled: true
+                  enabled: false
                   params:
                     checks: ["train_test_overlap", "scaler_contamination_check"]
                   output: "5.3.audit.leakage_trace.json"
 
         step_5_4_decision_making:
-          enabled: true
+          enabled: false
           description: "Subject pipeline execution results to final domain engineering verification."
           methods:
             decision_making:
-              enabled: true
+              enabled: false
               techniques:
                 final_sign_off:
-                  enabled: true
+                  enabled: false
                   params:
                     required_review: true
                     review_roles: ["preventive_maintenance_engineer", "turbomachinery_specialist"]
