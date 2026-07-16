@@ -165,7 +165,6 @@ Project_MPPR-ALB_PHM_America_2024/
 │   │   ├── regression_pipeline_config.yml
 │   │   └── classification_pipeline_config.yml
 │   └── rules/
-│       ├── dataset_schema.yml       # Column schema definitions
 │       └── ranges_quality_rules_config.yml  # Physics-based quality rules
 │
 ├── data/raw/                       # Original challenge CSV files
@@ -178,19 +177,6 @@ Project_MPPR-ALB_PHM_America_2024/
 │       └── X_test.csv
 │
 ├── notebooks/                      # Jupyter notebooks for analysis & prototyping
-│   ├── 00_pre_analysis-part-0.ipynb
-│   ├── 00_pre_analysis-part-1.ipynb
-│   ├── 00_pre_analysis-part-2.ipynb
-│   ├── phase2_analysis.ipynb
-│   ├── phase3_analysis.ipynb
-│   ├── phase3_class_analysis.ipynb
-│   ├── phase4_analysis.ipynb
-│   ├── phase4_class_analysis.ipynb
-│   ├── phase5_analysis.ipynb
-│   ├── phase6_analysis.ipynb
-│   └── dev/
-│       ├── phase3_analysis-dev.ipynb
-│       └── phase4_analysis-dev.ipynb
 │
 ├── src/phm_america_2024/           # Production ML source code
 │   ├── __init__.py
@@ -284,23 +270,6 @@ Project_MPPR-ALB_PHM_America_2024/
 │               └── ...
 │
 ├── docs/                           # Multilingual documentation
-│   ├── ES/                         # Spanish
-│   ├── IT/                         # Italian
-│   │   ├── funzionale/             # Functional documentation
-│   │   │   ├── paper/              # Paper analysis (7 competition papers)
-│   │   │   │   ├── general_paper/
-│   │   │   │   └── models_paper/
-│   │   │   └── ...
-│   │   └── tecnico/                # Technical documentation
-│   └── RELAZIONE/                  # Final report (Italian)
-│       ├── 1.contesto.md
-│       ├── 2.0.metodologia.md
-│       ├── 2.1.phase2.md
-│       ├── 2.2.phase3.md
-│       ├── 2.3.phase4.md
-│       ├── 2.4.phase5.md
-│       ├── 2.5.phase6.md
-│       └── 3.risultati.md
 │
 ├── pyproject.toml                  # Poetry dependencies (PEP 621 compliant)
 ├── poetry.lock

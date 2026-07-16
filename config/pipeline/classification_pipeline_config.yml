@@ -59,7 +59,7 @@ classification_pipeline_config:
                     remove_duplicate: true
                   output: "3.1.selection.filter_trace_log.json"
           input_artifact:
-            path: "2.1.data_acquisition.prod_3000_stratified_x_y_train.parquet"
+            path: "2.1.data_acquisition.prod_742625_stratified_x_y_train.parquet"
 
           output_artifacts:
             selected_classification_train_parquet:
@@ -253,7 +253,7 @@ classification_pipeline_config:
                     strategy: "StratifiedKFold"
                     target_variable: "faulty"
                     n_splits: 5
-                    iterations: 10
+                    iterations: 500
                     grouping_mechanism:
                       type: "GMM_Clusterer"
                       features: ["oat", "mgt", "ias"]
