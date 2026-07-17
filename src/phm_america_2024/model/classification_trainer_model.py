@@ -179,16 +179,17 @@ def cross_validation(
     # ── 7. Iterar folds ──
     best_model: Any = None
     best_brier = None
-    fold_results = []
+    iterations_results = []
     best_params = None
 
-    for _ in range(n_iterations):
+    for i in range(n_iterations):
         newparams = lgb_params.copy()
         newparams["scale_pos_weight"] += (random.random()-0.5)*2*lgb_uncertainty["scale_pos_weight"]
         newparams["learning_rate"] += (random.random()-0.5)*2*lgb_uncertainty["learning_rate"]
         newparams["n_estimators"] += int((random.random()-0.5)*2*lgb_uncertainty["n_estimators"])
         newparams["max_depth"] += int((random.random()-0.5)*2*lgb_uncertainty["max_depth"])
         newparams["num_leaves"] += int((random.random()-0.5)*2*lgb_uncertainty["num_leaves"])
+        fold_results = []
 
         for fold_idx, (train_idx, val_idx) in enumerate(
             gkf.split(X, y, groups=cluster_labels)
@@ -214,6 +215,10 @@ def cross_validation(
 
         params_brier_score = sum(fold_results)/len(fold_results)
         if best_brier is None or params_brier_score < best_brier:
+            iterations_results.append({
+                'index': i,
+                'score': params_brier_score
+            })
             best_brier = params_brier_score
             best_params = newparams
 
@@ -229,6 +234,7 @@ def cross_validation(
         "gmm_features": gmm_features,
         "gmm_n_clusters": n_clusters,
         "best_fold_brier": float(best_brier),
+        "iterations_results": iterations_results
     }
     output_path = output_dir / output_filename
     output_path.write_text(json.dumps(trace, indent=2, default=str), encoding="utf-8")
