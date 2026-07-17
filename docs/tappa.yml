@@ -1,0 +1,42 @@
+# =============================================================================
+# STEP_TAPPA_MAP — Mappatura tra gli step del pipeline YAML.
+# =============================================================================
+STEP_TAPPA_MAP:
+
+  # --- Tappa 1 - Acquisizione dati -------------------------------------------
+  # Raccolta dei dati grezzi e comprensione iniziale (schema, qualità, EDA).
+  # Include l'intera phase2_data_understanding: nessuna trasformazione dei
+  # dati avviene qui, solo diagnosi (collinearità, KS-test, drift, GMM EDA).
+  step_2_1_data_acquisition: "Tappa 1 - Acquisizione dati"
+  step_2_2_data_description: "Tappa 1 - Acquisizione dati (descrizione/qualità iniziale)"
+  step_2_3_data_quality_assessment: "Tappa 1 - Acquisizione dati (descrizione/qualità iniziale)"
+  step_2_4_data_exploration: "Tappa 1 - Acquisizione dati (descrizione/qualità iniziale)"
+
+  # --- Tappa 2 - Preprocessamento ---------------------------------------------
+  # Selezione delle colonne candidate e pulizia (dedup, clipping) — preparare
+  # la materia prima prima di costruire feature vere e proprie.
+  step_3_1_data_selection: "Tappa 2 - Preprocessamento (Data Selection)"
+  step_3_2_data_cleaning: "Tappa 2 - Preprocessamento (Data Cleaning)"
+
+  # --- Tappa 3 - Estrazione Feature -------------------------------------------
+  # Costruzione attiva delle variabili: engineering, split treno/val/test,
+  # scaling (RobustScaler fit SOLO su train, mai su val/test).
+  step_3_3_data_engineering: "Tappa 3 - Estrazione Feature (Data Engineering)"
+  step_3_4_data_formatting: "Tappa 3 - Estrazione Feature (Data Formatting/Split)"
+  step_3_5_data_transformation: "Tappa 3 - Estrazione Feature (Data Transformation/Scaling)"
+
+  # --- Tappa 4 - Addestramento ------------------------------------------------
+  # Selezione dell'algoritmo (NGBoost), training con CV stratificata via GMM,
+  # e valutazione/ranking del modello finale.
+  # NOTA: "step_4_3" non esiste nel pipeline YAML — non è un artefatto
+  # mancante, è un salto di numerazione senza impatto funzionale (già
+  # documentato come discrepanza minore nell'audit di Fase 4).
+  step_4_1_algorithm_selection: "Tappa 4 - Addestramento (Algorithm Selection)"
+  step_4_2_model_training: "Tappa 4 - Addestramento (Model Training/CV)"
+  step_4_4_model_evaluation: "Tappa 4 - Addestramento (Model Evaluation/Ranking)"
+
+  # --- Tappa 5 - Integrazione --------------------------------------------------
+  # Inferenza finale (academic scoring, mode "independent" vs "cascade") e
+  # consegna dei deliverable.
+  step_6_1_academic_scoring: "Tappa 5 - Integrazione (Academic Scoring/Inference)"
+  step_6_2_package_deliverables: "Tappa 5 - Integrazione (Package Deliverables)"
