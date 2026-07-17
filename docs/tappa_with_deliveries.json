@@ -1,0 +1,137 @@
+{
+  "STEP_TAPPA_MAP_WITH_DELIVERIES": {
+    "Tappa 1 - Acquisizione dati": {
+      "description": "Raccolta dei dati grezzi e comprensione iniziale (schema, qualità, EDA). Include l'intera phase2_data_understanding: nessuna trasformazione dei dati avviene qui, solo diagnosi (collinearità, KS-test, drift, GMM EDA).",
+      "steps": {
+        "step_2_1_data_acquisition": {
+          "label": "Tappa 1 - Acquisizione dati",
+          "artifacts": [
+            "2.1.data_acquisition.prod_742625_stratified_x_y_train.parquet",
+            "2.1.data_acquisition.prod_full_x_test.parquet",
+            "2.1.data_acquisition.prod_full_x_validation.parquet"
+          ]
+        },
+        "step_2_2_data_description": {
+          "label": "Tappa 1 - Acquisizione dati (descrizione/qualità iniziale)",
+          "artifacts": [
+            "2.2.data_description-distribution_analysis.json",
+            "2.2.data_description-null_count_per_column.json",
+            "2.2.data_description-schema_analysis.column_metadata.json",
+            "2.2.data_description-sensor_stats.json"
+          ]
+        },
+        "step_2_3_data_quality_assessment": {
+          "label": "Tappa 1 - Acquisizione dati (descrizione/qualità iniziale)",
+          "artifacts": [
+            "2.3.data_quality_assessment-quality.collinearity.json",
+            "2.3.data_quality_assessment-zero_or_negative_check.json"
+          ]
+        },
+        "step_2_4_data_exploration": {
+          "label": "Tappa 1 - Acquisizione dati (descrizione/qualità iniziale)",
+          "artifacts": [
+            "2.4.data_exploration-column_catalog.json",
+            "2.4.data_exploration-drift_summary.json",
+            "2.4.data_exploration-gmm_exploration.bic_aic_curve.png",
+            "2.4.data_exploration-ks_test_per_feature.json",
+            "2.4.data_exploration-visual_eda.flight_regimes.png"
+          ]
+        }
+      }
+    },
+    "Tappa 2 - Preprocessamento": {
+      "description": "Selezione delle colonne candidate e pulizia (dedup, clipping) — preparare la materia prima prima di costruire feature vere e proprie.",
+      "steps": {
+        "step_3_1_data_selection": {
+          "label": "Tappa 2 - Preprocessamento (Data Selection)",
+          "artifacts": [
+            "3.1.selection.definition_trace_log.json",
+            "3.1.selection.selected_regression_train.parquet"
+          ]
+        },
+        "step_3_2_data_cleaning": {
+          "label": "Tappa 2 - Preprocessamento (Data Cleaning)",
+          "artifacts": [
+            "3.2.cleaning.cleaned_regression_train.parquet",
+            "3.2.cleaning.clipping_audit_log.json",
+            "3.2.cleaning.duplicates_trace.json"
+          ]
+        }
+      }
+    },
+    "Tappa 3 - Estrazione Feature": {
+      "description": "Costruzione attiva delle variabili: engineering, split treno/val/test, scaling (RobustScaler fit SOLO su train, mai su val/test).",
+      "steps": {
+        "step_3_3_data_engineering": {
+          "label": "Tappa 3 - Estrazione Feature (Data Engineering)",
+          "artifacts": [
+            "3.3.transformation.engineering_formulas_log.json",
+            "3.3.transformation.scaler_fit_trace.json",
+            "3.3.transformation.transformed_regression_train.parquet"
+          ]
+        },
+        "step_3_4_data_formatting": {
+          "label": "Tappa 3 - Estrazione Feature (Data Formatting/Split)",
+          "artifacts": [
+            "3.4.formatting.arrays_manifest.json",
+            "3.4.formatting.regression_internal_test.parquet",
+            "3.4.formatting.regression_internal_train.parquet",
+            "3.4.formatting.regression_internal_val.parquet",
+            "3.4.formatting.split_indices_trace.json"
+          ]
+        },
+        "step_3_5_data_transformation": {
+          "label": "Tappa 3 - Estrazione Feature (Data Transformation/Scaling)",
+          "artifacts": [
+            "3.5.transformation.robust_scaler_regression.pkl",
+            "3.5.transformation.scaled_regression_train.parquet",
+            "3.5.transformation.scaler_fit_trace.json"
+          ]
+        }
+      }
+    },
+    "Tappa 4 - Addestramento": {
+      "description": "Selezione dell'algoritmo (NGBoost), training con CV stratificata via GMM, e valutazione/ranking del modello finale.",
+      "steps": {
+        "step_4_1_algorithm_selection": {
+          "label": "Tappa 4 - Addestramento (Algorithm Selection)",
+          "artifacts": [
+            "4.1.modeling.algo_setup_trace.json"
+          ]
+        },
+        "step_4_2_model_training": {
+          "label": "Tappa 4 - Addestramento (Model Training/CV)",
+          "artifacts": [
+            "4.2.training.cv_fold_execution_trace.json",
+            "4.2.training.ngboost_regressor.pkl"
+          ]
+        },
+        "step_4_4_model_evaluation": {
+          "label": "Tappa 4 - Addestramento (Model Evaluation/Ranking)",
+          "artifacts": [
+            "4.4.evaluation.final_best_model_meta.json",
+            "4.4.evaluation.ranking_trace.json"
+          ]
+        }
+      }
+    },
+    "Tappa 5 - Integrazione": {
+      "description": "Inferenza finale (academic scoring, mode 'independent' vs 'cascade') e consegna dei deliverable.",
+      "steps": {
+        "step_6_1_academic_scoring": {
+          "label": "Tappa 5 - Integrazione (Academic Scoring/Inference)",
+          "artifacts": [
+            "6.1.final_academic_predictions-cascade-v1.parquet",
+            "6.1.final_academic_predictions-cascade-v2.parquet",
+            "6.1.final_academic_predictions-independent-v1.parquet",
+            "6.1.final_academic_predictions-independent-v2.parquet"
+          ]
+        },
+        "step_6_2_package_deliverables": {
+          "label": "Tappa 5 - Integrazione (Package Deliverables)",
+          "artifacts": []
+        }
+      }
+    }
+  }
+}

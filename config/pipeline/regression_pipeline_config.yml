@@ -328,7 +328,7 @@ regression_pipeline_config:
     # [SCHEMA-V: Verifica — System testing]
     # ----------------------------------------------------------------------------
     phase5_evaluation_and_interpretation:
-      enabled: true
+      enabled: false
       objective: "Verify prediction interval calibration honesty on UNSEEN CROSS-ASSET MOTORS."
 
       read_strategy:
@@ -370,7 +370,7 @@ regression_pipeline_config:
               consumed_by: [ "report_generator" ]
         # step_5_2_probabilistic_evaluation
         step_5_2_business_evaluation:
-          enabled: true
+          enabled: false
           description: "Audit true target hit counts inside prediction boundaries on hidden test motors."
           methods:
             probabilistic_evaluation:
@@ -403,7 +403,7 @@ regression_pipeline_config:
               consumed_by: [ "report_generator", "quality_audit" ]
 
         step_5_3_process_audit:
-          enabled: true
+          enabled: false
           description: "Run automated compliance traces on the transformation pipeline."
           methods:
             process_audit:
@@ -416,7 +416,7 @@ regression_pipeline_config:
                   output: "5.3.audit.leakage_trace.json"
 
         step_5_4_decision_making:
-          enabled: true
+          enabled: false
           description: "Subject pipeline execution artifacts to engineering domain specialist reviews."
           methods:
             decision_making:

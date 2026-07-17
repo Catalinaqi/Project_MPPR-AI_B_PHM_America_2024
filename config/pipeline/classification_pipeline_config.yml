@@ -300,7 +300,7 @@ classification_pipeline_config:
     # [SCHEMA-V: Verifica — System testing]
     # ----------------------------------------------------------------------------
     phase5_evaluation_and_interpretation:
-      enabled: true
+      enabled: false
       objective: "Audit probability honesty on UNSEEN CROSS-ASSET MOTORS."
 
       # ¡LA CLAVE ESTÁ AQUÍ! Carga el scaler, el modelo, y los DATOS DEL CHALLENGE CRUDOS
@@ -316,7 +316,7 @@ classification_pipeline_config:
 
       steps:
         step_5_1_interpretation:
-          enabled: true
+          enabled: false
           description: "Extract feature weights to understand operational drivers of engine fault."
           methods:
             model_interpretation:

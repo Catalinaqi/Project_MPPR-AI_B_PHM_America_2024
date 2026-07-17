@@ -48,7 +48,7 @@ PHM is structured around three fundamental phases:
 - **Prognostics** – Prediction of the future evolution of degradation and estimation of Remaining Useful Life (RUL), which requires a temporal degradation trajectory per asset. **This project does not perform prognostics**: the training data is shuffled and provides no engine identifier or timestamp, making it structurally impossible to build the per-asset trajectories that RUL estimation requires. The torque margin regression is therefore a second diagnostic output (current-state severity), not a projection into the future.
 - **Health Management** – Operational decisions based on diagnostic information: scheduling maintenance interventions, adjusting operating regimes to slow degradation, or stopping the asset for safety. Out of scope for this project.
 
-This distinction follows the **data-driven diagnosis workflow** taught in the *Manutenzione Preventiva per la Robotica e l'Automazione Intelligente* course (Acquisizione dati → Preprocessamento → Estrazione feature → Addestramento classificatore/predittore → Integrazione), applied here to both the classification and the torque-margin regression task. See `docs/RELAZIONE/2.0.metodologia.md` for the full mapping between this workflow, the internal phase-runner naming (Section 2 below), and the V-model referenced in the course.
+This distinction follows the **data-driven diagnosis workflow** taught in the *Manutenzione Preventiva per la Robotica e l'Automazione Intelligente* course (Acquisizione dati → Preprocessamento → Estrazione feature → Addestramento → Integrazione), applied here to both the classification and the torque-margin regression task. See `docs/tappa.yml` for the full mapping between this 5-*tappe* workflow and the internal phase-runner naming (Section 2 below), and `docs/tappa_with_deliveries.json` for the same mapping enriched with the concrete artifact (deliverable) produced by each step.
 
 The **Torque Margin** is the key indicator for quantifying degradation:
 
@@ -95,7 +95,9 @@ Input → Audit & Data Prep → Feature Engineering → NGBoost (μ, σ²) → �
 
 ## 2. System Architecture
 
-The project implements a clean, modular pipeline whose runtime phases are internally named `phase2`…`phase6` for traceability, and which implements the **data-driven diagnosis workflow** of the course (Acquisizione dati → Preprocessamento → Estrazione feature → Addestramento classificatore/predittore → Integrazione), extended with an explicit verification stage (`phase5`) before deployment. The full terminology mapping — internal phase names ↔ course workflow ↔ V-model — is documented in `docs/RELAZIONE/2.0.metodologia.md`; it is intentionally kept out of this README to avoid duplicating a mapping that only makes sense read alongside the course's own diagrams.
+The project implements a clean, modular pipeline whose runtime phases are internally named `phase2`…`phase6` for traceability, and which implements the **data-driven diagnosis workflow** of the course (Acquisizione dati → Preprocessamento → Estrazione feature → Addestramento → Integrazione). The full terminology mapping — internal phase/step names ↔ course workflow (5 *tappe*) ↔ produced artifacts — is documented in `docs/tappa.yml` (mapping only) and `docs/tappa_with_deliveries.json` (mapping + artifact list per step); it is intentionally kept out of this README to avoid duplicating a mapping that is easier to consume as structured data than as prose.
+
+> **Note on `phase5`**: the codebase still exposes a `phase5_evaluation_and_interpretation` runner (Section 3), but it is not executed as an autonomous *tappa* in the final, adapted methodology — its outputs (permutation importance, degradation checks, sign-off) were folded into the `phase4`/`phase6` reporting instead. See `docs/tappa_with_deliveries.json` for the authoritative, current step-to-artifact mapping.
 
 ### Pipeline Flow Diagram
 
@@ -176,7 +178,12 @@ Project_MPPR-ALB_PHM_America_2024/
 │   └── test/
 │       └── X_test.csv
 │
-├── notebooks/                      # Jupyter notebooks for analysis & prototyping
+├── notebooks/                      # Jupyter notebooks for analysis & prototyping, organized by tappa
+│   ├── 1_acquisizione_dati/
+│   ├── 2_pre_processamento/
+│   ├── 3_estrazione_feature/
+│   ├── 4_addestramento/
+│   └── 5_integrazione/
 │
 ├── src/phm_america_2024/           # Production ML source code
 │   ├── __init__.py
@@ -269,7 +276,11 @@ Project_MPPR-ALB_PHM_America_2024/
 │               ├── <timestamp>/
 │               └── ...
 │
-├── docs/                           # Multilingual documentation
+├── docs/                            # Canonical, machine-readable workflow documentation
+│   ├── dataset_schema.yml           # Column schema definitions (moved here from config/rules/)
+│   ├── model_training_regression.yml # Training/hyperparameter-search configuration reference
+│   ├── tappa.yml                    # Mapping: technical step -> course tappa (5-step workflow)
+│   └── tappa_with_deliveries.json   # Same mapping, enriched with the artifact(s) produced by each step
 │
 ├── pyproject.toml                  # Poetry dependencies (PEP 621 compliant)
 ├── poetry.lock
@@ -370,25 +381,24 @@ outputs/runs/regression/phm2024/<timestamp>/
 ├── phase4_data_modeling/
 │   ├── *.pkl              # Trained models (NGBoost, LightGBM, Isotonic calibrator)
 │   └── *.json             # Cross-validation traces, evaluation rankings, best model meta
-├── phase5_evaluation_and_interpretation/
-│   ├── *.json             # Permutation importance, degradation traces, leakage audit
-│   ├── *.png              # Feature importance, calibration curves, degradation comparison
-│   └── *.json             # Final sign-off certificate
 └── phase6_deployment/
     ├── *.parquet          # Final academic predictions
     └── *.zip              # Deliverable package
 ```
+
+> `phase5_data_evaluation_and_interpretation/` is intentionally **not** listed above: per `docs/tappa_with_deliveries.json` (the authoritative step-to-artifact mapping), no artifact is currently produced by this runner in the adapted final methodology — see the note in Section 2.
 ---
 
 ## 9. Roadmap
 
-* [x] **Phase 1-2**: Architecture Setup, Data Ingestion & EDA.
-* [x] **Phase 3**: Data Preparation (Robust Scaling & Feature Engineering).
-* [x] **Phase 4**: Modeling & Calibration (Probabilistic Regression via NGBoost).
-* [x] **Phase 5**: Interpretation & Evaluation Metrics.
-* [x] **Phase 6**: Final Deployment & Challenge Submission.
+* [x] **Tappa 1-2**: Architecture Setup, Data Ingestion, EDA & Preprocessing.
+* [x] **Tappa 3**: Feature Extraction (Robust Scaling & Physics-Based Feature Engineering).
+* [x] **Tappa 4**: Modeling & Calibration (Probabilistic Regression via NGBoost, Classifier Training).
+* [x] **Tappa 5**: Final Inference & Academic Deliverable Packaging.
 * [ ] **Refactoring**: Containerization (Docker) & CI/CD Pipelines.
 * [ ] **MLflow Integration**: Experiment tracking & model registry
 * [ ] **Unit & Integration Testing**: Comprehensive test coverage
+
+> The methodology initially planned a standalone `phase5` (interpretation/evaluation) between modeling and deployment. In the adapted, final version of the pipeline this step is **not executed as an autonomous tappa** — see the note in Section 2 for where its outputs now live.
 
 ---
